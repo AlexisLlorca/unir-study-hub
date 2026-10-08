@@ -24,6 +24,10 @@ from src.core.config import (
 )
 from src.auth.session_manager import login_interactivo, tiene_sesion_guardada
 from src.extractors.pdf_parser import extraer_texto_pdf
+from src.generators.exam_simulator import (
+    ejecutar_test_interactivo,
+    bateria_psp,
+)
 
 console = Console()
 
@@ -69,6 +73,7 @@ def menu_principal():
         console.print("[cyan]2.[/cyan] 📥 Ver archivos en la Bandeja de Entrada (Dropzone)")
         console.print("[cyan]3.[/cyan] 📄 Procesar un PDF de prueba de la bandeja")
         console.print("[cyan]4.[/cyan] 📁 Ver estructura de carpetas del sistema")
+        console.print("[cyan]5.[/cyan] 🎯 Practicar con Simulacro de Examen Tipo Test (PSP - Tema 1)")
         console.print("[cyan]0.[/cyan] 🚪 Salir\n")
 
         opcion = console.input("👉 Selecciona una opción: ").strip()
@@ -96,6 +101,8 @@ def menu_principal():
             console.print(f"[green]✔ DAM:[/green] {BANDEJA_DAM_DIR}")
             console.print(f"[green]✔ PFU:[/green] {BANDEJA_PFU_DIR}")
             console.print(f"[green]✔ Procesado:[/green] {PROCESADO_DIR}\n")
+        elif opcion == "5":
+            ejecutar_test_interactivo(bateria_psp)
         elif opcion == "0":
             console.print("\n[bold cyan]¡Hasta la próxima, Alexis! A por ese Grado y DAM.[/bold cyan] 👋\n")
             break
