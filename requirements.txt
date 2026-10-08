@@ -1,0 +1,11 @@
+# 1. Automatización de navegador moderna para autenticación y descargas
+    playwright>=1.49.0
+
+    # 2. Extracción y análisis de texto de PDFs de la UNIR
+    pypdf>=5.0.0
+
+    # 3. Gestión segura de configuración y variables de entorno
+    python-dotenv>=1.0.1
+
+    # 4. Interfaz de consola elegante (mensajes, tablas y barras de progreso en terminal)
+    rich>=13.9.0
