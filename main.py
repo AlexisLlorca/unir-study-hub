@@ -48,6 +48,8 @@ from src.core.academic_structure import (
     reorganizar_biblioteca_completa,
 )
 from src.core.study_navigator import NavegadorAcademico
+from src.core.progress_tracker import GestorProgreso
+from src.ui.web_server import iniciar_servidor_web
 
 console = Console()
 
@@ -66,21 +68,27 @@ def mostrar_banner():
     )
 
 
-def menu_sincronizacion(scraper: CampusScraper):
+def menu_sincronizacion_y_ajustes(scraper: CampusScraper, scheduler: Any, llm_client: Any):
     console.print(
         Panel.fit(
-            "[bold cyan]📥 SINCRONIZACIÓN Y DESCARGA DE MATERIALES[/bold cyan]\n\n"
-            "[cyan]1.[/cyan] 📦 Importar automáticamente todos los PDFs de tu respaldo local de DAM\n"
-            "[cyan]2.[/cyan] 🌐 Conectar al Campus Virtual para buscar recursos nuevos con Playwright\n"
+            "[bold cyan]⚙️ SINCRONIZACIÓN Y AJUSTES DEL SISTEMA[/bold cyan]\n\n"
+            "[cyan]1.[/cyan] 🔄 Sincronización completa ahora (Campus + Respaldo + Videoclases)\n"
+            "[cyan]2.[/cyan] 🔐 Renovar sesión de UNIR con Playwright (2FA interactivo)\n"
+            "[cyan]3.[/cyan] ⏰ Configurar Descargas Nocturnas Automáticas (systemd timer)\n"
+            "[cyan]4.[/cyan] 🔑 Cambiar o Configurar Clave de API de Gemini\n"
             "[cyan]0.[/cyan] ↩ Volver al menú principal",
             border_style="cyan",
         )
     )
     op = console.input("👉 Selecciona una opción: ").strip()
     if op == "1":
-        scraper.sincronizar_desde_respaldo_local()
+        scraper.ejecutar_sincronizacion_completa()
     elif op == "2":
-        scraper.explorar_y_descargar_campus()
+        login_interactivo()
+    elif op == "3":
+        menu_programador_tareas(scheduler)
+    elif op == "4":
+        llm_client.solicitar_api_key_interactiva()
 
 
 def menu_clases_grabadas(recordings: RecordingsManager, tutor: TutorIA):
@@ -315,45 +323,39 @@ def menu_principal():
     tutor_ia = TutorIA(llm_client)
     recordings = RecordingsManager(llm_client)
     scraper = CampusScraper()
-    factoria = FactoriaAcademicaIA(tutor_ia)
     scheduler = SyncScheduler()
     navigator = NavegadorAcademico(tutor_ia)
+    tracker = GestorProgreso()
 
     while True:
         mostrar_banner()
 
-        console.print("[bold]Menú de Operaciones:[/bold]")
-        console.print("[cyan]1.[/cyan] 🔐 Iniciar sesión segura interactiva en UNIR (Playwright 2FA)")
-        console.print("[cyan]2.[/cyan] 📥 Sincronizar e importar materiales (Campus & Respaldo local)")
-        console.print("[cyan]3.[/cyan] 🎙️ Clases Grabadas (49 videoclases, transcripciones y vídeos)")
-        console.print("[cyan]4.[/cyan] 🤖 Chat con tu Tutor de IA (Preguntas, dudas de código y explicaciones)")
-        console.print("[cyan]5.[/cyan] 📘 Navegador Académico & Guías por Tema (Explorar 2º DAM, temas y tests con IA)")
-        console.print("[cyan]6.[/cyan] 🎯 Practicar Simulacro de Examen Tipo Test (Por tema o PSP)")
-        console.print("[cyan]7.[/cyan] 📚 Ver Biblioteca Consolidada de Materiales y Clases")
-        console.print("[cyan]8.[/cyan] 🔑 Configurar Clave de API de IA (Google Gemini)")
-        console.print("[cyan]9.[/cyan] ⏰ Programar Descarga Automática (systemd timer desatendido)")
+        console.print("[bold]Centro de Mando de Estudio (2º DAM):[/bold]\n")
+        console.print("[cyan]1.[/cyan] 🎓 [bold white]Centro de Estudio por Asignaturas[/bold white] [dim](Temas, Guías IA, Videoclases y Tareas)[/dim]")
+        console.print("[cyan]2.[/cyan] 🎯 [bold white]Simulacros de Examen y Tests[/bold white] [dim](Entrenar con nota y justificaciones)[/dim]")
+        console.print("[cyan]3.[/cyan] 📊 [bold white]Expediente y Semáforo de Examen[/bold white] [dim](Notas medias y estado de preparación)[/dim]")
+        console.print("[cyan]4.[/cyan] 🤖 [bold white]Tutor de IA NOVA en Directo[/bold white] [dim](Dudas de código y consultas libres)[/dim]")
+        console.print("[cyan]5.[/cyan] 🎙️ [bold white]Videoclases Magistrales UNIR[/bold white] [dim](49 lecciones transcritas y enlaces)[/dim]")
+        console.print("[cyan]6.[/cyan] 🌐 [bold white]Iniciar Interfaz Gráfica Web[/bold white] [dim](Dashboard visual en http://localhost:8080)[/dim]")
+        console.print("[cyan]7.[/cyan] ⚙️ [bold white]Sincronización Campus y Ajustes[/bold white] [dim](Sesión, descargas y timer)[/dim]")
         console.print("[cyan]0.[/cyan] 🚪 Salir\n")
 
         opcion = console.input("👉 Selecciona una opción: ").strip()
 
         if opcion == "1":
-            login_interactivo()
+            navigator.mostrar_menu_asignaturas()
         elif opcion == "2":
-            menu_sincronizacion(scraper)
+            menu_simulacros_test()
         elif opcion == "3":
-            menu_clases_grabadas(recordings, tutor_ia)
+            tracker.mostrar_dashboard_progreso()
         elif opcion == "4":
             tutor_ia.sesion_chat_interactivo()
         elif opcion == "5":
-            navigator.mostrar_menu_asignaturas()
+            menu_clases_grabadas(recordings, tutor_ia)
         elif opcion == "6":
-            menu_simulacros_test()
+            iniciar_servidor_web()
         elif opcion == "7":
-            ver_biblioteca_completa(recordings)
-        elif opcion == "8":
-            llm_client.solicitar_api_key_interactiva()
-        elif opcion == "9":
-            menu_programador_tareas(scheduler)
+            menu_sincronizacion_y_ajustes(scraper, scheduler, llm_client)
         elif opcion == "0":
             console.print("\n[bold green]👋 ¡Hasta pronto Alex! Éxitos con el estudio.[/bold green]\n")
             break
@@ -364,6 +366,10 @@ if __name__ == "__main__":
         ensure_directories()
         scraper = CampusScraper()
         scraper.ejecutar_sincronizacion_completa()
+        sys.exit(0)
+    elif len(sys.argv) > 1 and sys.argv[1] in ["--web", "-w"]:
+        ensure_directories()
+        iniciar_servidor_web()
         sys.exit(0)
 
     menu_principal()

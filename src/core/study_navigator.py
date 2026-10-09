@@ -123,9 +123,11 @@ class NavegadorAcademico:
                     "[bold]Opciones de estudio:[/bold]\n"
                     "[cyan]1.[/cyan] 📘 Generar Guía de Estudio + Test por Tema con IA (Elige tema a procesar)\n"
                     "[cyan]2.[/cyan] 🎯 Practicar Test de Examen Interactivo de esta asignatura\n"
-                    "[cyan]3.[/cyan] 🎙️ Ver y leer Clases Grabadas de esta asignatura\n"
-                    "[cyan]4.[/cyan] 📄 Ver lista de Temarios Oficiales y PDFs\n"
-                    "[cyan]5.[/cyan] 🤖 Abrir chat con NOVA enfocado en esta asignatura\n"
+                    "[cyan]3.[/cyan] 🎴 Exportar Flashcards para Anki / AnkiDroid de esta asignatura\n"
+                    "[cyan]4.[/cyan] 🛠️ Asistente de Actividades Prácticas (tisupdam / tareas evaluables)\n"
+                    "[cyan]5.[/cyan] 🎙️ Ver y leer Clases Grabadas de esta asignatura\n"
+                    "[cyan]6.[/cyan] 📄 Ver lista de Temarios Oficiales y PDFs\n"
+                    "[cyan]7.[/cyan] 🤖 Abrir chat con NOVA enfocado en esta asignatura\n"
                     "[cyan]0.[/cyan] ↩ Volver a la lista de asignaturas",
                     border_style="cyan",
                 )
@@ -139,10 +141,15 @@ class NavegadorAcademico:
             elif op == "2":
                 self.menu_practicar_test_asignatura(asignatura)
             elif op == "3":
-                self.menu_leer_clases_asignatura(asignatura, info)
+                from src.generators.flashcard_exporter import ExportadorFlashcards
+                ExportadorFlashcards().exportar_asignatura(asignatura)
             elif op == "4":
-                self.menu_listar_materiales_asignatura(asignatura, info)
+                self.menu_actividades_asignatura(asignatura)
             elif op == "5":
+                self.menu_leer_clases_asignatura(asignatura, info)
+            elif op == "6":
+                self.menu_listar_materiales_asignatura(asignatura, info)
+            elif op == "7":
                 self.tutor.configurar_contexto(asignatura)
                 self.tutor.sesion_chat_interactivo()
 
@@ -219,9 +226,39 @@ class NavegadorAcademico:
                     )
                     for p in data
                 ]
-                ejecutar_test_interactivo(preguntas)
+                ejecutar_test_interactivo(
+                    preguntas,
+                    asignatura=asignatura,
+                    tema=test_elegido.stem.replace("_test", "").replace("_", " "),
+                )
         except Exception as e:
             console.print(f"[red]Error cargando test: {e}[/red]")
+
+    def menu_actividades_asignatura(self, asignatura: str):
+        """Muestra las actividades prácticas disponibles y permite generar su plantilla con IA."""
+        from src.generators.assignment_helper import AsistenteActividades
+        asistente = AsistenteActividades(self.tutor)
+        acts = asistente.listar_actividades_asignatura(asignatura)
+
+        if not acts:
+            console.print(f"[yellow]⚠ No se detectaron enunciados de actividades evaluables en {asignatura}.[/yellow]\n")
+            return
+
+        table = Table(title=f"🛠️ Actividades y Tareas Evaluables — {asignatura}", border_style="cyan")
+        table.add_column("#", style="cyan", justify="right")
+        table.add_column("Archivo de la Tarea", style="white")
+
+        for idx, a in enumerate(acts, start=1):
+            table.add_row(str(idx), a.name)
+
+        console.print(table)
+        sel = console.input("\n👉 Selecciona el número de actividad para generar la plantilla con IA (o 0 para volver): ").strip()
+        try:
+            i = int(sel) - 1
+            if 0 <= i < len(acts):
+                asistente.generar_guia_actividad(acts[i], asignatura)
+        except ValueError:
+            pass
 
     def menu_leer_clases_asignatura(self, asignatura: str, info: Dict[str, Any]):
         """Permite leer las transcripciones literales de las clases magistrales."""

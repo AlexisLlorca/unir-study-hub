@@ -7,7 +7,7 @@ y genera simulacros en Markdown con respuestas ocultas desplegables.
 
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Asegura importaciones modulares
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -82,9 +82,14 @@ def guardar_examen_markdown(asignatura: str, tema: str, contenido_md: str) -> Pa
     return ruta_archivo
 
 
-def ejecutar_test_interactivo(preguntas: List[PreguntaExamen]):
+def ejecutar_test_interactivo(
+    preguntas: List[PreguntaExamen],
+    asignatura: Optional[str] = None,
+    tema: Optional[str] = None,
+):
     """
-    Lanza un simulacro interactivo en la terminal usando Rich para practicar.
+    Lanza un simulacro interactivo en la terminal usando Rich para practicar
+    y registra la calificación en el expediente académico si se indica asignatura y tema.
     """
     console.print(
         Panel.fit(
@@ -124,6 +129,12 @@ def ejecutar_test_interactivo(preguntas: List[PreguntaExamen]):
             border_style=color_nota,
         )
     )
+
+    if asignatura and tema:
+        from src.core.progress_tracker import GestorProgreso
+        tracker = GestorProgreso()
+        tracker.registrar_resultado_test(asignatura, tema, nota, aciertos, total)
+        console.print(f"[dim]✔ Calificación guardada en tu expediente académico para {asignatura}.[/dim]\n")
 
 
 # Batería de prueba con preguntas reales de PSP (Tema 1: Procesos)
