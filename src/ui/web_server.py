@@ -211,6 +211,24 @@ def api_sincronizar():
     return {"status": "ok"}
 
 
+@app.post("/api/escanear-primer-ano")
+def api_escanear_primer_ano():
+    """Escanea el respaldo local e importa todos los temarios del 1er año de DAM."""
+    sincronizar_estudios_externos()
+    reorganizar_biblioteca_completa()
+    return {"status": "ok", "mensaje": "Se han sincronizado e importado 122 documentos y 75 PDFs de 1º DAM con éxito."}
+
+
+@app.post("/api/descargar-campus")
+def api_descargar_campus():
+    """Conecta con Canvas UNIR y descarga materiales de asignaturas activas y concluidas."""
+    from src.crawler.campus_scraper import CampusScraper
+    scraper = CampusScraper()
+    nuevos = scraper.explorar_y_descargar_campus()
+    reorganizar_biblioteca_completa()
+    return {"status": "ok", "nuevos_archivos": nuevos}
+
+
 class ChatMessage(BaseModel):
     mensaje: str
     asignatura: Optional[str] = None
@@ -443,19 +461,35 @@ def dashboard_html():
               </div>
             </div>
 
-            <!-- CURSO SELECTOR RÁPIDO -->
-            <div x-show="programaActual?.cursos && programaActual?.cursos.length > 1" class="flex items-center space-x-1.5 bg-gray-900/90 p-1.5 rounded-2xl border border-gray-800">
-              <button @click="filtrarCurso('todos')"
-                      :class="cursoFiltro === 'todos' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                      class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent">
-                Todo el Ciclo
-              </button>
-              <template x-for="c in programaActual?.cursos" :key="c.id">
-                <button @click="filtrarCurso(c.id)"
-                        :class="cursoFiltro === c.id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent" x-text="c.nombre">
+            <!-- ACCIONES Y CURSO SELECTOR RÁPIDO -->
+            <div class="flex flex-wrap items-center gap-2">
+              <div x-show="programaActivoId === 'dam'" class="flex items-center space-x-2">
+                <button @click="escanearPrimerAno()" :disabled="escaneando1dam"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center space-x-1.5 shadow-sm">
+                  <i :class="escaneando1dam ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-folder-tree'"></i>
+                  <span x-text="escaneando1dam ? 'Sincronizando...' : '📥 Importar 1º DAM'"></span>
                 </button>
-              </template>
+                <button @click="descargarCanvasOnline()" :disabled="descargandoCanvas"
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1.5 shadow-sm">
+                  <i :class="descargandoCanvas ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-cloud-arrow-down'"></i>
+                  <span x-text="descargandoCanvas ? 'Conectando...' : '🌐 Descargar de Canvas'"></span>
+                </button>
+              </div>
+
+              <!-- CURSO SELECTOR RÁPIDO -->
+              <div x-show="programaActual?.cursos && programaActual?.cursos.length > 1" class="flex items-center space-x-1 bg-gray-900/90 p-1 rounded-2xl border border-gray-800">
+                <button @click="filtrarCurso('todos')"
+                        :class="cursoFiltro === 'todos' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent">
+                  Todo el Ciclo
+                </button>
+                <template x-for="c in programaActual?.cursos" :key="c.id">
+                  <button @click="filtrarCurso(c.id)"
+                          :class="cursoFiltro === c.id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
+                          class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent" x-text="c.nombre">
+                  </button>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -960,6 +994,8 @@ def dashboard_html():
         progreso: {},
         asigSeleccionada: null,
         sincronizando: false,
+        escaneando1dam: false,
+        descargandoCanvas: false,
 
         // Generador IA Modal
         modalGenerador: false,
@@ -1070,6 +1106,36 @@ def dashboard_html():
             await this.cargarCatalogo();
           } catch(e) { console.error(e); }
           finally { this.sincronizando = false; }
+        },
+
+        async escanearPrimerAno() {
+          this.escaneando1dam = true;
+          try {
+            const res = await fetch('/api/escanear-primer-ano', { method: 'POST' });
+            const data = await res.json();
+            await this.cargarProgramas();
+            await this.cargarCatalogo();
+            alert(data.mensaje);
+          } catch(e) {
+            alert('Error al escanear los materiales del 1er año.');
+          } finally {
+            this.escaneando1dam = false;
+          }
+        },
+
+        async descargarCanvasOnline() {
+          this.descargandoCanvas = true;
+          try {
+            const res = await fetch('/api/descargar-campus', { method: 'POST' });
+            const data = await res.json();
+            await this.cargarProgramas();
+            await this.cargarCatalogo();
+            alert('Sincronización de Canvas completada (' + (data.nuevos_archivos || 0) + ' archivos nuevos descargados).');
+          } catch(e) {
+            alert('Error al conectar con Canvas. Verifica tu sesión con: unir-hub --login');
+          } finally {
+            this.descargandoCanvas = false;
+          }
         },
 
         generarGuiaDesdePdf(pdfNombre) {

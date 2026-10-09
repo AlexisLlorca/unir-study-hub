@@ -66,6 +66,8 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                     "1º DAM - Sistemas Informáticos",
                     "1º DAM - Desarrollo de Entornos",
                     "1º DAM - Lenguajes de Marcas",
+                    "1º DAM - Itinerario para la Empleabilidad I",
+                    "1º DAM - Inglés Técnico I",
                 ],
             },
         },
@@ -152,6 +154,12 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
     """
     s = nombre_sucio.lower().strip()
 
+    # Si ya es un nombre canónico oficial, no tocar
+    todos_canonicos = set(ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER + ASIGNATURAS_PFU)
+    for c in todos_canonicos:
+        if s == c.lower():
+            return c
+
     # 1. Módulos de Máster en Ciberseguridad
     if "m1" in s or "ciberinteligencia" in s:
         return "M1 - Ciberinteligencia y Fraude"
@@ -168,7 +176,24 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
     if "m7" in s or "forense" in s:
         return "M7 - Análisis Forense Digital"
 
-    # 2. 2º DAM
+    # 2. 1º DAM (Prioridad si indica primer curso, 1º o asignaturas exclusivas de 1º)
+    if "bases de datos" in s:
+        return "1º DAM - Bases de Datos"
+    if "lenguajes de marcas" in s or "llmm" in s:
+        return "1º DAM - Lenguajes de Marcas"
+    if "entornos" in s:
+        return "1º DAM - Desarrollo de Entornos"
+    if "sistemas inform" in s:
+        return "1º DAM - Sistemas Informáticos"
+    if "programación" in s or "programacion" in s:
+        if "multimedia" not in s and "servicios" not in s:
+            return "1º DAM - Programación"
+    if ("ipe" in s or "empleabilidad" in s) and ("ii" not in s and "2" not in s and "segundo" not in s):
+        return "1º DAM - Itinerario para la Empleabilidad I"
+    if ("inglés" in s or "ingles" in s) and ("profesional" not in s or "gs" not in s) and ("2" not in s and "segundo" not in s):
+        return "1º DAM - Inglés Técnico I"
+
+    # 3. 2º DAM
     if "acceso a datos" in s or "clasead" in s:
         return "Acceso a Datos"
     if "interfaces" in s:
@@ -193,18 +218,6 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
         return "Proyecto Intermodular DAM"
     if "formación en empresa" in s or "formacion en empresa" in s or "ffe" in s:
         return "Formación en Empresa (FFE)"
-
-    # 3. 1º DAM
-    if "bases de datos" in s:
-        return "1º DAM - Bases de Datos"
-    if "lenguajes de marcas" in s or "llmm" in s:
-        return "1º DAM - Lenguajes de Marcas"
-    if "entornos" in s:
-        return "1º DAM - Desarrollo de Entornos"
-    if "sistemas inform" in s:
-        return "1º DAM - Sistemas Informáticos"
-    if "programación" in s or "programacion" in s:
-        return "1º DAM - Programación"
 
     # 4. PFU / Grado
     if "ingeniería del software" in s or "ingenieria del software" in s:
@@ -258,19 +271,33 @@ def sincronizar_estudios_externos():
                             except Exception:
                                 pass
 
-    # 2. Vincular Programación de 1º DAM
-    prog_1dam_src = Path("/home/alexllorca/Respaldo_Estudios/Proyectos/FP DAM unir/Programación")
-    if prog_1dam_src.exists():
-        dest_prog = MATERIALES_DIR / "1º DAM - Programación"
-        dest_prog.mkdir(parents=True, exist_ok=True)
+    # 2. Vincular todas las Asignaturas de 1º DAM desde el respaldo local
+    backup_dam_root = Path("/home/alexllorca/Respaldo_Estudios/Proyectos/FP DAM unir")
+    if backup_dam_root.exists():
+        mapeo_1dam = {
+            "Bases de datos": "1º DAM - Bases de Datos",
+            "Programación": "1º DAM - Programación",
+            "Sistemas informaticos": "1º DAM - Sistemas Informáticos",
+            "Entornos de desarrollo": "1º DAM - Desarrollo de Entornos",
+            "Lenguajes de marcas": "1º DAM - Lenguajes de Marcas",
+            "Ipe": "1º DAM - Itinerario para la Empleabilidad I",
+            "Inglés": "1º DAM - Inglés Técnico I",
+        }
 
-        for pdf_file in prog_1dam_src.glob("**/*.pdf"):
-            target_link = dest_prog / pdf_file.name
-            if not target_link.exists():
-                try:
-                    os.symlink(pdf_file.resolve(), target_link)
-                except Exception:
-                    pass
+        for folder_src, canonico in mapeo_1dam.items():
+            dir_src = backup_dam_root / folder_src
+            if dir_src.exists():
+                dir_dest = MATERIALES_DIR / canonico
+                dir_dest.mkdir(parents=True, exist_ok=True)
+
+                for f in dir_src.glob("**/*"):
+                    if f.is_file() and f.suffix.lower() in [".pdf", ".docx", ".zip", ".psc"]:
+                        dest_link = dir_dest / f.name
+                        if not dest_link.exists():
+                            try:
+                                os.symlink(f.resolve(), dest_link)
+                            except Exception:
+                                pass
 
     # 3. Crear carpetas de PFU y Certificaciones para cuando haya material
     for asig_pfu in ASIGNATURAS_PFU:
@@ -294,8 +321,13 @@ def reorganizar_biblioteca_completa():
 
     # 1. Reorganizar data/materiales/
     if MATERIALES_DIR.exists():
+        todos_canonicos = set(ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER + ASIGNATURAS_PFU)
         carpetas = [d for d in MATERIALES_DIR.iterdir() if d.is_dir()]
         for carpeta in carpetas:
+            # Si la carpeta ya es un directorio canónico oficial, no tocar sus archivos
+            if carpeta.name in todos_canonicos:
+                continue
+
             asig_canonica = normalizar_nombre_asignatura(carpeta.name)
 
             archivos = list(carpeta.glob("*"))

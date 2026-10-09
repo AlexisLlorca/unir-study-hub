@@ -141,8 +141,24 @@ class CampusScraper:
                 for ck in context.cookies():
                     req_session.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
 
-                # 1. Obtener lista de cursos vía Canvas API interna
+                # 1. Obtener lista completa de cursos vía Canvas API interna (1º y 2º año)
                 cursos = page.evaluate("""async () => {
+                    try {
+                        let res = await fetch('/api/v1/courses?per_page=100&include[]=concluded&include[]=term&state[]=available&state[]=completed');
+                        if (res.ok) {
+                            let data = await res.json();
+                            if (Array.isArray(data) && data.length > 0) return data;
+                        }
+                    } catch (e) {}
+
+                    try {
+                        let res = await fetch('/api/v1/users/self/courses?per_page=100&include[]=concluded');
+                        if (res.ok) {
+                            let data = await res.json();
+                            if (Array.isArray(data) && data.length > 0) return data;
+                        }
+                    } catch (e) {}
+
                     try {
                         let res = await fetch('/api/v1/users/self/favorites/courses');
                         if (res.ok) {
@@ -154,9 +170,7 @@ class CampusScraper:
                             let data = await res.json();
                             if (Array.isArray(data)) return data;
                         }
-                    } catch (e) {
-                        return [];
-                    }
+                    } catch (e) {}
                     return [];
                 }""")
 
