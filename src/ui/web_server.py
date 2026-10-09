@@ -286,10 +286,13 @@ def dashboard_html():
     code, pre { font-family: 'JetBrains Mono', monospace; }
     .glass { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
     .glass-card { background: rgba(31, 41, 55, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); }
-    .markdown-content h1 { font-size: 1.5rem; font-weight: 700; color: #38bdf8; margin-top: 1.2rem; margin-bottom: 0.6rem; }
-    .markdown-content h2 { font-size: 1.25rem; font-weight: 600; color: #818cf8; margin-top: 1rem; margin-bottom: 0.5rem; }
-    .markdown-content p { margin-bottom: 0.8rem; line-height: 1.6; }
-    .markdown-content pre { background: #111827; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1rem; border: 1px solid #374151; }
+    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: #38bdf8; line-height: 1.55; margin-top: 1.4rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
+    .markdown-content h2 { font-size: 1.25rem; font-weight: 700; color: #818cf8; line-height: 1.5; margin-top: 1.3rem; margin-bottom: 0.7rem; }
+    .markdown-content h3 { font-size: 1.1rem; font-weight: 600; color: #a5b4fc; line-height: 1.45; margin-top: 1.1rem; margin-bottom: 0.5rem; }
+    .markdown-content p { margin-bottom: 0.9rem; line-height: 1.7; color: #e2e8f0; }
+    .markdown-content ul, .markdown-content ol { margin-bottom: 1rem; padding-left: 1.5rem; line-height: 1.65; }
+    .markdown-content li { margin-bottom: 0.35rem; }
+    .markdown-content pre { background: #111827; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1rem; border: 1px solid #374151; line-height: 1.5; }
     .markdown-content code { background: #1f2937; padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.875rem; color: #38bdf8; }
     .markdown-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
     .markdown-content th, .markdown-content td { border: 1px solid #374151; padding: 0.5rem 0.75rem; text-align: left; }
@@ -1206,7 +1209,7 @@ def dashboard_html():
           try {
             const res = await fetch('/api/contenido?ruta=' + encodeURIComponent(ruta));
             const data = await res.json();
-            this.modalTitulo = data.nombre;
+            this.modalTitulo = data.nombre.replace(/_/g, ' ').replace(/\.md$/i, '');
             this.modalContenido = data.contenido;
             this.modalVisor = true;
           } catch(e) { alert('No se pudo abrir el archivo'); }
