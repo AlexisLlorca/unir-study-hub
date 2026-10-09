@@ -44,7 +44,7 @@ AUTH_DIR = BASE_DIR / "auth"
 SESSION_STATE_FILE = AUTH_DIR / "session_state.json"
 
 # 6. Variables del Campus y Servicios de IA
-UNIR_CAMPUS_URL = os.getenv("UNIR_CAMPUS_URL", "https://campusvirtual.unir.net/")
+UNIR_CAMPUS_URL = os.getenv("UNIR_CAMPUS_URL", "https://campusfp.unir.net/")
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 
