@@ -434,16 +434,61 @@ def dashboard_html():
     code, pre { font-family: 'JetBrains Mono', monospace; }
     .glass { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
     .glass-card { background: rgba(31, 41, 55, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); }
-    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: #38bdf8; line-height: 1.55; margin-top: 1.4rem; margin-bottom: 1rem; letter-spacing: -0.01em; }
-    .markdown-content h2 { font-size: 1.25rem; font-weight: 700; color: #818cf8; line-height: 1.5; margin-top: 1.3rem; margin-bottom: 0.7rem; }
-    .markdown-content h3 { font-size: 1.1rem; font-weight: 600; color: #a5b4fc; line-height: 1.45; margin-top: 1.1rem; margin-bottom: 0.5rem; }
-    .markdown-content p { margin-bottom: 0.9rem; line-height: 1.7; color: #e2e8f0; }
-    .markdown-content ul, .markdown-content ol { margin-bottom: 1rem; padding-left: 1.5rem; line-height: 1.65; }
-    .markdown-content li { margin-bottom: 0.35rem; }
-    .markdown-content pre { background: #111827; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1rem; border: 1px solid #374151; line-height: 1.5; }
-    .markdown-content code { background: #1f2937; padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.875rem; color: #38bdf8; }
-    .markdown-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-    .markdown-content th, .markdown-content td { border: 1px solid #374151; padding: 0.5rem 0.75rem; text-align: left; }
+
+    /* Ajuste responsivo de texto para evitar cortes y barras horizontales */
+    .markdown-content {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: normal;
+      line-height: 1.7;
+    }
+    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: #38bdf8; line-height: 1.4; margin-top: 1.4rem; margin-bottom: 0.8rem; word-break: break-word; }
+    .markdown-content h2 { font-size: 1.25rem; font-weight: 700; color: #818cf8; line-height: 1.4; margin-top: 1.2rem; margin-bottom: 0.6rem; word-break: break-word; }
+    .markdown-content h3 { font-size: 1.1rem; font-weight: 600; color: #a5b4fc; line-height: 1.35; margin-top: 1rem; margin-bottom: 0.5rem; word-break: break-word; }
+    .markdown-content p { margin-bottom: 0.9rem; line-height: 1.75; color: #e2e8f0; word-break: break-word; overflow-wrap: anywhere; }
+    .markdown-content ul, .markdown-content ol { margin-bottom: 1rem; padding-left: 1.5rem; line-height: 1.65; word-break: break-word; }
+    .markdown-content li { margin-bottom: 0.35rem; word-break: break-word; }
+    
+    /* Bloques de código y citas: auto-wrap para no forzar scroll horizontal */
+    .markdown-content pre {
+      background: #111827;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      border: 1px solid #374151;
+      line-height: 1.55;
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      overflow-wrap: anywhere !important;
+      overflow-x: hidden !important;
+    }
+    .markdown-content code {
+      background: #1f2937;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      color: #38bdf8;
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      overflow-wrap: anywhere !important;
+    }
+    .markdown-content blockquote {
+      border-left: 3px solid #38bdf8;
+      padding-left: 1rem;
+      color: #94a3b8;
+      margin-bottom: 1rem;
+      font-style: italic;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .markdown-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+      word-break: break-word;
+      table-layout: auto;
+    }
+    .markdown-content th, .markdown-content td { border: 1px solid #374151; padding: 0.5rem 0.75rem; text-align: left; word-break: break-word; }
     .markdown-content th { background: #1f2937; color: #e5e7eb; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0b0f19; }
@@ -811,11 +856,11 @@ def dashboard_html():
               <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                 <template x-for="clase in asigSeleccionada?.clases" :key="clase.nombre">
                   <div class="glass-card p-3 rounded-xl hover:border-amber-500/30 transition flex items-center justify-between">
-                    <div class="overflow-hidden pr-2">
+                    <div class="overflow-hidden pr-2 flex-1">
                       <p class="text-[10px] text-amber-400 font-bold" x-text="clase.fecha"></p>
-                      <h5 class="text-xs font-medium text-white truncate" x-text="clase.titulo"></h5>
+                      <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="clase.titulo"></h5>
                     </div>
-                    <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition shrink-0">
+                    <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition shrink-0 ml-2">
                       Leer
                     </button>
                   </div>
@@ -841,11 +886,11 @@ def dashboard_html():
                 <!-- GUÍAS RESUMIDAS IA -->
                 <template x-for="guia in asigSeleccionada?.guias" :key="guia">
                   <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between">
-                    <div class="overflow-hidden pr-2">
+                    <div class="overflow-hidden pr-2 flex-1">
                       <p class="text-[10px] text-cyan-400 font-bold">Guía de Alto Rendimiento</p>
-                      <h5 class="text-xs font-medium text-white truncate" x-text="guia.replace('_guia.md', '').replaceAll('_', ' ')"></h5>
+                      <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="guia.replace('_guia.md', '').replaceAll('_', ' ')"></h5>
                     </div>
-                    <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0">
+                    <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0 ml-2">
                       Estudiar
                     </button>
                   </div>
@@ -855,10 +900,10 @@ def dashboard_html():
                 <div class="pt-3 border-t border-gray-800">
                   <p class="text-[10px] uppercase text-gray-400 font-bold mb-2">Temarios Oficiales</p>
                   <template x-for="m in asigSeleccionada?.materiales" :key="m">
-                    <div class="p-2 text-xs text-gray-300 truncate hover:text-white flex items-center justify-between bg-gray-900/40 rounded-lg mb-1 group">
-                      <div class="flex items-center space-x-2 truncate pr-2">
+                    <div class="p-2 text-xs text-gray-300 hover:text-white flex items-center justify-between bg-gray-900/40 rounded-lg mb-1 group">
+                      <div class="flex items-center space-x-2 pr-2 overflow-hidden flex-1">
                         <i class="fa-regular fa-file-pdf text-rose-400 shrink-0"></i>
-                        <span class="truncate" x-text="m"></span>
+                        <span class="break-words line-clamp-2 text-left" x-text="m"></span>
                       </div>
                       <button @click="generarGuiaDesdePdf(m)" title="Generar Guía IA de este tema" class="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[10px] transition shrink-0">
                         Generar IA
@@ -1013,9 +1058,9 @@ def dashboard_html():
         <div class="flex-1 p-6 overflow-y-auto space-y-4" id="chatBox">
           <template x-for="(msg, idx) in chatHistorial" :key="idx">
             <div :class="msg.rol === 'user' ? 'flex justify-end' : 'flex justify-start'">
-              <div :class="msg.rol === 'user' ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none' : 'bg-gray-800/90 text-gray-200 rounded-2xl rounded-tl-none border border-gray-700'" class="max-w-2xl p-4 shadow-md">
+              <div :class="msg.rol === 'user' ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none' : 'bg-gray-800/90 text-gray-200 rounded-2xl rounded-tl-none border border-gray-700'" class="max-w-3xl lg:max-w-4xl p-4 shadow-md break-words">
                 <p class="text-xs font-bold mb-1 opacity-75" x-text="msg.rol === 'user' ? 'Tú' : 'NOVA'"></p>
-                <div class="markdown-content text-sm" x-html="marked.parse(msg.texto)"></div>
+                <div class="markdown-content text-sm leading-relaxed" x-html="marked.parse(msg.texto)"></div>
               </div>
             </div>
           </template>
@@ -1027,18 +1072,18 @@ def dashboard_html():
         </div>
 
         <!-- QUICK PROMPT CHIPS SOBRE LAS CLASES -->
-        <div class="px-4 py-2.5 bg-gray-900/80 border-t border-gray-800 flex items-center space-x-2 overflow-x-auto text-xs" x-show="chatAsignatura">
+        <div class="px-4 py-2.5 bg-gray-900/80 border-t border-gray-800 flex flex-wrap items-center gap-2 text-xs" x-show="chatAsignatura">
           <span class="text-[10px] text-amber-400 font-bold uppercase shrink-0 flex items-center space-x-1">
             <i class="fa-solid fa-bolt text-[10px]"></i>
             <span>Preguntar a NOVA:</span>
           </span>
-          <button @click="lanzarPreguntaRapida('¿Qué explicó el profesor en la última videoclase de ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 shrink-0 transition text-[11px] border border-gray-700">
+          <button @click="lanzarPreguntaRapida('¿Qué explicó el profesor en la última videoclase de ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 transition text-[11px] border border-gray-700">
             🎙️ ¿Qué explicó el profesor en la última sesión?
           </button>
-          <button @click="lanzarPreguntaRapida('¿Qué indicaciones dio el docente sobre el anteproyecto y las entregas en ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 shrink-0 transition text-[11px] border border-gray-700">
+          <button @click="lanzarPreguntaRapida('¿Qué indicaciones dio el docente sobre el anteproyecto y las entregas en ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 transition text-[11px] border border-gray-700">
             📋 Directrices de anteproyecto y entregas
           </button>
-          <button @click="lanzarPreguntaRapida('¿Cuáles son las fechas límite y criterios de evaluación comentados en clase de ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 shrink-0 transition text-[11px] border border-gray-700">
+          <button @click="lanzarPreguntaRapida('¿Cuáles son las fechas límite y criterios de evaluación comentados en clase de ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 transition text-[11px] border border-gray-700">
             📅 Fechas y criterios de evaluación
           </button>
         </div>
@@ -1102,15 +1147,15 @@ def dashboard_html():
           <template x-for="clase in videoclasesFiltradas" :key="clase.archivo">
             <div class="glass p-5 rounded-2xl border border-gray-800 hover:border-amber-500/40 transition flex flex-col justify-between group">
               <div>
-                <div class="flex items-center justify-between">
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 truncate max-w-[220px]" x-text="clase.asignatura"></span>
-                  <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 break-words" x-text="clase.asignatura"></span>
+                  <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1 shrink-0">
                     <i class="fa-regular fa-calendar mr-1"></i>
                     <span x-text="clase.fecha"></span>
                   </span>
                 </div>
-                <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition" x-text="clase.titulo"></h4>
-                <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
+                <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition break-words" x-text="clase.titulo"></h4>
+                <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
               </div>
 
               <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between">
@@ -1174,15 +1219,15 @@ def dashboard_html():
   </div>
 
   <!-- ==================== MODAL: VISOR DE DOCUMENTOS ==================== -->
-  <div x-show="modalVisor" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-    <div class="glass w-full max-w-4xl max-h-[85vh] rounded-3xl flex flex-col overflow-hidden border border-gray-700 shadow-2xl">
-      <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
-        <h4 class="font-bold text-white text-sm truncate" x-text="modalTitulo"></h4>
-        <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
+  <div x-show="modalVisor" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/80 backdrop-blur-sm">
+    <div class="glass w-full max-w-5xl lg:max-w-6xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-gray-700 shadow-2xl">
+      <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between gap-4">
+        <h4 class="font-bold text-white text-sm break-words pr-2 line-clamp-2" x-text="modalTitulo"></h4>
+        <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg shrink-0">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
-      <div class="flex-1 p-6 overflow-y-auto markdown-content text-sm" x-html="marked.parse(modalContenido)"></div>
+      <div class="flex-1 p-6 overflow-y-auto markdown-content text-sm leading-relaxed" x-html="marked.parse(modalContenido)"></div>
     </div>
   </div>
 
@@ -1326,6 +1371,12 @@ def dashboard_html():
         },
 
         async init() {
+          if (window.marked) {
+            marked.setOptions({
+              gfm: true,
+              breaks: true,
+            });
+          }
           await this.cargarProgramas();
           await this.cargarCatalogo();
           await this.cargarProgreso();
