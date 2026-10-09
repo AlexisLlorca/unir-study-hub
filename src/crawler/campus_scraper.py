@@ -229,6 +229,47 @@ class CampusScraper:
                             except Exception as err:
                                 console.print(f"[dim]Error descargando {nombre_archivo}: {err}[/dim]")
 
+                    # 3. Comprobar temarios teóricos en la herramienta LTI de UNIR CMS si faltan unidades
+                    temas_actuales = list(dir_asig.glob("Tema *.pdf"))
+                    if len(temas_actuales) < 10 and not c_name_limpio.startswith("M") and "Inglés" not in c_name_limpio:
+                        try:
+                            page.goto(f"{UNIR_CAMPUS_URL.rstrip('/')}/courses/{c_id}/external_tools/6206", wait_until="domcontentloaded", timeout=12000)
+                            page.wait_for_timeout(3500)
+                            cms_frame = next((f for f in page.frames if "cms.unir.net" in f.url), None)
+                            if cms_frame:
+                                lti_links = cms_frame.evaluate("""() => {
+                                    const list = [];
+                                    document.querySelectorAll('a[title*="Descargar PDF"]').forEach((a, idx) => {
+                                        list.push({idx: idx + 1, href: a.href});
+                                    });
+                                    return list;
+                                }""")
+                                for it in lti_links:
+                                    t_num = it.get("idx")
+                                    t_file = f"Tema {t_num}.pdf"
+                                    t_dest = dir_asig / t_file
+                                    if not t_dest.exists() or t_dest.stat().st_size == 0:
+                                        b64 = cms_frame.evaluate("""async (u) => {
+                                            try {
+                                                const r = await fetch(u);
+                                                if (!r.ok) return null;
+                                                const b = await r.arrayBuffer();
+                                                let s = '';
+                                                const u8 = new Uint8Array(b);
+                                                for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+                                                return btoa(s);
+                                            } catch (e) { return null; }
+                                        }""", it["href"])
+                                        if b64:
+                                            import base64
+                                            pdf_data = base64.b64decode(b64)
+                                            t_dest.write_bytes(pdf_data)
+                                            tam_mb = len(pdf_data) / (1024 * 1024)
+                                            table.add_row(c_name_limpio, t_file, f"{tam_mb:.1f} MB (CMS)")
+                                            total_nuevos_archivos += 1
+                        except Exception:
+                            pass
+
                 if total_nuevos_archivos > 0:
                     console.print(table)
                     console.print(f"\n[bold green]✔ ¡Se han descargado {total_nuevos_archivos} nuevos archivos del campus![/bold green]\n")
