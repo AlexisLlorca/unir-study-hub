@@ -222,12 +222,16 @@ def api_escanear_primer_ano():
 
 @app.post("/api/descargar-campus")
 def api_descargar_campus():
-    """Conecta con Canvas UNIR y descarga materiales de asignaturas activas y concluidas."""
+    """Conecta con Canvas UNIR y sincroniza todo: materiales locales, Canvas LMS y clases grabadas."""
     from src.crawler.campus_scraper import CampusScraper
     scraper = CampusScraper()
-    nuevos = scraper.explorar_y_descargar_campus()
+    nuevos = scraper.ejecutar_sincronizacion_completa()
     reorganizar_biblioteca_completa()
-    return {"status": "ok", "nuevos_archivos": nuevos}
+    return {
+        "status": "ok",
+        "nuevos_archivos": nuevos,
+        "mensaje": f"Sincronización 360° completada con éxito. Se han incorporado {nuevos} recursos (temarios, actividades o clases)."
+    }
 
 
 def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None) -> str:
@@ -1414,7 +1418,7 @@ def dashboard_html():
             await this.cargarProgramas();
             await this.cargarCatalogo();
             await this.cargarVideoclases();
-            alert('Sincronización de Canvas completada (' + (data.nuevos_archivos || 0) + ' archivos nuevos descargados).');
+            alert(data.mensaje || ('Sincronización de Canvas completada (' + (data.nuevos_archivos || 0) + ' recursos nuevos descargados).'));
           } catch(e) {
             alert('Error al conectar con Canvas. Verifica tu sesión con: unir-hub --login');
           } finally {

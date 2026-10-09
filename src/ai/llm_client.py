@@ -109,9 +109,11 @@ class LLMClient:
             temperature=temperatura,
         )
 
-        modelos = [self.model_name]
-        if "gemini-flash-latest" not in modelos:
-            modelos.append("gemini-flash-latest")
+        modelos_candidatos = [self.model_name, "gemini-flash-latest", "gemini-3.1-flash-lite-preview"]
+        modelos = []
+        for m in modelos_candidatos:
+            if m and m not in modelos:
+                modelos.append(m)
 
         for intento, mod in enumerate(modelos):
             try:

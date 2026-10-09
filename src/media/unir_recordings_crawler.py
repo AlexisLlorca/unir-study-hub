@@ -235,6 +235,23 @@ class UnirRecordingsCrawler:
 
                 estado_trans = "No disponible"
 
+                # Comprobar si el archivo base ya pertenece a otra sesión diferente
+                archivo_info = dir_clases / f"{fecha}_{nombre_seguro}_info.json"
+                if archivo_info.exists():
+                    try:
+                        with open(archivo_info, "r", encoding="utf-8") as f_prev:
+                            data_prev = json.load(f_prev)
+                            if data_prev.get("id") and data_prev.get("id") != rec_id:
+                                nombre_seguro = f"{nombre_seguro}_{rec_id}"
+                                archivo_info = dir_clases / f"{fecha}_{nombre_seguro}_info.json"
+                    except Exception:
+                        pass
+
+                # Guardar ficha de la grabación con metadatos para reproducción
+                if not archivo_info.exists():
+                    with open(archivo_info, "w", encoding="utf-8") as f_info:
+                        json.dump(rec, f_info, indent=2, ensure_ascii=False)
+
                 # Descargar transcripción VTT si existe
                 if captions_url:
                     archivo_md = dir_trans / f"{fecha}_{nombre_seguro}.md"
@@ -251,12 +268,6 @@ class UnirRecordingsCrawler:
                             estado_trans = "Error"
                     else:
                         estado_trans = "Ya existente"
-
-                # Guardar ficha de la grabación con metadatos para reproducción
-                archivo_info = dir_clases / f"{fecha}_{nombre_seguro}_info.json"
-                if not archivo_info.exists():
-                    with open(archivo_info, "w", encoding="utf-8") as f_info:
-                        json.dump(rec, f_info, indent=2, ensure_ascii=False)
 
                 table.add_row(c_name_limpio, fecha, nombre_sesion[:40], estado_trans)
 

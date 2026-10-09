@@ -31,6 +31,7 @@ from src.core.config import (
     ensure_directories,
 )
 from src.auth.session_manager import tiene_sesion_guardada, login_interactivo
+from src.core.academic_structure import normalizar_nombre_asignatura, reorganizar_biblioteca_completa
 
 # Ruta del respaldo local de estudios de Alex
 RESPALDO_LOCAL_DAM = Path("/home/alexllorca/Respaldo_Estudios/Proyectos/FP DAM unir")
@@ -193,15 +194,51 @@ class CampusScraper:
                     dir_asig = MATERIALES_DIR / c_name_limpio
                     dir_asig.mkdir(parents=True, exist_ok=True)
 
-                    # 2. Consultar archivos del curso vía Canvas API
+                    # 2. Consultar archivos del curso vía Canvas API (con paginación y módulos)
                     archivos = page.evaluate("""async (courseId) => {
+                        let allFiles = [];
                         try {
-                            const res = await fetch(`/api/v1/courses/${courseId}/files?per_page=100`);
-                            if (res.ok) return await res.json();
-                        } catch (e) {
-                            return [];
+                            let pageNum = 1;
+                            while (pageNum <= 5) {
+                                const res = await fetch(`/api/v1/courses/${courseId}/files?per_page=100&page=${pageNum}`);
+                                if (!res.ok) break;
+                                const items = await res.json();
+                                if (!Array.isArray(items) || items.length === 0) break;
+                                allFiles = allFiles.concat(items);
+                                if (items.length < 100) break;
+                                pageNum++;
+                            }
+                        } catch (e) {}
+
+                        // Si la carpeta de archivos está vacía u oculta por el docente, escanear módulos
+                        if (allFiles.length === 0) {
+                            try {
+                                const modRes = await fetch(`/api/v1/courses/${courseId}/modules?include[]=items&per_page=50`);
+                                if (modRes.ok) {
+                                    const modules = await modRes.json();
+                                    if (Array.isArray(modules)) {
+                                        for (const mod of modules) {
+                                            if (Array.isArray(mod.items)) {
+                                                for (const it of mod.items) {
+                                                    if (it.type === 'File' && it.url) {
+                                                        try {
+                                                            const fRes = await fetch(it.url);
+                                                            if (fRes.ok) {
+                                                                const fData = await fRes.json();
+                                                                if (fData && (fData.url || fData.download_url)) {
+                                                                    allFiles.push(fData);
+                                                                }
+                                                            }
+                                                        } catch(e) {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch(e) {}
                         }
-                        return [];
+                        return allFiles;
                     }""", c_id)
 
                     if not isinstance(archivos, list):
