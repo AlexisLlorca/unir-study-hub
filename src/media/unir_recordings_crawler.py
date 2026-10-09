@@ -169,13 +169,25 @@ class UnirRecordingsCrawler:
                 page.goto(UNIR_CAMPUS_URL, wait_until="domcontentloaded", timeout=25000)
                 cursos = page.evaluate("""async () => {
                     try {
+                        let res = await fetch('/api/v1/courses?per_page=100&include[]=concluded&include[]=term&state[]=available&state[]=completed');
+                        if (res.ok) {
+                            let data = await res.json();
+                            if (Array.isArray(data) && data.length > 0) return data;
+                        }
+                    } catch(e) {}
+                    try {
+                        let res = await fetch('/api/v1/users/self/courses?per_page=100&include[]=concluded');
+                        if (res.ok) {
+                            let data = await res.json();
+                            if (Array.isArray(data) && data.length > 0) return data;
+                        }
+                    } catch(e) {}
+                    try {
                         let res = await fetch('/api/v1/users/self/favorites/courses');
                         if (res.ok) {
                             let data = await res.json();
                             if (Array.isArray(data) && data.length > 0) return data;
                         }
-                        res = await fetch('/api/v1/courses?enrollment_state=active');
-                        if (res.ok) return await res.json();
                     } catch(e) {}
                     return [];
                 }""")

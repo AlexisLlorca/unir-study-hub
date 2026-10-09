@@ -10,6 +10,7 @@ generar guías y tests con IA y realizar simulacros tipo test directamente desde
 """
 
 import os
+import re
 import json
 import asyncio
 from pathlib import Path
@@ -229,6 +230,138 @@ def api_descargar_campus():
     return {"status": "ok", "nuevos_archivos": nuevos}
 
 
+def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None) -> str:
+    """Busca en transcripciones y fichas de clases de forma rápida para contextualizar el prompt de NOVA."""
+    if not TRANSCRIPCIONES_DIR.exists():
+        return ""
+
+    asigs_a_buscar = []
+    if asignatura:
+        for d in TRANSCRIPCIONES_DIR.iterdir():
+            if d.is_dir() and (asignatura.lower() in d.name.lower() or d.name.lower() in asignatura.lower()):
+                asigs_a_buscar.append(d.name)
+    if not asigs_a_buscar:
+        asigs_a_buscar = [d.name for d in TRANSCRIPCIONES_DIR.iterdir() if d.is_dir()]
+
+    terminos = [w.lower() for w in re.findall(r'\b[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9]{3,}\b', query)]
+    stopwords = {'que', 'por', 'para', 'con', 'del', 'las', 'los', 'una', 'uno', 'unos', 'unas', 'este', 'esta', 'como', 'sobre', 'aqui', 'hay', 'ver', 'los', 'dijo', 'dicho', 'profe', 'profesor', 'profesora', 'hola', 'buenas', 'tardes'}
+    terminos_clave = [t for t in terminos if t not in stopwords] or terminos
+
+    coincidencias = []
+    for asig in asigs_a_buscar:
+        dir_t = TRANSCRIPCIONES_DIR / asig
+        dir_i = CLASES_GRABADAS_DIR / asig
+        if not dir_t.exists():
+            continue
+
+        for f_md in dir_t.glob('*.md'):
+            try:
+                texto = f_md.read_text(encoding='utf-8')
+            except Exception:
+                continue
+
+            info_file = dir_i / (f_md.stem + '_info.json')
+            summary = ''
+            session_name = f_md.stem
+            if info_file.exists():
+                try:
+                    data = json.loads(info_file.read_text(encoding='utf-8'))
+                    summary = data.get('summary', '')
+                    session_name = data.get('sessionName', f_md.stem)
+                except Exception:
+                    pass
+
+            puntuacion = 0
+            texto_lower = texto.lower()
+            summary_lower = summary.lower()
+
+            for t in terminos_clave:
+                puntuacion += summary_lower.count(t) * 15
+                puntuacion += texto_lower.count(t) * 2
+
+            if puntuacion > 0 or not terminos_clave:
+                fragmentos = []
+                for t in terminos_clave:
+                    pos = 0
+                    while True:
+                        pos = texto_lower.find(t, pos)
+                        if pos == -1:
+                            break
+                        inicio = max(0, pos - 150)
+                        fin = min(len(texto), pos + 250)
+                        frag = texto[inicio:fin].replace('\n\n', ' ').strip()
+                        fragmentos.append(f'...{frag}...')
+                        pos += len(t) + 120
+                        if len(fragmentos) >= 2:
+                            break
+                    if len(fragmentos) >= 2:
+                        break
+
+                coincidencias.append({
+                    'asig': asig,
+                    'clase': session_name,
+                    'fecha': f_md.stem[:10],
+                    'puntuacion': puntuacion,
+                    'summary': summary,
+                    'fragmentos': fragmentos[:2]
+                })
+
+    coincidencias.sort(key=lambda x: x['puntuacion'], reverse=True)
+    if not coincidencias:
+        return ""
+
+    top = coincidencias[:3]
+    contexto_str = "\n[ACCESO A VIDEOCLASES Y TRANSCRIPCIONES OFICIALES DISPONIBLES EN UNIR STUDY HUB]:\n"
+    for c in top:
+        contexto_str += f"\n📌 ASIGNATURA: {c['asig']} | SESIÓN: {c['clase']} (Fecha: {c['fecha']})\n"
+        if c['summary']:
+            contexto_str += f"• RESUMEN OFICIAL: {c['summary']}\n"
+        if c['fragmentos']:
+            contexto_str += f"• FRAGMENTOS DIRECTOS DE LA CLASE:\n"
+            for f in c['fragmentos']:
+                contexto_str += f"   \"{f}\"\n"
+    return contexto_str
+
+
+@app.get("/api/videoclases")
+def api_videoclases(programa: Optional[str] = None):
+    """Devuelve el catálogo de todas las clases grabadas con sus metadatos y resúmenes oficiales."""
+    if not TRANSCRIPCIONES_DIR.exists():
+        return []
+
+    clases = []
+    for dir_asig in sorted(TRANSCRIPCIONES_DIR.iterdir()):
+        if not dir_asig.is_dir():
+            continue
+        asig = dir_asig.name
+        dir_i = CLASES_GRABADAS_DIR / asig
+
+        for f_md in sorted(dir_asig.glob("*.md"), reverse=True):
+            info_file = dir_i / (f_md.stem + "_info.json")
+            summary = ""
+            titulo = f_md.stem[11:] if len(f_md.stem) >= 11 and f_md.stem[:4].isdigit() else f_md.stem
+            fecha = f_md.stem[:10] if len(f_md.stem) >= 10 and f_md.stem[:4].isdigit() else "Reciente"
+
+            if info_file.exists():
+                try:
+                    data = json.loads(info_file.read_text(encoding="utf-8"))
+                    summary = data.get("summary", "")
+                    if data.get("sessionName"):
+                        titulo = data.get("sessionName")
+                except Exception:
+                    pass
+
+            clases.append({
+                "asignatura": asig,
+                "fecha": fecha,
+                "titulo": titulo,
+                "summary": summary,
+                "archivo": str(f_md.relative_to(BASE_DIR)),
+                "nombre_archivo": f_md.name
+            })
+    return clases
+
+
 class ChatMessage(BaseModel):
     mensaje: str
     asignatura: Optional[str] = None
@@ -237,7 +370,7 @@ class ChatMessage(BaseModel):
 
 @app.post("/api/chat")
 def api_chat(msg: ChatMessage):
-    """Responde preguntas mediante NOVA con rol especializado según el programa."""
+    """Responde preguntas mediante NOVA con rol especializado e inyección RAG de videoclases."""
     contexto_rol = ""
     if msg.programa == "ciber":
         contexto_rol = (
@@ -259,8 +392,19 @@ def api_chat(msg: ChatMessage):
             "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot y patrones de arquitectura limpia. "
         )
 
+    # Inyección RAG contextual de videoclases y transcripciones
+    contexto_trans = buscar_contexto_transcripciones(msg.mensaje, msg.asignatura)
     contexto_asig = f"\n[Asignatura / Módulo activo: {msg.asignatura}]" if msg.asignatura else ""
-    prompt = f"{contexto_rol}{contexto_asig}\nAlumno: {msg.mensaje}\nNOVA:"
+
+    instrucciones_base = (
+        "\nINSTRUCCIONES CLAVE DE NOVA:\n"
+        "1. Eres NOVA, la copiloto y mentora académica integrada dentro de UNIR Study Hub.\n"
+        "2. Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas de UNIR y a todos los temarios.\n"
+        "3. NUNCA digas que no tienes acceso al campus virtual ni que los datos están protegidos por login. Toda la información de las videoclases ya ha sido extraída y transcrita localmente en el Hub.\n"
+        "4. Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, responde con la máxima exactitud basándote en las transcripciones y resúmenes oficiales incluidos a continuación. Cita nombres de profesores (ej: David, Borja, etc.), fechas de sesión y directrices exactas explicadas.\n"
+    )
+
+    prompt = f"{contexto_rol}{instrucciones_base}{contexto_asig}{contexto_trans}\nAlumno: {msg.mensaje}\nNOVA:"
     
     respuesta = tutor_ia.client.generar_contenido(prompt, temperatura=0.4)
     return {"respuesta": respuesta or "No se pudo generar respuesta."}
@@ -385,6 +529,12 @@ def dashboard_html():
                   class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
             <i class="fa-solid fa-book-bookmark w-4 text-center"></i>
             <span>Temarios y Asignaturas</span>
+          </button>
+          <button @click="tab = 'clases'; asigSeleccionada = null"
+                  :class="tab === 'clases' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+            <i class="fa-solid fa-video w-4 text-center text-amber-400"></i>
+            <span>Videoclases y Transcripciones</span>
           </button>
           <button @click="tab = 'tutor'"
                   :class="tab === 'tutor' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
@@ -840,7 +990,12 @@ def dashboard_html():
             </div>
           </div>
 
-          <div class="flex items-center space-x-2">
+          <div class="flex items-center space-x-3">
+            <span class="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-xl flex items-center space-x-1.5"
+                  x-show="clasesDeAsignaturaActual.length > 0">
+              <i class="fa-solid fa-video"></i>
+              <span x-text="clasesDeAsignaturaActual.length + ' videoclases vinculadas'"></span>
+            </span>
             <select x-model="chatAsignatura" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
               <option value="">General (Todo el programa)</option>
               <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
@@ -867,16 +1022,112 @@ def dashboard_html():
           </div>
         </div>
 
+        <!-- QUICK PROMPT CHIPS SOBRE LAS CLASES -->
+        <div class="px-4 py-2.5 bg-gray-900/80 border-t border-gray-800 flex items-center space-x-2 overflow-x-auto text-xs" x-show="chatAsignatura">
+          <span class="text-[10px] text-amber-400 font-bold uppercase shrink-0 flex items-center space-x-1">
+            <i class="fa-solid fa-bolt text-[10px]"></i>
+            <span>Preguntar a NOVA:</span>
+          </span>
+          <button @click="lanzarPreguntaRapida('¿Qué explicó el profesor en la última videoclase de ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 shrink-0 transition text-[11px] border border-gray-700">
+            🎙️ ¿Qué explicó el profesor en la última sesión?
+          </button>
+          <button @click="lanzarPreguntaRapida('¿Qué indicaciones dio el docente sobre el anteproyecto y las entregas en ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 shrink-0 transition text-[11px] border border-gray-700">
+            📋 Directrices de anteproyecto y entregas
+          </button>
+          <button @click="lanzarPreguntaRapida('¿Cuáles son las fechas límite y criterios de evaluación comentados en clase de ' + chatAsignatura + '?')" class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 hover:text-cyan-300 text-gray-300 shrink-0 transition text-[11px] border border-gray-700">
+            📅 Fechas y criterios de evaluación
+          </button>
+        </div>
+
         <!-- INPUT BAR -->
         <div class="p-4 bg-gray-900/90 border-t border-gray-800 flex items-center space-x-3">
           <input type="text" x-model="chatInput" @keydown.enter="enviarMensajeChat()"
-                 :placeholder="'Haz cualquier pregunta técnica sobre ' + programaActual?.titulo_corto + ', examen o código...'"
+                 :placeholder="'Haz cualquier pregunta técnica o sobre lo que dijo el docente en las videoclases...'"
                  class="flex-1 bg-gray-800 text-white placeholder-gray-500 text-xs px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-cyan-500">
           <button @click="enviarMensajeChat()" :disabled="chatCargando || !chatInput.trim()"
                   class="px-5 py-3 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold rounded-xl text-xs hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 transition">
             <i class="fa-solid fa-paper-plane mr-1.5"></i>Enviar
           </button>
         </div>
+      </div>
+
+      <!-- ==================== 5. VISTA VIDEOCLASES Y TRANSCRIPCIONES ==================== -->
+      <div x-show="tab === 'clases'" x-transition class="space-y-6">
+        
+        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-video"></i>
+              </div>
+              <div>
+                <h2 class="text-xl font-bold text-white">Videoclases y Transcripciones Oficiales</h2>
+                <p class="text-xs text-gray-400">Catálogo oficial con transcripciones completas y resúmenes de cada lección magistral</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex items-center space-x-3">
+            <span class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl font-semibold"
+                  x-text="videoclasesFiltradas.length + ' clases disponibles'"></span>
+          </div>
+        </div>
+
+        <!-- FILTROS Y BÚSQUEDA DE CLASES -->
+        <div class="glass-card p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
+            <div class="relative flex-1">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-gray-500"></i>
+              <input type="text" x-model="busquedaClaseTexto" placeholder="Buscar por profesor, tema, fecha o palabra dicha en clase..."
+                     class="w-full bg-gray-900 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-gray-800 focus:outline-none focus:border-amber-500">
+            </div>
+          </div>
+          
+          <div class="flex items-center space-x-3">
+            <select x-model="filtroClaseAsignatura" class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2.5 rounded-xl border border-gray-800 outline-none focus:border-amber-500">
+              <option value="">Todas las asignaturas</option>
+              <template x-for="asig in asignaturasConClases" :key="asig">
+                <option :value="asig" x-text="asig"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <!-- LISTA / REJILLA DE VIDEOCLASES -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <template x-for="clase in videoclasesFiltradas" :key="clase.archivo">
+            <div class="glass p-5 rounded-2xl border border-gray-800 hover:border-amber-500/40 transition flex flex-col justify-between group">
+              <div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 truncate max-w-[220px]" x-text="clase.asignatura"></span>
+                  <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1">
+                    <i class="fa-regular fa-calendar mr-1"></i>
+                    <span x-text="clase.fecha"></span>
+                  </span>
+                </div>
+                <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition" x-text="clase.titulo"></h4>
+                <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
+              </div>
+
+              <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between">
+                <button @click="verContenidoArchivo(clase.archivo)" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
+                  <i class="fa-solid fa-book-open text-amber-400"></i>
+                  <span>Leer Transcripción</span>
+                </button>
+                <button @click="preguntarSobreClase(clase)" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
+                  <i class="fa-solid fa-robot"></i>
+                  <span>Preguntar a NOVA</span>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div x-show="videoclasesFiltradas.length === 0" class="text-center py-16 text-gray-500 text-xs">
+          <i class="fa-solid fa-video-slash text-3xl mb-3 opacity-30 text-amber-400"></i>
+          <p class="text-sm">No se encontraron videoclases que coincidan con la búsqueda.</p>
+        </div>
+
       </div>
 
     </main>
@@ -1028,6 +1279,11 @@ def dashboard_html():
         testAciertos: 0,
         testNota: 0,
 
+        // Videoclases y Transcripciones
+        todasLasClases: [],
+        filtroClaseAsignatura: '',
+        busquedaClaseTexto: '',
+
         get programaActual() {
           return this.programas.find(p => p.id === this.programaActivoId) || this.programas[0];
         },
@@ -1044,10 +1300,32 @@ def dashboard_html():
           return this.catalogoFiltrado.reduce((acc, a) => acc + (a.tests?.length || 0), 0);
         },
 
+        get videoclasesFiltradas() {
+          let lista = this.todasLasClases;
+          if (this.filtroClaseAsignatura) {
+            lista = lista.filter(c => c.asignatura === this.filtroClaseAsignatura);
+          }
+          if (this.busquedaClaseTexto.trim()) {
+            const q = this.busquedaClaseTexto.toLowerCase();
+            lista = lista.filter(c => c.titulo.toLowerCase().includes(q) || c.asignatura.toLowerCase().includes(q) || (c.summary && c.summary.toLowerCase().includes(q)) || c.fecha.includes(q));
+          }
+          return lista;
+        },
+
+        get asignaturasConClases() {
+          return [...new Set(this.todasLasClases.map(c => c.asignatura))].sort();
+        },
+
+        get clasesDeAsignaturaActual() {
+          if (!this.chatAsignatura) return [];
+          return this.todasLasClases.filter(c => c.asignatura.toLowerCase().includes(this.chatAsignatura.toLowerCase()) || this.chatAsignatura.toLowerCase().includes(c.asignatura.toLowerCase()));
+        },
+
         async init() {
           await this.cargarProgramas();
           await this.cargarCatalogo();
           await this.cargarProgreso();
+          await this.cargarVideoclases();
           this.actualizarMensajeBienvenidaChat();
         },
 
@@ -1107,6 +1385,7 @@ def dashboard_html():
             await fetch('/api/sincronizar', { method: 'POST' });
             await this.cargarProgramas();
             await this.cargarCatalogo();
+            await this.cargarVideoclases();
           } catch(e) { console.error(e); }
           finally { this.sincronizando = false; }
         },
@@ -1118,6 +1397,7 @@ def dashboard_html():
             const data = await res.json();
             await this.cargarProgramas();
             await this.cargarCatalogo();
+            await this.cargarVideoclases();
             alert(data.mensaje);
           } catch(e) {
             alert('Error al escanear los materiales del 1er año.');
@@ -1133,12 +1413,32 @@ def dashboard_html():
             const data = await res.json();
             await this.cargarProgramas();
             await this.cargarCatalogo();
+            await this.cargarVideoclases();
             alert('Sincronización de Canvas completada (' + (data.nuevos_archivos || 0) + ' archivos nuevos descargados).');
           } catch(e) {
             alert('Error al conectar con Canvas. Verifica tu sesión con: unir-hub --login');
           } finally {
             this.descargandoCanvas = false;
           }
+        },
+
+        async cargarVideoclases() {
+          try {
+            const res = await fetch('/api/videoclases');
+            this.todasLasClases = await res.json();
+          } catch(e) { console.error(e); }
+        },
+
+        preguntarSobreClase(clase) {
+          this.chatAsignatura = clase.asignatura;
+          this.tab = 'tutor';
+          this.chatInput = '¿Qué explicó el profesor en la sesión ' + clase.titulo + ' (' + clase.fecha + ') y qué indicaciones concretas dio?';
+          this.enviarMensajeChat();
+        },
+
+        lanzarPreguntaRapida(texto) {
+          this.chatInput = texto;
+          this.enviarMensajeChat();
         },
 
         generarGuiaDesdePdf(pdfNombre) {
@@ -1209,7 +1509,7 @@ def dashboard_html():
           try {
             const res = await fetch('/api/contenido?ruta=' + encodeURIComponent(ruta));
             const data = await res.json();
-            this.modalTitulo = data.nombre.replace(/_/g, ' ').replace(/\.md$/i, '');
+            this.modalTitulo = data.nombre.replace(/_/g, ' ').replace(/\\.md$/i, '');
             this.modalContenido = data.contenido;
             this.modalVisor = true;
           } catch(e) { alert('No se pudo abrir el archivo'); }

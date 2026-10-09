@@ -109,16 +109,27 @@ class LLMClient:
             temperature=temperatura,
         )
 
-        try:
-            response = client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=config,
-            )
-            return response.text
-        except Exception as e:
-            console.print(f"[bold red]❌ Error de comunicación con Gemini:[/bold red] {e}")
-            return None
+        modelos = [self.model_name]
+        if "gemini-flash-latest" not in modelos:
+            modelos.append("gemini-flash-latest")
+
+        for intento, mod in enumerate(modelos):
+            try:
+                response = client.models.generate_content(
+                    model=mod,
+                    contents=prompt,
+                    config=config,
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                console.print(f"[dim]Reintentando con modelo de respaldo tras error en {mod}: {e}[/dim]")
+                import time
+                time.sleep(1)
+                continue
+
+        console.print("[bold red]❌ Error de comunicación con Gemini en todos los modelos disponibles.[/bold red]")
+        return None
 
     def generar_stream(
         self,

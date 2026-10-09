@@ -188,9 +188,13 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
     if "programación" in s or "programacion" in s:
         if "multimedia" not in s and "servicios" not in s:
             return "1º DAM - Programación"
-    if ("ipe" in s or "empleabilidad" in s) and ("ii" not in s and "2" not in s and "segundo" not in s):
+    if "empleabilidad" in s or "ipe" in s:
+        if re.search(r'\b(ii|2º|2o|segundo)\b', s) or re.search(r'empleabilidad\s+ii\b', s) or re.search(r'ipe\s*2\b', s):
+            return "Itinerario para la Empleabilidad II"
         return "1º DAM - Itinerario para la Empleabilidad I"
-    if ("inglés" in s or "ingles" in s) and ("profesional" not in s or "gs" not in s) and ("2" not in s and "segundo" not in s):
+    if "inglés" in s or "ingles" in s:
+        if ("profesional" in s and "gs" in s) or re.search(r'\b(ii|2º|2o|segundo)\b', s):
+            return "Inglés Profesional"
         return "1º DAM - Inglés Técnico I"
 
     # 3. 2º DAM
@@ -206,10 +210,6 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
         return "Sistemas de Gestión Empresarial"
     if "nube" in s or "cloud" in s:
         return "Arquitecturas en la Nube"
-    if "empleabilidad" in s or "ipe" in s:
-        return "Itinerario para la Empleabilidad II"
-    if "inglés" in s or "ingles" in s:
-        return "Inglés Profesional"
     if "digitali" in s:
         return "Digitalización Aplicada"
     if "sostenib" in s:
