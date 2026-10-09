@@ -117,7 +117,8 @@ class CampusScraper:
             page = context.new_page()
 
             try:
-                page.goto(UNIR_CAMPUS_URL, wait_until="networkidle", timeout=30000)
+                page.goto(UNIR_CAMPUS_URL, wait_until="domcontentloaded", timeout=25000)
+                page.wait_for_timeout(1500)
 
                 # Verificar si fuimos redirigidos al login
                 if "login" in page.url.lower():
@@ -126,6 +127,14 @@ class CampusScraper:
                     return 0
 
                 console.print(f"[green]✔ Acceso concedido al campus: {page.title()}[/green]")
+
+                # Inicializar sesión de requests con las cookies activas de Canvas
+                req_session = requests.Session()
+                req_session.headers.update({
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                })
+                for ck in context.cookies():
+                    req_session.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
 
                 # 1. Obtener lista de cursos vía Canvas API interna
                 cursos = page.evaluate("""async () => {
@@ -189,9 +198,9 @@ class CampusScraper:
 
                         ruta_local = dir_asig / nombre_archivo
                         if not ruta_local.exists() or ruta_local.stat().st_size == 0:
-                            # Descargar archivo
+                            # Descargar archivo con sesión autenticada
                             try:
-                                resp = requests.get(url_descarga, timeout=30)
+                                resp = req_session.get(url_descarga, timeout=30)
                                 if resp.status_code == 200:
                                     with open(ruta_local, "wb") as out:
                                         out.write(resp.content)
