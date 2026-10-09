@@ -138,6 +138,35 @@ def menu_procesar_tema_ia(factoria: FactoriaAcademicaIA):
         pass
 
 
+from src.scheduler.sync_scheduler import SyncScheduler
+
+
+def menu_programador_tareas(scheduler: SyncScheduler):
+    estado = scheduler.estado_programacion()
+    texto_estado = "[green]✔ Activo[/green]" if estado["activo"] else "[yellow]⚠ Inactivo[/yellow]"
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]⏰ PROGRAMADOR AUTOMÁTICO DE DESCARGAS (systemd timer)[/bold cyan]\n\n"
+            f"Estado actual: {texto_estado}\n"
+            f"Próxima ejecución: [white]{estado['proxima_ejecucion']}[/white]\n\n"
+            "[bold]Opciones de configuración:[/bold]\n"
+            "[cyan]1.[/cyan] 🌙 Activar: Todos los días a las 04:00 AM (Recomendado)\n"
+            "[cyan]2.[/cyan] 🔄 Activar: Cada 12 horas (00:00 y 12:00)\n"
+            "[cyan]3.[/cyan] ⚡ Activar: Cada 6 horas\n"
+            "[cyan]4.[/cyan] 💼 Activar: De Lunes a Viernes a las 08:00 AM\n"
+            "[cyan]5.[/cyan] 🛑 Desactivar temporizador automático\n"
+            "[cyan]0.[/cyan] ↩ Volver al menú principal",
+            border_style="cyan",
+        )
+    )
+    op = console.input("👉 Selecciona una opción: ").strip()
+    if op in ["1", "2", "3", "4"]:
+        scheduler.activar_programacion(op)
+    elif op == "5":
+        scheduler.desactivar_programacion()
+
+
 def ver_biblioteca_completa(scraper: CampusScraper, recordings: RecordingsManager):
     scraper.listar_materiales_locales()
     recordings.listar_clases_disponibles()
@@ -150,6 +179,7 @@ def menu_principal():
     recordings = RecordingsManager(llm_client)
     scraper = CampusScraper()
     factoria = FactoriaAcademicaIA(tutor_ia)
+    scheduler = SyncScheduler()
 
     while True:
         mostrar_banner()
@@ -163,6 +193,7 @@ def menu_principal():
         console.print("[cyan]6.[/cyan] 🎯 Practicar Simulacro de Examen Tipo Test (PSP - Tema 1)")
         console.print("[cyan]7.[/cyan] 📚 Ver Biblioteca de Materiales y Clases guardadas")
         console.print("[cyan]8.[/cyan] 🔑 Configurar Clave de API de IA (Google Gemini)")
+        console.print("[cyan]9.[/cyan] ⏰ Programar Descarga Automática (systemd timer desatendido)")
         console.print("[cyan]0.[/cyan] 🚪 Salir\n")
 
         opcion = console.input("👉 Selecciona una opción: ").strip()
@@ -183,10 +214,18 @@ def menu_principal():
             ver_biblioteca_completa(scraper, recordings)
         elif opcion == "8":
             llm_client.solicitar_api_key_interactiva()
+        elif opcion == "9":
+            menu_programador_tareas(scheduler)
         elif opcion == "0":
             console.print("\n[bold green]👋 ¡Hasta pronto Alex! Éxitos con el estudio.[/bold green]\n")
             break
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ["--sync", "-s"]:
+        ensure_directories()
+        scraper = CampusScraper()
+        scraper.ejecutar_sincronizacion_completa()
+        sys.exit(0)
+
     menu_principal()

@@ -145,3 +145,34 @@ class CampusScraper:
 
         console.print(table)
         console.print("")
+
+    def ejecutar_sincronizacion_completa(self) -> int:
+        """
+        Ejecuta la sincronización completa (respaldo + campus) y emite
+        notificaciones de escritorio en caso de nuevos archivos.
+        """
+        console.print("\n[bold cyan]🔄 Iniciando ciclo de sincronización automática...[/bold cyan]")
+        importados = self.sincronizar_desde_respaldo_local()
+
+        if tiene_sesion_guardada():
+            self.explorar_y_descargar_campus()
+        else:
+            console.print("[dim]Sesión del campus pendiente. Para sincronizar en la nube, inicia sesión en la opción 1.[/dim]")
+
+        if importados > 0:
+            try:
+                import subprocess
+                subprocess.run(
+                    [
+                        "notify-send",
+                        "-a", "UNIR Study Hub",
+                        "-i", "dialog-information",
+                        "🎓 UNIR Study Hub Actualizado",
+                        f"Se han incorporado {importados} nuevos temas y materiales al sistema.",
+                    ],
+                    check=False,
+                )
+            except Exception:
+                pass
+
+        return importados
