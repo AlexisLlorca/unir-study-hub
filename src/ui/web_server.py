@@ -18,7 +18,7 @@ from typing import Dict, Any, Optional, List
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -135,6 +135,18 @@ def api_contenido(ruta: str):
     
     with open(archivo, "r", encoding="utf-8") as f:
         return {"contenido": f.read(), "nombre": archivo.name}
+
+
+@app.get("/api/archivo-raw")
+def api_archivo_raw(ruta: str):
+    """Sirve archivos directamente (como PDFs o imágenes) para visores integrados."""
+    archivo = (BASE_DIR / ruta).resolve()
+    if not str(archivo).startswith(str(BASE_DIR)) and not str(archivo).startswith("/home/alexllorca/Respaldo_Estudios"):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    if not archivo.exists() or not archivo.is_file():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    media_type = "application/pdf" if archivo.suffix.lower() == ".pdf" else None
+    return FileResponse(archivo, media_type=media_type)
 
 
 @app.get("/api/test/{asignatura}/{test_name}")
@@ -353,6 +365,8 @@ def api_videoclases(programa: Optional[str] = None):
             summary = ""
             titulo = f_md.stem[11:] if len(f_md.stem) >= 11 and f_md.stem[:4].isdigit() else f_md.stem
             fecha = f_md.stem[:10] if len(f_md.stem) >= 10 and f_md.stem[:4].isdigit() else "Reciente"
+            rec_url = ""
+            duration = 0
 
             if info_file.exists():
                 try:
@@ -360,8 +374,12 @@ def api_videoclases(programa: Optional[str] = None):
                     summary = data.get("summary", "")
                     if data.get("sessionName"):
                         titulo = data.get("sessionName")
+                    rec_url = data.get("recordingUrl", "")
+                    duration = data.get("duration", 0)
                 except Exception:
                     pass
+
+            cues_file = dir_asig / f"{f_md.stem}_cues.json"
 
             clases.append({
                 "asignatura": asig,
@@ -369,9 +387,130 @@ def api_videoclases(programa: Optional[str] = None):
                 "titulo": titulo,
                 "summary": summary,
                 "archivo": str(f_md.relative_to(BASE_DIR)),
-                "nombre_archivo": f_md.name
+                "nombre_archivo": f_md.name,
+                "recording_url": rec_url,
+                "has_cues": cues_file.exists(),
+                "duration": duration,
             })
     return clases
+
+
+@app.get("/api/buscar-en-clases")
+def api_buscar_en_clases(q: str, asig: Optional[str] = None):
+    """Búsqueda rápida en intervenciones de clases con minutaje exacto."""
+    from src.ai.transcription_search import buscar_en_transcripciones
+    return buscar_en_transcripciones(q, asignatura=asig, max_results=8)
+
+
+@app.get("/api/clase-cues")
+def api_clase_cues(asig: str, nombre_archivo: str):
+    """Devuelve los cues estructurados de una clase para el visor interactivo."""
+    stem = Path(nombre_archivo).stem.replace("_cues", "")
+    f_cues = TRANSCRIPCIONES_DIR / asig / f"{stem}_cues.json"
+    if f_cues.exists():
+        try:
+            return json.loads(f_cues.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    f_md = TRANSCRIPCIONES_DIR / asig / f"{stem}.md"
+    if f_md.exists():
+        return [{"start_str": "00:00", "speaker": "Clase", "text": f_md.read_text(encoding="utf-8")[:4000]}]
+    return []
+
+
+@app.get("/api/agenda")
+def api_agenda():
+    """Devuelve las próximas entregas, PACs y eventos académicos de Canvas."""
+    from src.crawler.agenda_sync import cargar_agenda_cache
+    return cargar_agenda_cache()
+
+
+@app.post("/api/sincronizar-agenda")
+def api_sincronizar_agenda():
+    """Sincroniza en directo la agenda y PACs con Canvas LMS."""
+    from src.crawler.agenda_sync import sincronizar_agenda_canvas
+    eventos = sincronizar_agenda_canvas()
+    return {"status": "ok", "total": len(eventos), "eventos": eventos}
+
+
+@app.get("/api/flashcards")
+def api_flashcards(programa: str = "dam", asig: Optional[str] = None):
+    """Devuelve las barajas de flashcards para memorización y repaso activo."""
+    from src.ai.flashcards import GestorFlashcards
+    gestor = GestorFlashcards()
+    return gestor.obtener_tarjetas(programa, asignatura=asig)
+
+
+class CalificarCardReq(BaseModel):
+    programa: str
+    tarjeta_id: str
+    dificultad: str
+
+
+@app.post("/api/flashcards/calificar")
+def api_calificar_flashcard(req: CalificarCardReq):
+    from src.ai.flashcards import GestorFlashcards
+    gestor = GestorFlashcards()
+    return gestor.calificar_tarjeta(req.programa, req.tarjeta_id, req.dificultad)
+
+
+class GenerarCardsReq(BaseModel):
+    asignatura: str
+    programa: str
+    texto: str
+
+
+@app.post("/api/flashcards/generar")
+def api_generar_flashcards(req: GenerarCardsReq):
+    from src.ai.flashcards import GestorFlashcards
+    gestor = GestorFlashcards()
+    nuevas = gestor.generar_flashcards_con_ia(req.texto, req.asignatura, req.programa)
+    return {"status": "ok", "creadas": len(nuevas), "tarjetas": nuevas}
+
+
+class EvaluarTestReq(BaseModel):
+    preguntas: List[Dict[str, Any]]
+    respuestas: Dict[str, str]
+
+
+@app.post("/api/evaluar-test-unir")
+def api_evaluar_test_unir(req: EvaluarTestReq):
+    """
+    Evalúa el test con el baremo oficial de examen de UNIR:
+    +1.00 por acierto, -0.33 por fallo, 0 en blanco.
+    Calcula nota final de 0 a 10.
+    """
+    total = len(req.preguntas)
+    if total == 0:
+        return {"nota": 0.0, "aciertos": 0, "fallos": 0, "blancos": 0, "puntos_netos": 0.0, "aprobado": False}
+
+    aciertos = 0
+    fallos = 0
+    blancos = 0
+
+    for idx, p in enumerate(req.preguntas):
+        resp_user = req.respuestas.get(str(idx))
+        correcta = p.get("correcta")
+        if not resp_user:
+            blancos += 1
+        elif resp_user == correcta:
+            aciertos += 1
+        else:
+            fallos += 1
+
+    puntos_netos = (aciertos * 1.0) - (fallos * 0.33)
+    puntos_netos = max(0.0, puntos_netos)
+    nota_sobre_10 = min(10.0, (puntos_netos / total) * 10.0)
+
+    return {
+        "nota": round(nota_sobre_10, 2),
+        "aciertos": aciertos,
+        "fallos": fallos,
+        "blancos": blancos,
+        "puntos_netos": round(puntos_netos, 2),
+        "aprobado": nota_sobre_10 >= 5.0,
+        "baremo": "+1.0 acierto, -0.33 fallo, 0 en blanco"
+    }
 
 
 class ChatMessage(BaseModel):
@@ -382,7 +521,9 @@ class ChatMessage(BaseModel):
 
 @app.post("/api/chat")
 def api_chat(msg: ChatMessage):
-    """Responde preguntas mediante NOVA con rol especializado e inyección RAG de videoclases."""
+    """Responde preguntas mediante NOVA con rol especializado e inyección RAG con minutaje exacto."""
+    from src.ai.transcription_search import formatear_contexto_para_tutor
+
     contexto_rol = ""
     if msg.programa == "ciber":
         contexto_rol = (
@@ -404,21 +545,23 @@ def api_chat(msg: ChatMessage):
             "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot y patrones de arquitectura limpia. "
         )
 
-    # Inyección RAG contextual de videoclases y transcripciones
-    contexto_trans = buscar_contexto_transcripciones(msg.mensaje, msg.asignatura)
+    # Inyección RAG con minutaje exacto de videoclases y transcripciones
+    contexto_citas = formatear_contexto_para_tutor(msg.mensaje, msg.asignatura)
+    contexto_trans_general = buscar_contexto_transcripciones(msg.mensaje, msg.asignatura)
     contexto_asig = f"\n[Asignatura / Módulo activo: {msg.asignatura}]" if msg.asignatura else ""
 
     instrucciones_base = (
         "\nINSTRUCCIONES CLAVE DE NOVA:\n"
         "1. Eres NOVA, la copiloto y mentora académica integrada dentro de UNIR Study Hub.\n"
-        "2. Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas de UNIR y a todos los temarios.\n"
-        "3. NUNCA digas que no tienes acceso al campus virtual ni que los datos están protegidos por login. Toda la información de las videoclases ya ha sido extraída y transcrita localmente en el Hub.\n"
-        "4. Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, responde con la máxima exactitud basándote en las transcripciones y resúmenes oficiales incluidos a continuación. Cita nombres de profesores (ej: David, Borja, etc.), fechas de sesión y directrices exactas explicadas.\n"
+        "2. Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios.\n"
+        "3. NUNCA digas que no tienes acceso al campus virtual ni que los datos están protegidos por login. Toda la información ya ha sido indexada localmente en el Hub.\n"
+        "4. Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, responde con la máxima exactitud. "
+        "MENCIONA SIEMPRE EL MINUTO EXACTO [MM:SS] o [HH:MM:SS], el nombre del profesor/alumno que habló y sus declaraciones literales.\n"
     )
 
-    prompt = f"{contexto_rol}{instrucciones_base}{contexto_asig}{contexto_trans}\nAlumno: {msg.mensaje}\nNOVA:"
+    prompt = f"{contexto_rol}{instrucciones_base}{contexto_asig}{contexto_citas}{contexto_trans_general}\nAlumno: {msg.mensaje}\nNOVA:"
     
-    respuesta = tutor_ia.client.generar_contenido(prompt, temperatura=0.4)
+    respuesta = tutor_ia.client.generar_contenido(prompt, temperatura=0.3)
     return {"respuesta": respuesta or "No se pudo generar respuesta."}
 
 
@@ -611,6 +754,21 @@ def dashboard_html():
             <i class="fa-solid fa-robot w-4 text-center text-cyan-400"></i>
             <span>Tutor Inteligente NOVA</span>
           </button>
+          <button @click="tab = 'agenda'; asigSeleccionada = null"
+                  :class="tab === 'agenda' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <i class="fa-solid fa-calendar-check w-4 text-center text-rose-400"></i>
+              <span>Agenda y PACs Canvas</span>
+            </div>
+            <span x-show="agendaEventos.length > 0" class="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded-full font-bold" x-text="agendaEventos.length"></span>
+          </button>
+          <button @click="tab = 'flashcards'; asigSeleccionada = null"
+                  :class="tab === 'flashcards' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+            <i class="fa-solid fa-clone w-4 text-center text-purple-400"></i>
+            <span>Flashcards (Repaso Activo)</span>
+          </button>
           <button @click="tab = 'progreso'"
                   :class="tab === 'progreso' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
                   class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
@@ -723,6 +881,58 @@ def dashboard_html():
                 </template>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- AGENDA & PACs WIDGET (CANVAS ALERT BANNER) -->
+        <div x-show="agendaEventos.length > 0" class="glass-card p-5 rounded-3xl border border-rose-500/30 bg-gradient-to-r from-rose-950/20 via-gray-900/60 to-purple-950/20">
+          <div class="flex flex-wrap items-center justify-between gap-4 mb-3">
+            <div class="flex items-center space-x-3">
+              <span class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-sm font-bold animate-pulse">
+                <i class="fa-solid fa-bell"></i>
+              </span>
+              <div>
+                <h3 class="text-sm font-extrabold text-white flex items-center space-x-2">
+                  <span>Próximas Entregas y PACs de Canvas</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-mono font-bold" x-text="agendaEventos.length + ' en calendario'"></span>
+                </h3>
+                <p class="text-[11px] text-gray-400">Actividades evaluables, fechas límite y sesiones oficiales</p>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition flex items-center space-x-1.5 border border-gray-700">
+                <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
+                <span x-text="sincronizandoAgenda ? 'Actualizando...' : 'Refrescar Canvas'"></span>
+              </button>
+              <button @click="tab = 'agenda'" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition flex items-center space-x-1">
+                <span>Ver Agenda Completa</span>
+                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <template x-for="ev in agendaEventos.slice(0, 3)" :key="ev.id">
+              <div class="p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-rose-500/40 transition flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center justify-between text-[11px] mb-1.5">
+                    <span class="font-bold uppercase tracking-wider text-[10px] text-gray-400 truncate max-w-[150px]" x-text="ev.asignatura"></span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          :class="ev.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : (ev.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40')"
+                          x-text="ev.plazo_texto"></span>
+                  </div>
+                  <h4 class="text-xs font-bold text-white line-clamp-1" x-text="ev.titulo"></h4>
+                  <p class="text-[11px] text-gray-400 mt-1 line-clamp-2" x-text="ev.descripcion"></p>
+                </div>
+                <div class="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[10px]">
+                  <span class="text-gray-400 font-mono" x-text="ev.puntos ? (ev.puntos + ' pts') : 'Evaluación'"></span>
+                  <a :href="ev.url || 'https://campusfp.unir.net'" target="_blank" class="text-cyan-400 hover:underline flex items-center space-x-1">
+                    <span>Abrir en Canvas</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                  </a>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -931,13 +1141,18 @@ def dashboard_html():
                   <p class="text-[10px] uppercase text-gray-400 font-bold mb-2">Temarios Oficiales</p>
                   <template x-for="m in asigSeleccionada?.materiales" :key="m">
                     <div class="p-2 text-xs text-gray-300 hover:text-white flex items-center justify-between bg-gray-900/40 rounded-lg mb-1 group">
-                      <div class="flex items-center space-x-2 pr-2 overflow-hidden flex-1">
+                      <div class="flex items-center space-x-2 pr-2 overflow-hidden flex-1 cursor-pointer" @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + m, m)">
                         <i class="fa-regular fa-file-pdf text-rose-400 shrink-0"></i>
-                        <span class="break-words line-clamp-2 text-left" x-text="m"></span>
+                        <span class="break-words line-clamp-2 text-left group-hover:text-cyan-300 transition" x-text="m"></span>
                       </div>
-                      <button @click="generarGuiaDesdePdf(m)" title="Generar Guía IA de este tema" class="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[10px] transition shrink-0">
-                        Generar IA
-                      </button>
+                      <div class="flex items-center space-x-1 shrink-0">
+                        <button @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + m, m)" title="Visualizar PDF integrado" class="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px] transition font-semibold hover:bg-cyan-500/30">
+                          👁️ Ver
+                        </button>
+                        <button @click="generarGuiaDesdePdf(m)" title="Generar Guía IA de este tema" class="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[10px] transition hover:bg-emerald-500/30">
+                          IA
+                        </button>
+                      </div>
                     </div>
                   </template>
                   <div x-show="asigSeleccionada?.materiales.length === 0" class="text-center py-6 text-gray-500 text-xs">
@@ -1043,6 +1258,133 @@ def dashboard_html():
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ==================== VISTA AGENDA Y PACS CANVAS ==================== -->
+      <div x-show="tab === 'agenda'" x-transition class="space-y-6">
+        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-calendar-check"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-white">Agenda & Calendario de Entregas (Canvas LMS)</h2>
+              <p class="text-xs text-gray-400">Control de plazos, PACs obligatorias, foros puntuables y sesiones en directo</p>
+            </div>
+          </div>
+          <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20 disabled:opacity-50">
+            <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
+            <span x-text="sincronizandoAgenda ? 'Sincronizando con Canvas...' : 'Sincronizar con Canvas'"></span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <template x-for="ev in agendaEventos" :key="ev.id">
+            <div class="glass p-5 rounded-2xl border transition flex flex-col justify-between group"
+                 :class="ev.urgencia === 'critica' ? 'border-rose-500/40 bg-rose-950/10' : (ev.urgencia === 'alta' ? 'border-amber-500/30' : 'border-gray-800')">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase"
+                        :class="ev.tipo === 'tarea' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'"
+                        x-text="ev.tipo === 'tarea' ? 'PAC / Tarea' : 'Clase en Directo'"></span>
+                  <span class="text-[11px] font-black px-2 py-0.5 rounded-full"
+                        :class="ev.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : (ev.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-800 text-gray-400')"
+                        x-text="ev.plazo_texto"></span>
+                </div>
+                <p class="text-[11px] font-semibold text-gray-400 truncate" x-text="ev.asignatura"></p>
+                <h4 class="font-bold text-white text-sm mt-1 group-hover:text-cyan-300 transition" x-text="ev.titulo"></h4>
+                <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed" x-text="ev.descripcion || 'Sin descripción detallada disponible.'"></p>
+              </div>
+
+              <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between text-xs">
+                <span class="text-gray-400 font-mono text-[11px]" x-text="ev.puntos ? (ev.puntos + ' puntos') : 'Sesión evaluativa'"></span>
+                <a :href="ev.url || 'https://campusfp.unir.net'" target="_blank" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-300 rounded-xl font-semibold transition flex items-center space-x-1.5 border border-gray-700">
+                  <span>Ir a la Entrega</span>
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                </a>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ==================== VISTA FLASHCARDS / REPASO ACTIVO ==================== -->
+      <div x-show="tab === 'flashcards'" x-transition class="space-y-6">
+        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-clone"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-white">Tarjetas de Repaso Activo (Flashcards / Anki)</h2>
+              <p class="text-xs text-gray-400">Técnica de memorización activa y repetición espaciada para conceptos de examen</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-3">
+            <select x-model="flashcardFiltroAsig" @change="filtrarFlashcards()" class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2.5 rounded-xl border border-gray-800 outline-none">
+              <option value="">Todas las materias</option>
+              <template x-for="asig in asignaturasConFlashcards" :key="asig">
+                <option :value="asig" x-text="asig"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <div x-show="flashcardsFiltradas.length > 0" class="max-w-2xl mx-auto space-y-6">
+          <div class="flex items-center justify-between text-xs text-gray-400">
+            <span x-text="'Tarjeta ' + (flashcardIndice + 1) + ' de ' + flashcardsFiltradas.length"></span>
+            <span class="text-purple-400 font-semibold" x-text="tarjetaActual?.asignatura"></span>
+          </div>
+
+          <!-- TARJETA INTERACTIVA 3D FLIP -->
+          <div @click="flashcardVolteada = !flashcardVolteada"
+               class="min-h-[280px] p-8 rounded-3xl glass cursor-pointer border hover:border-purple-500/40 transition flex flex-col justify-between shadow-2xl relative select-none"
+               :class="flashcardVolteada ? 'border-purple-500/50 bg-purple-950/20' : 'border-gray-700 bg-gray-900/90'">
+            <div>
+              <div class="flex items-center justify-between text-xs text-gray-400 mb-4">
+                <span class="font-bold uppercase tracking-wider text-[10px]"
+                      :class="flashcardVolteada ? 'text-purple-400' : 'text-cyan-400'"
+                      x-text="flashcardVolteada ? '💡 Respuesta Técnica' : '❓ Pregunta de Concepto'"></span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-300" x-text="tarjetaActual?.nivel"></span>
+              </div>
+              <h3 class="text-lg md:text-xl font-bold text-white leading-relaxed" x-show="!flashcardVolteada" x-text="tarjetaActual?.anverso"></h3>
+              <div class="markdown-content text-sm md:text-base leading-relaxed text-gray-200" x-show="flashcardVolteada" x-html="marked.parse(tarjetaActual?.reverso || '')"></div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-400">
+              <span class="text-[11px]"><i class="fa-solid fa-arrows-rotate mr-1"></i>Haz clic en cualquier parte para voltear</span>
+              <span class="text-xs font-semibold text-purple-400" x-text="flashcardVolteada ? '✔ Reversa' : 'Ver respuesta'"></span>
+            </div>
+          </div>
+
+          <!-- BOTONES DE CALIFICACIÓN ESPACIADA -->
+          <div class="grid grid-cols-3 gap-3" x-show="flashcardVolteada">
+            <button @click="calificarTarjeta('dificil')" class="py-3 px-4 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs transition border border-rose-500/30">
+              🔴 Difícil (Reforzar)
+            </button>
+            <button @click="calificarTarjeta('medio')" class="py-3 px-4 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs transition border border-amber-500/30">
+              🟡 Bien (En repaso)
+            </button>
+            <button @click="calificarTarjeta('facil')" class="py-3 px-4 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs transition border border-emerald-500/30">
+              🟢 Fácil (Dominada)
+            </button>
+          </div>
+
+          <!-- BOTONES DE NAVEGACIÓN -->
+          <div class="flex items-center justify-between pt-2">
+            <button @click="anteriorFlashcard()" :disabled="flashcardIndice === 0" class="px-4 py-2 bg-gray-800 rounded-xl text-xs text-gray-300 font-semibold disabled:opacity-40">
+              Anterior
+            </button>
+            <button @click="siguienteFlashcard()" class="px-5 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
+              Siguiente Tarjeta
+            </button>
+          </div>
+        </div>
+
+        <div x-show="flashcardsFiltradas.length === 0" class="text-center py-16 text-gray-500 text-xs">
+          <i class="fa-solid fa-clone text-3xl mb-3 opacity-30 text-purple-400"></i>
+          <p class="text-sm">No hay tarjetas de repaso para este filtro.</p>
         </div>
       </div>
 
@@ -1188,15 +1530,27 @@ def dashboard_html():
                 <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
               </div>
 
-              <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between">
-                <button @click="verContenidoArchivo(clase.archivo)" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
-                  <i class="fa-solid fa-book-open text-amber-400"></i>
-                  <span>Leer Transcripción</span>
-                </button>
-                <button @click="preguntarSobreClase(clase)" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
-                  <i class="fa-solid fa-robot"></i>
-                  <span>Preguntar a NOVA</span>
-                </button>
+              <div class="mt-4 pt-3 border-t border-gray-800 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center space-x-1.5">
+                  <button @click="abrirMinutero(clase)" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-amber-500/30 shadow-sm">
+                    <i class="fa-solid fa-clock"></i>
+                    <span>Minutero y Citas</span>
+                  </button>
+                  <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1">
+                    <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
+                    <span>Texto</span>
+                  </button>
+                </div>
+                <div class="flex items-center space-x-1.5">
+                  <a x-show="clase.recording_url" :href="clase.recording_url" target="_blank" class="px-2.5 py-1.5 bg-gray-800/80 hover:bg-gray-700 text-cyan-400 rounded-xl text-xs transition flex items-center space-x-1" title="Ver en servidor UNIR">
+                    <i class="fa-solid fa-play text-[10px]"></i>
+                    <span>Vídeo</span>
+                  </a>
+                  <button @click="preguntarSobreClase(clase)" class="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1">
+                    <i class="fa-solid fa-robot"></i>
+                    <span>NOVA</span>
+                  </button>
+                </div>
               </div>
             </div>
           </template>
@@ -1297,7 +1651,14 @@ def dashboard_html():
         <h3 class="text-2xl font-extrabold text-white" x-text="testNota >= 5 ? '¡Enhorabuena, has aprobado!' : 'Necesitas repasar este tema'"></h3>
         <p class="text-gray-400 text-sm">Tu puntuación oficial en el simulacro:</p>
         <p class="text-5xl font-black" :class="testNota >= 5 ? 'text-emerald-400' : 'text-rose-400'" x-text="testNota.toFixed(2) + ' / 10'"></p>
-        <p class="text-xs text-gray-500" x-text="testAciertos + ' aciertos de ' + testPreguntas.length + ' preguntas.'"></p>
+        
+        <!-- DESGLOSE OFICIAL UNIR (+1 / -0.33) -->
+        <div class="flex flex-wrap items-center justify-center gap-3 py-2 px-4 bg-gray-900/90 rounded-2xl border border-gray-800 max-w-sm mx-auto text-xs font-mono">
+          <span class="text-emerald-400 font-bold" x-text="'+' + testAciertos + ' Aciertos'"></span>
+          <span class="text-rose-400 font-bold" x-text="'-' + testFallos + ' Fallos (-' + (testFallos * 0.33).toFixed(2) + ')'"></span>
+          <span class="text-gray-400" x-text="testBlancos + ' Blanco'"></span>
+        </div>
+        <p class="text-[11px] text-gray-500">Baremo oficial UNIR: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
         <button @click="modalTest = false" class="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
           Cerrar y Guardar Nota
         </button>
@@ -1310,6 +1671,95 @@ def dashboard_html():
         <button @click="siguientePregunta()" class="px-6 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-lg text-xs transition">
           <span x-text="testIndice === testPreguntas.length - 1 ? 'Finalizar Examen' : 'Siguiente'"></span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: VISOR DE CLASE CON MINUTERO INTERACTIVO ==================== -->
+  <div x-show="modalMinutero" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-5xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-amber-500/30 shadow-2xl">
+      <!-- HEADER -->
+      <div class="p-4 bg-gray-900/95 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-clock"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 uppercase" x-text="minuteroClase?.asignatura"></span>
+              <span class="text-xs text-amber-400 font-mono" x-text="minuteroClase?.fecha"></span>
+            </div>
+            <h3 class="font-bold text-white text-sm mt-0.5" x-text="minuteroClase?.titulo"></h3>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <a x-show="minuteroClase?.recording_url" :href="minuteroClase?.recording_url" target="_blank" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-amber-500/30">
+            <i class="fa-solid fa-play"></i>
+            <span>Grabación UNIR</span>
+          </a>
+          <button @click="modalMinutero = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- BUSCADOR INTERNO DENTRO DE LA CLASE -->
+      <div class="px-4 py-2.5 bg-gray-950/80 border-b border-gray-800 flex items-center space-x-3">
+        <i class="fa-solid fa-magnifying-glass text-xs text-amber-400"></i>
+        <input type="text" x-model="minuteroFiltro" placeholder="Filtrar por frase, duda o minuto..." class="w-full bg-transparent text-white placeholder-gray-500 text-xs focus:outline-none">
+        <span class="text-[10px] text-gray-500 shrink-0" x-text="minuteroCuesFiltrados.length + ' intervenciones'"></span>
+      </div>
+
+      <!-- LISTA DE INTERVENCIONES CON MINUTAJE EXACTO -->
+      <div class="flex-1 p-4 md:p-6 overflow-y-auto space-y-2.5">
+        <template x-for="cue in minuteroCuesFiltrados" :key="cue.start">
+          <div class="p-3.5 rounded-2xl bg-gray-900/60 border border-gray-800 hover:border-amber-500/30 transition flex flex-col md:flex-row md:items-start justify-between gap-3 group">
+            <div class="flex-1 space-y-1">
+              <div class="flex items-center space-x-2 text-xs">
+                <span class="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 text-[11px]" x-text="'⏱️ ' + cue.start_str"></span>
+                <span class="font-bold text-gray-200" x-text="cue.speaker"></span>
+              </div>
+              <p class="text-xs text-gray-300 leading-relaxed pl-1" x-text="cue.text"></p>
+            </div>
+            <button @click="preguntarMinuto(cue, minuteroClase)" class="opacity-80 group-hover:opacity-100 px-3 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-xl text-[11px] font-semibold transition shrink-0 flex items-center space-x-1.5 self-start">
+              <i class="fa-solid fa-robot text-[10px]"></i>
+              <span>Consultar a NOVA</span>
+            </button>
+          </div>
+        </template>
+        <div x-show="minuteroCuesFiltrados.length === 0" class="text-center py-12 text-gray-500 text-xs">
+          <p>No se encontraron fragmentos para este filtro.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: VISOR DE PDF INTEGRADO ==================== -->
+  <div x-show="modalVisorPdf" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-6xl h-[95vh] rounded-3xl flex flex-col overflow-hidden border border-cyan-500/30 shadow-2xl">
+      <!-- HEADER -->
+      <div class="p-3.5 bg-gray-900/95 border-b border-gray-800 flex items-center justify-between gap-4">
+        <div class="flex items-center space-x-2.5 overflow-hidden">
+          <i class="fa-regular fa-file-pdf text-rose-400 text-lg shrink-0"></i>
+          <h4 class="font-bold text-white text-xs md:text-sm truncate" x-text="modalTitulo"></h4>
+        </div>
+        <div class="flex items-center space-x-2 shrink-0">
+          <button @click="consultarNovaPdf()" class="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white rounded-xl text-xs font-semibold hover:shadow-lg transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-robot"></i>
+            <span>Preguntar a NOVA</span>
+          </button>
+          <a :href="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" target="_blank" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs transition" title="Abrir en pestaña nueva">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </a>
+          <button @click="modalVisorPdf = false" class="text-gray-400 hover:text-white p-1.5 rounded-lg">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+      <!-- IFRAME VISOR NATIVO CON TEMA OSCURO -->
+      <div class="flex-1 bg-gray-950 w-full h-full">
+        <iframe :src="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" class="w-full h-full border-0"></iframe>
       </div>
     </div>
   </div>
@@ -1358,12 +1808,35 @@ def dashboard_html():
         testRespuestaSeleccionada: null,
         testFinalizado: false,
         testAciertos: 0,
+        testFallos: 0,
+        testBlancos: 0,
+        testPuntosNetos: 0,
         testNota: 0,
 
         // Videoclases y Transcripciones
         todasLasClases: [],
         filtroClaseAsignatura: '',
         busquedaClaseTexto: '',
+
+        // Minutero y Citas Interactivas
+        modalMinutero: false,
+        minuteroClase: null,
+        minuteroCues: [],
+        minuteroFiltro: '',
+
+        // Visor PDF Integrado
+        modalVisorPdf: false,
+        modalRutaPdf: '',
+
+        // Agenda Canvas LMS
+        agendaEventos: [],
+        sincronizandoAgenda: false,
+
+        // Flashcards Repetición Espaciada
+        flashcards: [],
+        flashcardIndice: 0,
+        flashcardVolteada: false,
+        flashcardFiltroAsig: '',
 
         get programaActual() {
           return this.programas.find(p => p.id === this.programaActivoId) || this.programas[0];
@@ -1402,6 +1875,28 @@ def dashboard_html():
           return this.todasLasClases.filter(c => c.asignatura.toLowerCase().includes(this.chatAsignatura.toLowerCase()) || this.chatAsignatura.toLowerCase().includes(c.asignatura.toLowerCase()));
         },
 
+        get minuteroCuesFiltrados() {
+          if (!this.minuteroFiltro.trim()) return this.minuteroCues;
+          const q = this.minuteroFiltro.toLowerCase();
+          return this.minuteroCues.filter(c => c.text.toLowerCase().includes(q) || c.speaker.toLowerCase().includes(q) || c.start_str.includes(q));
+        },
+
+        get flashcardsFiltradas() {
+          let lista = this.flashcards;
+          if (this.flashcardFiltroAsig) {
+            lista = lista.filter(f => f.asignatura === this.flashcardFiltroAsig);
+          }
+          return lista;
+        },
+
+        get tarjetaActual() {
+          return this.flashcardsFiltradas[this.flashcardIndice] || null;
+        },
+
+        get asignaturasConFlashcards() {
+          return [...new Set(this.flashcards.map(f => f.asignatura))].sort();
+        },
+
         async init() {
           if (window.marked) {
             marked.setOptions({
@@ -1413,6 +1908,8 @@ def dashboard_html():
           await this.cargarCatalogo();
           await this.cargarProgreso();
           await this.cargarVideoclases();
+          await this.cargarAgenda();
+          await this.cargarFlashcards();
           this.actualizarMensajeBienvenidaChat();
         },
 
@@ -1445,6 +1942,7 @@ def dashboard_html():
           this.tab = 'dashboard';
           this.aplicarFiltroCatalogo();
           this.actualizarMensajeBienvenidaChat();
+          this.cargarFlashcards();
         },
 
         filtrarCurso(cursoId) {
@@ -1654,15 +2152,23 @@ def dashboard_html():
         },
 
         async finalizarTest() {
-          let aciertos = 0;
-          this.testPreguntas.forEach((p, idx) => {
-            if (this.testRespuestasUsuario[idx] === p.correcta) aciertos++;
-          });
-          this.testAciertos = aciertos;
-          this.testNota = (aciertos / this.testPreguntas.length) * 10;
-          this.testFinalizado = true;
-
           try {
+            const res = await fetch('/api/evaluar-test-unir', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                preguntas: this.testPreguntas,
+                respuestas: this.testRespuestasUsuario
+              })
+            });
+            const evalData = await res.json();
+            this.testAciertos = evalData.aciertos;
+            this.testFallos = evalData.fallos;
+            this.testBlancos = evalData.blancos;
+            this.testPuntosNetos = evalData.puntos_netos;
+            this.testNota = evalData.nota;
+            this.testFinalizado = true;
+
             await fetch('/api/test/guardar', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1676,7 +2182,117 @@ def dashboard_html():
             });
             await this.cargarProgreso();
             await this.cargarCatalogo();
+          } catch(e) {
+            console.error(e);
+            let aciertos = 0;
+            this.testPreguntas.forEach((p, idx) => {
+              if (this.testRespuestasUsuario[idx] === p.correcta) aciertos++;
+            });
+            this.testAciertos = aciertos;
+            this.testNota = (aciertos / this.testPreguntas.length) * 10;
+            this.testFinalizado = true;
+          }
+        },
+
+        async cargarAgenda() {
+          try {
+            const res = await fetch('/api/agenda');
+            this.agendaEventos = await res.json();
           } catch(e) { console.error(e); }
+        },
+
+        async sincronizarAgenda() {
+          this.sincronizandoAgenda = true;
+          try {
+            const res = await fetch('/api/sincronizar-agenda', { method: 'POST' });
+            const data = await res.json();
+            this.agendaEventos = data.eventos || [];
+            alert(`Sincronización completada. ${this.agendaEventos.length} entregas y eventos en tu calendario de Canvas.`);
+          } catch(e) {
+            alert('Error al sincronizar la agenda con Canvas.');
+          } finally {
+            this.sincronizandoAgenda = false;
+          }
+        },
+
+        async cargarFlashcards() {
+          try {
+            const res = await fetch('/api/flashcards?programa=' + encodeURIComponent(this.programaActivoId));
+            this.flashcards = await res.json();
+            this.flashcardIndice = 0;
+            this.flashcardVolteada = false;
+          } catch(e) { console.error(e); }
+        },
+
+        filtrarFlashcards() {
+          this.flashcardIndice = 0;
+          this.flashcardVolteada = false;
+        },
+
+        siguienteFlashcard() {
+          if (this.flashcardIndice < this.flashcardsFiltradas.length - 1) {
+            this.flashcardIndice++;
+            this.flashcardVolteada = false;
+          } else {
+            this.flashcardIndice = 0;
+            this.flashcardVolteada = false;
+          }
+        },
+
+        anteriorFlashcard() {
+          if (this.flashcardIndice > 0) {
+            this.flashcardIndice--;
+            this.flashcardVolteada = false;
+          }
+        },
+
+        async calificarTarjeta(dificultad) {
+          if (!this.tarjetaActual) return;
+          try {
+            await fetch('/api/flashcards/calificar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                programa: this.programaActivoId,
+                tarjeta_id: this.tarjetaActual.id,
+                dificultad: dificultad
+              })
+            });
+          } catch(e) {}
+          this.siguienteFlashcard();
+        },
+
+        async abrirMinutero(clase) {
+          this.minuteroClase = clase;
+          this.minuteroFiltro = '';
+          this.minuteroCues = [];
+          this.modalMinutero = true;
+          try {
+            const res = await fetch(`/api/clase-cues?asig=${encodeURIComponent(clase.asignatura)}&nombre_archivo=${encodeURIComponent(clase.nombre_archivo)}`);
+            this.minuteroCues = await res.json();
+          } catch(e) { console.error(e); }
+        },
+
+        preguntarMinuto(cue, clase) {
+          this.modalMinutero = false;
+          this.chatAsignatura = clase.asignatura;
+          this.tab = 'tutor';
+          this.chatInput = `En la sesión ${clase.titulo} (${clase.fecha}), en el minuto [${cue.start_str}], ${cue.speaker} explicó: "${cue.text}". ¿Me lo puedes explicar con más detalle técnico y darme un ejemplo práctico?`;
+          this.enviarMensajeChat();
+        },
+
+        abrirPdf(ruta, titulo) {
+          this.modalRutaPdf = ruta;
+          this.modalTitulo = titulo;
+          this.modalVisorPdf = true;
+        },
+
+        consultarNovaPdf() {
+          this.modalVisorPdf = false;
+          this.chatAsignatura = this.asigSeleccionada?.nombre || '';
+          this.tab = 'tutor';
+          this.chatInput = `Estoy estudiando el documento "${this.modalTitulo}". ¿Cuáles son los puntos clave más importantes de cara al examen y qué trampas o preguntas típicas suelen poner en UNIR sobre este temario?`;
+          this.enviarMensajeChat();
         },
 
         async enviarMensajeChat() {
