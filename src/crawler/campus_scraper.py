@@ -266,44 +266,88 @@ class CampusScraper:
                             except Exception as err:
                                 console.print(f"[dim]Error descargando {nombre_archivo}: {err}[/dim]")
 
-                    # 3. Comprobar temarios teóricos en la herramienta LTI de UNIR CMS si faltan unidades
+                    # 3. Comprobar temarios teóricos y guías en herramientas externas si faltan unidades
                     temas_actuales = list(dir_asig.glob("Tema *.pdf"))
-                    if len(temas_actuales) < 10 and not c_name_limpio.startswith("M") and "Inglés" not in c_name_limpio:
+                    if (len(temas_actuales) < 10 or "Proyecto" in c_name_limpio) and not c_name_limpio.startswith("M") and "Inglés" not in c_name_limpio:
                         try:
-                            page.goto(f"{UNIR_CAMPUS_URL.rstrip('/')}/courses/{c_id}/external_tools/6206", wait_until="domcontentloaded", timeout=12000)
-                            page.wait_for_timeout(3500)
-                            cms_frame = next((f for f in page.frames if "cms.unir.net" in f.url), None)
-                            if cms_frame:
-                                lti_links = cms_frame.evaluate("""() => {
-                                    const list = [];
-                                    document.querySelectorAll('a[title*="Descargar PDF"]').forEach((a, idx) => {
-                                        list.push({idx: idx + 1, href: a.href});
-                                    });
-                                    return list;
-                                }""")
-                                for it in lti_links:
-                                    t_num = it.get("idx")
-                                    t_file = f"Tema {t_num}.pdf"
-                                    t_dest = dir_asig / t_file
-                                    if not t_dest.exists() or t_dest.stat().st_size == 0:
-                                        b64 = cms_frame.evaluate("""async (u) => {
-                                            try {
-                                                const r = await fetch(u);
-                                                if (!r.ok) return null;
-                                                const b = await r.arrayBuffer();
-                                                let s = '';
-                                                const u8 = new Uint8Array(b);
-                                                for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
-                                                return btoa(s);
-                                            } catch (e) { return null; }
-                                        }""", it["href"])
-                                        if b64:
-                                            import base64
-                                            pdf_data = base64.b64decode(b64)
-                                            t_dest.write_bytes(pdf_data)
-                                            tam_mb = len(pdf_data) / (1024 * 1024)
-                                            table.add_row(c_name_limpio, t_file, f"{tam_mb:.1f} MB (CMS)")
-                                            total_nuevos_archivos += 1
+                            tabs = page.evaluate("""async (courseId) => {
+                                try {
+                                    const res = await fetch(`/api/v1/courses/${courseId}/tabs`);
+                                    if (res.ok) return await res.json();
+                                } catch(e) {}
+                                return [];
+                            }""", c_id)
+                            
+                            url_temas = None
+                            for t in tabs:
+                                t_label = t.get("label", "").lower()
+                                if any(k in t_label for k in ["tema", "contenido", "material"]) and "context_external_tool" in t.get("id", ""):
+                                    url_temas = t.get("full_url")
+                                    break
+                            if not url_temas:
+                                url_temas = f"{UNIR_CAMPUS_URL.rstrip('/')}/courses/{c_id}/external_tools/6206"
+
+                            page.goto(url_temas, wait_until="domcontentloaded", timeout=15000)
+                            page.wait_for_timeout(4000)
+
+                            for frame in page.frames:
+                                if "cms.unir.net" in frame.url:
+                                    lti_links = frame.evaluate("""() => {
+                                        const list = [];
+                                        document.querySelectorAll('a[title*="Descargar PDF"]').forEach((a, idx) => {
+                                            list.push({idx: idx + 1, href: a.href});
+                                        });
+                                        return list;
+                                    }""")
+                                    for it in lti_links:
+                                        t_num = it.get("idx")
+                                        t_file = f"Tema {t_num}.pdf"
+                                        t_dest = dir_asig / t_file
+                                        if not t_dest.exists() or t_dest.stat().st_size == 0:
+                                            b64 = frame.evaluate("""async (u) => {
+                                                try {
+                                                    const r = await fetch(u);
+                                                    if (!r.ok) return null;
+                                                    const b = await r.arrayBuffer();
+                                                    let s = '';
+                                                    const u8 = new Uint8Array(b);
+                                                    for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+                                                    return btoa(s);
+                                                } catch (e) { return null; }
+                                            }""", it["href"])
+                                            if b64:
+                                                import base64
+                                                pdf_data = base64.b64decode(b64)
+                                                t_dest.write_bytes(pdf_data)
+                                                tam_mb = len(pdf_data) / (1024 * 1024)
+                                                table.add_row(c_name_limpio, t_file, f"{tam_mb:.1f} MB (CMS)")
+                                                total_nuevos_archivos += 1
+                                elif "unirfp.s3.amazonaws.com" in frame.url:
+                                    docs = frame.evaluate("""() => {
+                                        const list = [];
+                                        document.querySelectorAll('a').forEach(a => {
+                                            const h = a.href || '';
+                                            if (h.endsWith('.pdf') || h.endsWith('.docx') || h.endsWith('.ppt') || h.endsWith('.pptx')) {
+                                                list.push({href: h, name: h.split('/').pop()});
+                                            }
+                                        });
+                                        return list;
+                                    }""")
+                                    for doc in docs:
+                                        d_href = doc.get("href")
+                                        d_name = doc.get("name")
+                                        if d_href and d_name:
+                                            d_dest = dir_asig / d_name
+                                            if not d_dest.exists() or d_dest.stat().st_size == 0:
+                                                try:
+                                                    r_doc = req_session.get(d_href, timeout=20)
+                                                    if r_doc.status_code == 200:
+                                                        d_dest.write_bytes(r_doc.content)
+                                                        tam_mb = len(r_doc.content) / (1024 * 1024)
+                                                        table.add_row(c_name_limpio, d_name, f"{tam_mb:.1f} MB (S3)")
+                                                        total_nuevos_archivos += 1
+                                                except Exception:
+                                                    pass
                         except Exception:
                             pass
 

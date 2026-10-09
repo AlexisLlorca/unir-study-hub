@@ -241,7 +241,7 @@ class UnirRecordingsCrawler:
                     try:
                         with open(archivo_info, "r", encoding="utf-8") as f_prev:
                             data_prev = json.load(f_prev)
-                            if data_prev.get("id") and data_prev.get("id") != rec_id:
+                            if data_prev.get("id") and str(data_prev.get("id")) != str(rec_id):
                                 nombre_seguro = f"{nombre_seguro}_{rec_id}"
                                 archivo_info = dir_clases / f"{fecha}_{nombre_seguro}_info.json"
                     except Exception:

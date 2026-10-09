@@ -55,6 +55,7 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                     "Sostenibilidad Aplicada",
                     "Proyecto Intermodular DAM",
                     "Formación en Empresa (FFE)",
+                    "Aula de Información General",
                 ],
             },
             "1dam": {
@@ -218,6 +219,8 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
         return "Proyecto Intermodular DAM"
     if "formación en empresa" in s or "formacion en empresa" in s or "ffe" in s:
         return "Formación en Empresa (FFE)"
+    if "aula de información" in s or "aula de informacion" in s or "información general" in s or "informacion general" in s or "aig" in s:
+        return "Aula de Información General"
 
     # 4. PFU / Grado
     if "ingeniería del software" in s or "ingenieria del software" in s:
