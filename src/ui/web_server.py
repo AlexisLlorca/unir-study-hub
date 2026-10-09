@@ -1,12 +1,12 @@
 """
 Servidor Web y Dashboard Gráfico Interactivo para UNIR Study Hub.
-Plataforma Multi-Titulación:
+Plataforma Académica Multi-Titulación 100% Web:
   - FP Grado Superior DAM (1º y 2º Curso)
-  - Máster en Ciberseguridad (Módulos M1 a M7)
+  - Máster en Ciberseguridad (Módulos Oficiales M1 a M7)
   - PFU / Grado en Ingeniería del Software (UNIR)
   - Certificaciones Técnicas & Formación Continua
-Proporciona una interfaz gráfica moderna (HTML5, Tailwind CSS, Alpine.js)
-para explorar asignaturas sin mezclas, realizar tests oficiales y chatear con NOVA.
+Permite seleccionar programas, explorar materias, leer temarios y transcripciones,
+generar guías y tests con IA y realizar simulacros tipo test directamente desde la web.
 """
 
 import os
@@ -46,7 +46,7 @@ from src.core.progress_tracker import GestorProgreso
 from src.ai.tutor import TutorIA
 from src.generators.study_guide_generator import GeneradorGuiaEstudio
 
-app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.0.0")
+app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +54,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    )
+)
 
 tracker = GestorProgreso()
 tutor_ia = TutorIA()
@@ -65,13 +65,13 @@ generador = GeneradorGuiaEstudio(tutor_ia)
 
 @app.get("/api/programas")
 def api_programas():
-    """Retorna la lista de programas académicos disponibles con sus métricas."""
+    """Retorna la lista de programas académicos con todas sus métricas y cursos."""
     return obtener_resumen_programas()
 
 
 @app.get("/api/catalogo")
 def api_catalogo(programa: Optional[str] = None, curso: Optional[str] = None):
-    """Retorna el catálogo de asignaturas filtrado por programa y curso."""
+    """Retorna el catálogo consolidado de asignaturas filtrado por programa y curso."""
     catalogo = obtener_catalogo_academico(programa_id=programa, curso_id=curso)
     resultado = []
 
@@ -120,7 +120,7 @@ def api_progreso():
         "media_global": media,
         "tests_realizados": len(historial),
         "ultimas_calificaciones": datos.get("ultimas_calificaciones", {}),
-        "historial": historial[-10:],
+        "historial": historial[-15:],
     }
 
 
@@ -167,6 +167,50 @@ def api_guardar_test(sub: TestSubmission):
     return {"status": "ok"}
 
 
+class GenerarGuiaRequest(BaseModel):
+    asignatura: str
+    nombre_tema: str
+    archivo_pdf: Optional[str] = None
+
+
+@app.post("/api/generar-guia")
+def api_generar_guia(req: GenerarGuiaRequest):
+    """Genera una guía de estudio y test interactivo con IA desde la web."""
+    ruta_pdf = None
+    if req.archivo_pdf:
+        p = MATERIALES_DIR / req.asignatura / req.archivo_pdf
+        if p.exists():
+            ruta_pdf = p
+    else:
+        dir_mats = MATERIALES_DIR / req.asignatura
+        if dir_mats.exists():
+            pdfs = [f for f in dir_mats.glob("*.pdf")]
+            if pdfs:
+                ruta_pdf = pdfs[0]
+
+    ruta_trans = None
+    dir_trans = TRANSCRIPCIONES_DIR / req.asignatura
+    if dir_trans.exists():
+        trans = [f for f in dir_trans.glob("*.md")]
+        if trans:
+            ruta_trans = trans[0]
+
+    res = generador.generar_paquete_tema(
+        asignatura=req.asignatura,
+        nombre_tema=req.nombre_tema,
+        ruta_pdf=ruta_pdf,
+        ruta_transcripcion=ruta_trans,
+    )
+    return {"status": "ok", "resultado": res}
+
+
+@app.post("/api/sincronizar")
+def api_sincronizar():
+    """Resincroniza carpetas externas de estudio."""
+    reorganizar_biblioteca_completa()
+    return {"status": "ok"}
+
+
 class ChatMessage(BaseModel):
     mensaje: str
     asignatura: Optional[str] = None
@@ -175,17 +219,17 @@ class ChatMessage(BaseModel):
 
 @app.post("/api/chat")
 def api_chat(msg: ChatMessage):
-    """Responde preguntas mediante NOVA con especialización por titulación."""
+    """Responde preguntas mediante NOVA con rol especializado según el programa."""
     contexto_rol = ""
     if msg.programa == "ciber":
         contexto_rol = (
-            "ROL: Eres NOVA, mentora y consultora senior en Ciberseguridad, Red Team, Blue Team, SOC, SIEM y Forense. "
-            "Responde con rigor técnico citando estándares (OWASP, MITRE ATT&CK, NIST, RFC, ISO 27001). "
+            "ROL: Eres NOVA, mentora y consultora senior en Ciberseguridad, Red Team, SOC, SIEM y Forense. "
+            "Responde con rigor técnico citando estándares oficiales (OWASP, MITRE ATT&CK, NIST, RFC, ISO 27001). "
         )
     elif msg.programa == "grado":
         contexto_rol = (
             "ROL: Eres NOVA, profesora de Grado en Ingeniería del Software y PFU en UNIR. "
-            "Enfócate en metodología de software, estructuras de datos, complejidad O(n) y arquitectura formal. "
+            "Enfócate en metodología de software, estructuras de datos formales, complejidad O(n) y arquitectura limpia. "
         )
     elif msg.programa == "cert":
         contexto_rol = (
@@ -204,7 +248,7 @@ def api_chat(msg: ChatMessage):
     return {"respuesta": respuesta or "No se pudo generar respuesta."}
 
 
-# --- FRONTEND HTML SPA ---
+# --- FRONTEND HTML SPA CON SIDEBAR DE SECCIONES ---
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard_html():
@@ -222,10 +266,10 @@ def dashboard_html():
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
     body { font-family: 'Inter', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
     code, pre { font-family: 'JetBrains Mono', monospace; }
-    .glass { background: rgba(17, 24, 39, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
     .glass-card { background: rgba(31, 41, 55, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); }
-    .markdown-content h1 { font-size: 1.6rem; font-weight: 700; color: #38bdf8; margin-top: 1.2rem; margin-bottom: 0.6rem; }
-    .markdown-content h2 { font-size: 1.3rem; font-weight: 600; color: #818cf8; margin-top: 1rem; margin-bottom: 0.5rem; }
+    .markdown-content h1 { font-size: 1.5rem; font-weight: 700; color: #38bdf8; margin-top: 1.2rem; margin-bottom: 0.6rem; }
+    .markdown-content h2 { font-size: 1.25rem; font-weight: 600; color: #818cf8; margin-top: 1rem; margin-bottom: 0.5rem; }
     .markdown-content p { margin-bottom: 0.8rem; line-height: 1.6; }
     .markdown-content pre { background: #111827; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1rem; border: 1px solid #374151; }
     .markdown-content code { background: #1f2937; padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.875rem; color: #38bdf8; }
@@ -238,418 +282,608 @@ def dashboard_html():
     ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
   </style>
 </head>
-<body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex flex-col">
+<body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-[#0b0f19] text-gray-100 overflow-x-hidden">
 
-  <!-- TOPBAR PRINCIPAL -->
-  <header class="glass sticky top-0 z-50 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 border-b border-gray-800">
-    <div class="flex items-center space-x-3">
+  <!-- ==================== SIDEBAR PRINCIPAL DE SECCIONES ==================== -->
+  <aside class="w-72 bg-[#0f172a]/95 border-r border-gray-800 flex flex-col shrink-0 min-h-screen sticky top-0 z-40 select-none">
+    
+    <!-- BRAND / LOGO -->
+    <div class="p-5 border-b border-gray-800 flex items-center space-x-3">
       <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
         <i class="fa-solid fa-graduation-cap text-lg"></i>
       </div>
       <div>
-        <div class="flex items-center space-x-2">
-          <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400">UNIR Study Hub</h1>
-          <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Multi-Titulación</span>
-        </div>
-        <p class="text-xs text-gray-400 font-medium">Plataforma Académica y Copiloto de Estudio</p>
+        <h1 class="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400">UNIR Study Hub</h1>
+        <p class="text-[11px] text-gray-400 font-medium">Plataforma Multi-Titulación</p>
       </div>
     </div>
 
-    <!-- SELECTOR DE PROGRAMAS / TITULACIONES -->
-    <div class="flex items-center bg-gray-900/90 p-1 rounded-xl border border-gray-800 space-x-1 overflow-x-auto">
-      <template x-for="prog in programas" :key="prog.id">
-        <button @click="cambiarPrograma(prog.id)"
-                :class="programaActivoId === prog.id ? 'bg-gray-800 text-white shadow-sm border border-gray-700' : 'text-gray-400 hover:text-gray-200'"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-2 whitespace-nowrap">
-          <i :class="'fa-solid ' + prog.icono" :style="'color: ' + obtenerColorHex(prog.color)"></i>
-          <span x-text="prog.titulo_corto"></span>
-          <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-800/80 text-gray-400 border border-gray-700" x-text="prog.total_asignaturas"></span>
-        </button>
-      </template>
-    </div>
-
-    <!-- NAVEGACIÓN DE PESTAÑAS (DASHBOARD / ASIGNATURAS / TUTOR) -->
-    <nav class="flex items-center space-x-1 bg-gray-900/80 p-1 rounded-xl border border-gray-800">
-      <button @click="tab = 'dashboard'" :class="tab === 'dashboard' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition border border-transparent flex items-center space-x-1.5">
-        <i class="fa-solid fa-chart-pie"></i><span>Dashboard</span>
-      </button>
-      <button @click="tab = 'asignaturas'" :class="tab === 'asignaturas' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition border border-transparent flex items-center space-x-1.5">
-        <i class="fa-solid fa-book-bookmark"></i><span>Temarios</span>
-      </button>
-      <button @click="tab = 'tutor'" :class="tab === 'tutor' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'" class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition border border-transparent flex items-center space-x-1.5">
-        <i class="fa-solid fa-robot"></i><span>Tutor NOVA</span>
-      </button>
-    </nav>
-  </header>
-
-  <!-- CONTENIDO PRINCIPAL -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-
-    <!-- BANNER DEL PROGRAMA ACTIVO -->
-    <div class="glass p-5 rounded-2xl flex flex-wrap items-center justify-between gap-4 border border-gray-800/80">
-      <div class="flex items-center space-x-4">
-        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-lg"
-             :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)">
-          <i :class="'fa-solid ' + (programaActual?.icono || 'fa-graduation-cap')"></i>
-        </div>
-        <div>
-          <div class="flex items-center space-x-2">
-            <h2 class="text-xl font-bold text-white" x-text="programaActual?.nombre"></h2>
-            <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold border"
-                  :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color) + '; border-color: ' + obtenerColorHex(programaActual?.color) + '33'"
-                  x-text="programaActual?.badge"></span>
-          </div>
-          <p class="text-xs text-gray-400 mt-0.5" x-text="programaActual?.descripcion"></p>
-        </div>
-      </div>
-
-      <!-- FILTRO DE CURSOS (SI EL PROGRAMA TIENE MÁS DE 1 CURSO, EJ. FP DAM 1º Y 2º) -->
-      <div x-show="programaActual?.cursos && programaActual?.cursos.length > 1" class="flex items-center space-x-1 bg-gray-900/90 p-1 rounded-xl border border-gray-800">
-        <button @click="filtrarCurso('todos')"
-                :class="cursoFiltro === 'todos' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                class="px-3 py-1 rounded-lg text-xs font-semibold transition">
-          Todo el Ciclo
-        </button>
-        <template x-for="c in programaActual?.cursos" :key="c.id">
-          <button @click="filtrarCurso(c.id)"
-                  :class="cursoFiltro === c.id ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                  class="px-3 py-1 rounded-lg text-xs font-semibold transition" x-text="c.nombre">
-          </button>
-        </template>
-      </div>
-    </div>
-
-    <!-- 1. VISTA DASHBOARD -->
-    <div x-show="tab === 'dashboard'" x-transition class="space-y-6">
+    <!-- NAVEGACIÓN DE PROGRAMAS / TITULACIONES -->
+    <div class="flex-1 p-4 space-y-6 overflow-y-auto">
       
-      <!-- STATS HERO CARDS ADAPTATIVAS AL PROGRAMA -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition">
-          <div class="flex items-center justify-between">
+      <div>
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold px-3 mb-2 flex items-center justify-between">
+          <span>Titulaciones y Secciones</span>
+          <span class="text-[9px] bg-cyan-500/10 text-cyan-400 px-1.5 py-0.5 rounded font-mono" x-text="programas.length + ' activos'"></span>
+        </p>
+
+        <div class="space-y-1">
+          <template x-for="prog in programas" :key="prog.id">
             <div>
-              <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Asignaturas / Módulos</p>
-              <h3 class="text-3xl font-extrabold text-white mt-1" x-text="catalogoFiltrado.length">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-layer-group"></i>
-            </div>
-          </div>
-          <div class="mt-4 flex items-center text-xs text-cyan-400">
-            <i class="fa-solid fa-check-circle mr-1.5"></i>
-            <span>Itinerario activo y organizado</span>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/30 transition">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Temarios Oficiales (PDF)</p>
-              <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalMaterialesPrograma">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-file-pdf"></i>
-            </div>
-          </div>
-          <div class="mt-4 flex items-center text-xs text-indigo-400">
-            <i class="fa-solid fa-folder-open mr-1.5"></i>
-            <span>Indexados sin duplicar disco</span>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Videoclases / Sesiones</p>
-              <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalClasesPrograma">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-video"></i>
-            </div>
-          </div>
-          <div class="mt-4 flex items-center text-xs text-amber-400">
-            <i class="fa-solid fa-file-lines mr-1.5"></i>
-            <span>Con transcripciones textuales</span>
-          </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Tests y Simulacros</p>
-              <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalTestsPrograma">0</h3>
-            </div>
-            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
-              <i class="fa-solid fa-bullseye"></i>
-            </div>
-          </div>
-          <div class="mt-4 flex items-center text-xs text-emerald-400">
-            <i class="fa-solid fa-bolt mr-1.5"></i>
-            <span>Simulador de examen listo</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- SEMÁFORO DE ASIGNATURAS DEL PROGRAMA ACTIVO -->
-      <div class="glass rounded-2xl p-6">
-        <div class="flex items-center justify-between mb-6">
-          <div>
-            <h2 class="text-lg font-bold text-white flex items-center space-x-2">
-              <i class="fa-solid fa-graduation-cap text-cyan-400"></i>
-              <span>Semáforo de Preparación Académica</span>
-            </h2>
-            <p class="text-xs text-gray-400">Haz clic en cualquier asignatura o módulo para abrir sus temas, videoclases y tests</p>
-          </div>
-          <span class="text-xs text-gray-400 bg-gray-900 px-3 py-1.5 rounded-xl border border-gray-800" x-text="catalogoFiltrado.length + ' materias'"></span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-            <div @click="abrirAsignatura(asig)" class="glass-card p-5 rounded-xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/60 transition group">
-              <div class="flex items-start justify-between">
-                <div class="pr-2">
-                  <h4 class="font-bold text-white group-hover:text-cyan-400 transition" x-text="asig.nombre"></h4>
-                  <span class="text-xs text-gray-400" x-text="asig.curso"></span>
+              <!-- BOTÓN PRINCIPAL DE SECCIÓN -->
+              <button @click="seleccionarPrograma(prog.id)"
+                      :class="programaActivoId === prog.id ? 'bg-gray-800/90 text-white font-semibold border-gray-700 shadow-md' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                      class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition border flex items-center justify-between group">
+                <div class="flex items-center space-x-2.5 truncate">
+                  <span class="w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0"
+                        :style="'background: ' + obtenerFondoHex(prog.color) + '; color: ' + obtenerColorHex(prog.color)">
+                    <i :class="'fa-solid ' + prog.icono"></i>
+                  </span>
+                  <div class="truncate">
+                    <p class="truncate" x-text="prog.nombre"></p>
+                    <p class="text-[10px] text-gray-400 truncate" x-text="prog.badge"></p>
+                  </div>
                 </div>
-                <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0"
-                      :class="asig.progreso.total_evaluados > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-400'"
-                      x-text="asig.progreso.total_evaluados > 0 ? asig.progreso.estado : 'Sin evaluar'">
-                </span>
-              </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700" x-text="prog.total_asignaturas"></span>
+              </button>
 
-              <div class="mt-4 grid grid-cols-3 gap-2 text-xs text-gray-300 pt-3 border-t border-gray-800/80">
-                <div class="flex items-center space-x-1.5">
-                  <i class="fa-regular fa-file-pdf text-rose-400"></i>
-                  <span x-text="asig.total_materiales + ' pdfs'"></span>
-                </div>
-                <div class="flex items-center space-x-1.5">
-                  <i class="fa-solid fa-video text-amber-400"></i>
-                  <span x-text="asig.total_clases + ' clases'"></span>
-                </div>
-                <div class="flex items-center space-x-1.5">
-                  <i class="fa-solid fa-bolt text-emerald-400"></i>
-                  <span x-text="asig.tests.length + ' tests'"></span>
-                </div>
+              <!-- SUB-CURSOS SI EL PROGRAMA TIENE VARIOS (EJ: DAM 1º Y 2º) -->
+              <div x-show="programaActivoId === prog.id && prog.cursos.length > 1" class="ml-9 mt-1 space-y-0.5 border-l border-gray-800 pl-2">
+                <button @click="filtrarCurso('todos')"
+                        :class="cursoFiltro === 'todos' ? 'text-cyan-400 font-bold bg-cyan-500/10' : 'text-gray-400 hover:text-gray-300'"
+                        class="w-full text-left px-2 py-1 rounded-md text-[11px] transition flex items-center justify-between">
+                  <span>Todo el Ciclo</span>
+                  <span class="text-[9px] text-gray-400" x-text="prog.total_asignaturas"></span>
+                </button>
+                <template x-for="c in prog.cursos" :key="c.id">
+                  <button @click="filtrarCurso(c.id)"
+                          :class="cursoFiltro === c.id ? 'text-cyan-400 font-bold bg-cyan-500/10' : 'text-gray-400 hover:text-gray-300'"
+                          class="w-full text-left px-2 py-1 rounded-md text-[11px] transition flex items-center justify-between">
+                    <span x-text="c.nombre"></span>
+                    <span class="text-[9px] text-gray-400" x-text="c.asignaturas.length"></span>
+                  </button>
+                </template>
               </div>
             </div>
           </template>
         </div>
       </div>
+
+      <!-- VISTAS Y HERRAMIENTAS GLOBALES -->
+      <div>
+        <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold px-3 mb-2">Herramientas</p>
+        <div class="space-y-1">
+          <button @click="tab = 'dashboard'; asigSeleccionada = null"
+                  :class="tab === 'dashboard' && !asigSeleccionada ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+            <i class="fa-solid fa-chart-pie w-4 text-center"></i>
+            <span>Dashboard y Métricas</span>
+          </button>
+          <button @click="tab = 'asignaturas'"
+                  :class="tab === 'asignaturas' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+            <i class="fa-solid fa-book-bookmark w-4 text-center"></i>
+            <span>Temarios y Asignaturas</span>
+          </button>
+          <button @click="tab = 'tutor'"
+                  :class="tab === 'tutor' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+            <i class="fa-solid fa-robot w-4 text-center text-cyan-400"></i>
+            <span>Tutor Inteligente NOVA</span>
+          </button>
+          <button @click="tab = 'progreso'"
+                  :class="tab === 'progreso' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+            <i class="fa-solid fa-trophy w-4 text-center text-amber-400"></i>
+            <span>Expediente y Calificaciones</span>
+          </button>
+        </div>
+      </div>
+
     </div>
 
-    <!-- 2. VISTA EXPLORADOR DE TEMARIOS Y ASIGNATURAS -->
-    <div x-show="tab === 'asignaturas'" x-transition class="space-y-6">
-      
-      <!-- DETALLE DE ASIGNATURA SELECCIONADA -->
-      <div x-show="asigSeleccionada" class="space-y-6">
-        <div class="glass p-6 rounded-2xl flex flex-wrap items-center justify-between gap-4">
-          <div class="flex items-center space-x-4">
-            <button @click="asigSeleccionada = null" class="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center transition">
-              <i class="fa-solid fa-arrow-left"></i>
-            </button>
-            <div>
-              <div class="flex items-center space-x-2">
-                <h2 class="text-2xl font-bold text-white" x-text="asigSeleccionada?.nombre"></h2>
-                <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" x-text="asigSeleccionada?.curso"></span>
+    <!-- FOOTER SIDEBAR -->
+    <div class="p-4 border-t border-gray-800 bg-gray-900/40 flex items-center justify-between text-xs">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-gray-400 text-[11px]">Sistema Operativo</span>
+      </div>
+      <button @click="sincronizarMateriales()" :disabled="sincronizando" title="Refrescar y buscar archivos" class="text-gray-400 hover:text-cyan-400 p-1.5 rounded-lg hover:bg-gray-800 transition">
+        <i :class="sincronizando ? 'fa-solid fa-rotate fa-spin text-cyan-400' : 'fa-solid fa-rotate'"></i>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ==================== CONTENIDO PRINCIPAL ==================== -->
+  <div class="flex-1 flex flex-col min-h-screen max-w-full overflow-hidden">
+    
+    <!-- TOPBAR -->
+    <header class="glass sticky top-0 z-30 px-8 py-3.5 flex items-center justify-between border-b border-gray-800/80">
+      <div class="flex items-center space-x-3">
+        <span class="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+              :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)"
+              x-text="programaActual?.nombre"></span>
+        <span class="text-xs text-gray-400" x-text="cursoFiltro === 'todos' ? 'Todo el programa' : (cursoFiltro === '2dam' ? '2º Curso' : '1º Curso')"></span>
+      </div>
+
+      <!-- BUSCADOR RÁPIDO -->
+      <div class="flex items-center space-x-4">
+        <div class="relative w-64">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-gray-500"></i>
+          <input type="text" x-model="busquedaTexto" placeholder="Buscar materia, tema o pdf..." class="w-full bg-gray-900/80 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2 rounded-xl border border-gray-800 focus:outline-none focus:border-cyan-500">
+        </div>
+        <button @click="abrirChatConAsignatura('')" class="px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
+          <i class="fa-solid fa-robot"></i><span>Consultar NOVA</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- CUERPO DE LA APLICACIÓN -->
+    <main class="flex-1 p-8 space-y-6 overflow-y-auto max-w-7xl w-full mx-auto">
+
+      <!-- ==================== 1. VISTA DASHBOARD ==================== -->
+      <div x-show="tab === 'dashboard' && !asigSeleccionada" x-transition class="space-y-6">
+        
+        <!-- HERO BANNER DEL PROGRAMA ACTIVO -->
+        <div class="glass p-6 rounded-3xl relative overflow-hidden border border-gray-800">
+          <div class="flex flex-wrap items-center justify-between gap-6 relative z-10">
+            <div class="flex items-center space-x-5">
+              <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-xl shrink-0"
+                   :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)">
+                <i :class="'fa-solid ' + (programaActual?.icono || 'fa-graduation-cap')"></i>
               </div>
-              <p class="text-xs text-gray-400">Explora temarios oficiales, lecciones magistrales y simulacros de examen</p>
+              <div>
+                <div class="flex items-center space-x-3">
+                  <h2 class="text-2xl font-black text-white" x-text="programaActual?.nombre"></h2>
+                  <span class="text-xs px-3 py-0.5 rounded-full font-bold border"
+                        :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color) + '; border-color: ' + obtenerColorHex(programaActual?.color) + '40'"
+                        x-text="programaActual?.badge"></span>
+                </div>
+                <p class="text-xs text-gray-400 mt-1 max-w-2xl" x-text="programaActual?.descripcion"></p>
+              </div>
             </div>
-          </div>
-          <div class="flex items-center space-x-2">
-            <button @click="abrirChatConAsignatura(asigSeleccionada?.nombre)" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
-              <i class="fa-solid fa-robot"></i><span>Consultar con NOVA</span>
-            </button>
+
+            <!-- CURSO SELECTOR RÁPIDO -->
+            <div x-show="programaActual?.cursos && programaActual?.cursos.length > 1" class="flex items-center space-x-1.5 bg-gray-900/90 p-1.5 rounded-2xl border border-gray-800">
+              <button @click="filtrarCurso('todos')"
+                      :class="cursoFiltro === 'todos' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
+                      class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent">
+                Todo el Ciclo
+              </button>
+              <template x-for="c in programaActual?.cursos" :key="c.id">
+                <button @click="filtrarCurso(c.id)"
+                        :class="cursoFiltro === c.id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent" x-text="c.nombre">
+                </button>
+              </template>
+            </div>
           </div>
         </div>
 
-        <!-- 3 COLUMNAS: VIDEOCLASES | TEMARIO/GUÍAS | TESTS -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          <!-- COLUMNA 1: VIDEOCLASES Y TRANSCRIPCIONES -->
-          <div class="glass p-5 rounded-2xl space-y-4">
-            <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-              <h3 class="font-bold text-white flex items-center space-x-2">
-                <i class="fa-solid fa-video text-amber-400"></i>
-                <span>Videoclases Oficiales</span>
-              </h3>
-              <span class="text-xs bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.clases.length + ' clases'"></span>
-            </div>
-
-            <div class="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-              <template x-for="clase in asigSeleccionada?.clases" :key="clase.nombre">
-                <div class="glass-card p-3 rounded-xl hover:border-amber-500/30 transition flex items-center justify-between">
-                  <div class="overflow-hidden pr-2">
-                    <p class="text-[11px] text-amber-400 font-semibold" x-text="clase.fecha"></p>
-                    <h5 class="text-xs font-medium text-white truncate" x-text="clase.titulo"></h5>
-                  </div>
-                  <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition shrink-0">
-                    Leer
-                  </button>
-                </div>
-              </template>
-              <div x-show="asigSeleccionada?.clases.length === 0" class="text-center py-8 text-gray-500 text-xs">
-                <i class="fa-solid fa-video-slash text-2xl mb-2 opacity-50"></i>
-                <p>No hay videoclases sincronizadas para esta materia.</p>
+        <!-- STATS HERO CARDS -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Materias / Módulos</p>
+                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="catalogoFiltrado.length">0</h3>
               </div>
+              <div class="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-layer-group"></i>
+              </div>
+            </div>
+            <div class="mt-4 flex items-center text-xs text-cyan-400">
+              <i class="fa-solid fa-check-circle mr-1.5"></i>
+              <span>Estructura oficial limpia</span>
             </div>
           </div>
 
-          <!-- COLUMNA 2: TEMARIO Y GUÍAS DE ESTUDIO -->
-          <div class="glass p-5 rounded-2xl space-y-4">
-            <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-              <h3 class="font-bold text-white flex items-center space-x-2">
-                <i class="fa-solid fa-book-open text-cyan-400"></i>
-                <span>Guías de Estudio & PDFs</span>
-              </h3>
-              <span class="text-xs bg-cyan-500/10 text-cyan-400 px-2.5 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.total_materiales + ' docs'"></span>
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/30 transition">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Temarios Oficiales</p>
+                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalMaterialesPrograma">0</h3>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-file-pdf"></i>
+              </div>
             </div>
+            <div class="mt-4 flex items-center text-xs text-indigo-400">
+              <i class="fa-solid fa-folder-open mr-1.5"></i>
+              <span>PDFs indexados sin duplicar</span>
+            </div>
+          </div>
 
-            <div class="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-              <!-- GUÍAS RESUMIDAS IA -->
-              <template x-for="guia in asigSeleccionada?.guias" :key="guia">
-                <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between">
-                  <div class="overflow-hidden pr-2">
-                    <p class="text-[11px] text-cyan-400 font-semibold">Guía de Alto Rendimiento</p>
-                    <h5 class="text-xs font-medium text-white truncate" x-text="guia.replace('_guia.md', '').replaceAll('_', ' ')"></h5>
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Videoclases Oficiales</p>
+                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalClasesPrograma">0</h3>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-video"></i>
+              </div>
+            </div>
+            <div class="mt-4 flex items-center text-xs text-amber-400">
+              <i class="fa-solid fa-file-lines mr-1.5"></i>
+              <span>Transcripciones completas</span>
+            </div>
+          </div>
+
+          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Simulacros y Tests</p>
+                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalTestsPrograma">0</h3>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
+                <i class="fa-solid fa-bullseye"></i>
+              </div>
+            </div>
+            <div class="mt-4 flex items-center text-xs text-emerald-400">
+              <i class="fa-solid fa-bolt mr-1.5"></i>
+              <span>Simulador web interactivo</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEMÁFORO Y CATÁLOGO DE ASIGNATURAS -->
+        <div class="glass rounded-3xl p-6">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h3 class="text-lg font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-grid-2 text-cyan-400"></i>
+                <span>Materias y Módulos de <span x-text="programaActual?.nombre"></span></span>
+              </h3>
+              <p class="text-xs text-gray-400">Haz clic en cualquier tarjeta para abrir sus temarios, clases magistrales y tests</p>
+            </div>
+            <span class="text-xs bg-gray-900 text-gray-400 px-3 py-1.5 rounded-xl border border-gray-800" x-text="catalogoFiltrado.length + ' materias'"></span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
+              <div @click="abrirAsignatura(asig)" class="glass-card p-5 rounded-2xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/60 transition group flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700" x-text="asig.curso"></span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                          :class="asig.progreso.total_evaluados > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-400'"
+                          x-text="asig.progreso.total_evaluados > 0 ? asig.progreso.estado : 'Sin evaluar'">
+                    </span>
                   </div>
-                  <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0">
-                    Estudiar
-                  </button>
+                  <h4 class="font-bold text-white text-sm mt-3 group-hover:text-cyan-400 transition" x-text="asig.nombre"></h4>
                 </div>
-              </template>
 
-              <!-- PDFs OFICIALES -->
-              <div class="pt-3 border-t border-gray-800">
-                <p class="text-[11px] uppercase text-gray-400 font-bold mb-2">Temarios Oficiales</p>
-                <template x-for="m in asigSeleccionada?.materiales" :key="m">
-                  <div class="p-2 text-xs text-gray-300 truncate hover:text-white flex items-center space-x-2 bg-gray-900/40 rounded-lg mb-1">
-                    <i class="fa-regular fa-file-pdf text-rose-400 shrink-0"></i>
-                    <span class="truncate" x-text="m"></span>
+                <div class="mt-5 pt-3 border-t border-gray-800/80 grid grid-cols-3 gap-2 text-xs text-gray-400">
+                  <div class="flex items-center space-x-1.5">
+                    <i class="fa-regular fa-file-pdf text-rose-400"></i>
+                    <span x-text="asig.total_materiales + ' pdfs'"></span>
+                  </div>
+                  <div class="flex items-center space-x-1.5">
+                    <i class="fa-solid fa-video text-amber-400"></i>
+                    <span x-text="asig.total_clases + ' clases'"></span>
+                  </div>
+                  <div class="flex items-center space-x-1.5">
+                    <i class="fa-solid fa-bolt text-emerald-400"></i>
+                    <span x-text="asig.tests.length + ' tests'"></span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ==================== 2. VISTA EXPLORADOR DE TEMARIOS ==================== -->
+      <div x-show="tab === 'asignaturas' || asigSeleccionada" x-transition class="space-y-6">
+        
+        <!-- DETALLE DE ASIGNATURA SELECCIONADA -->
+        <div x-show="asigSeleccionada" class="space-y-6">
+          <div class="glass p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-gray-800">
+            <div class="flex items-center space-x-4">
+              <button @click="asigSeleccionada = null; tab = 'dashboard'" class="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center transition">
+                <i class="fa-solid fa-arrow-left"></i>
+              </button>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h2 class="text-2xl font-extrabold text-white" x-text="asigSeleccionada?.nombre"></h2>
+                  <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" x-text="asigSeleccionada?.curso"></span>
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5">Explora temarios oficiales, videoclases magistrales y simulacros de examen</p>
+              </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+              <button @click="modalGenerador = true" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl text-xs font-bold text-gray-900 hover:shadow-lg hover:shadow-emerald-500/20 transition flex items-center space-x-2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i><span>Generar Guía / Test IA</span>
+              </button>
+              <button @click="abrirChatConAsignatura(asigSeleccionada?.nombre)" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
+                <i class="fa-solid fa-robot"></i><span>Consultar con NOVA</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3 COLUMNAS: VIDEOCLASES | TEMARIO/GUÍAS | TESTS -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- COLUMNA 1: VIDEOCLASES Y TRANSCRIPCIONES -->
+            <div class="glass p-5 rounded-3xl space-y-4">
+              <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 class="font-bold text-white flex items-center space-x-2 text-sm">
+                  <i class="fa-solid fa-video text-amber-400"></i>
+                  <span>Videoclases Oficiales</span>
+                </h3>
+                <span class="text-[11px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.clases.length + ' clases'"></span>
+              </div>
+
+              <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                <template x-for="clase in asigSeleccionada?.clases" :key="clase.nombre">
+                  <div class="glass-card p-3 rounded-xl hover:border-amber-500/30 transition flex items-center justify-between">
+                    <div class="overflow-hidden pr-2">
+                      <p class="text-[10px] text-amber-400 font-bold" x-text="clase.fecha"></p>
+                      <h5 class="text-xs font-medium text-white truncate" x-text="clase.titulo"></h5>
+                    </div>
+                    <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition shrink-0">
+                      Leer
+                    </button>
                   </div>
                 </template>
-                <div x-show="asigSeleccionada?.materiales.length === 0" class="text-center py-6 text-gray-500 text-xs">
-                  <p>Sin documentos locales todavía.</p>
+                <div x-show="asigSeleccionada?.clases.length === 0" class="text-center py-10 text-gray-500 text-xs">
+                  <i class="fa-solid fa-video-slash text-2xl mb-2 opacity-40"></i>
+                  <p>Sin videoclases sincronizadas para esta materia.</p>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- COLUMNA 3: TESTS Y EXÁMENES INTERACTIVOS -->
-          <div class="glass p-5 rounded-2xl space-y-4">
-            <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-              <h3 class="font-bold text-white flex items-center space-x-2">
-                <i class="fa-solid fa-bullseye text-emerald-400"></i>
-                <span>Simulacros de Examen</span>
-              </h3>
-              <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.tests.length + ' tests'"></span>
+            <!-- COLUMNA 2: TEMARIO Y GUÍAS DE ESTUDIO -->
+            <div class="glass p-5 rounded-3xl space-y-4">
+              <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 class="font-bold text-white flex items-center space-x-2 text-sm">
+                  <i class="fa-solid fa-book-open text-cyan-400"></i>
+                  <span>Guías de Estudio & PDFs</span>
+                </h3>
+                <span class="text-[11px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.total_materiales + ' docs'"></span>
+              </div>
+
+              <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+                <!-- GUÍAS RESUMIDAS IA -->
+                <template x-for="guia in asigSeleccionada?.guias" :key="guia">
+                  <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between">
+                    <div class="overflow-hidden pr-2">
+                      <p class="text-[10px] text-cyan-400 font-bold">Guía de Alto Rendimiento</p>
+                      <h5 class="text-xs font-medium text-white truncate" x-text="guia.replace('_guia.md', '').replaceAll('_', ' ')"></h5>
+                    </div>
+                    <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0">
+                      Estudiar
+                    </button>
+                  </div>
+                </template>
+
+                <!-- PDFs OFICIALES -->
+                <div class="pt-3 border-t border-gray-800">
+                  <p class="text-[10px] uppercase text-gray-400 font-bold mb-2">Temarios Oficiales</p>
+                  <template x-for="m in asigSeleccionada?.materiales" :key="m">
+                    <div class="p-2 text-xs text-gray-300 truncate hover:text-white flex items-center justify-between bg-gray-900/40 rounded-lg mb-1 group">
+                      <div class="flex items-center space-x-2 truncate pr-2">
+                        <i class="fa-regular fa-file-pdf text-rose-400 shrink-0"></i>
+                        <span class="truncate" x-text="m"></span>
+                      </div>
+                      <button @click="generarGuiaDesdePdf(m)" title="Generar Guía IA de este tema" class="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[10px] transition shrink-0">
+                        Generar IA
+                      </button>
+                    </div>
+                  </template>
+                  <div x-show="asigSeleccionada?.materiales.length === 0" class="text-center py-6 text-gray-500 text-xs">
+                    <p>Sin documentos locales todavía.</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="space-y-3">
-              <template x-for="test in asigSeleccionada?.tests" :key="test">
-                <div class="glass-card p-4 rounded-xl border-l-4 border-emerald-400 hover:bg-gray-800/50 transition">
-                  <h5 class="font-bold text-white text-xs" x-text="test.replace('_test', '').replaceAll('_', ' ')"></h5>
-                  <p class="text-[11px] text-gray-400 mt-1">10 preguntas tipo test con formato oficial</p>
-                  <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="mt-3 w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-lg text-xs transition shadow-lg shadow-emerald-500/20">
-                    Comenzar Simulacro
+            <!-- COLUMNA 3: TESTS Y EXÁMENES INTERACTIVOS -->
+            <div class="glass p-5 rounded-3xl space-y-4">
+              <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 class="font-bold text-white flex items-center space-x-2 text-sm">
+                  <i class="fa-solid fa-bullseye text-emerald-400"></i>
+                  <span>Simulacros de Examen</span>
+                </h3>
+                <span class="text-[11px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.tests.length + ' tests'"></span>
+              </div>
+
+              <div class="space-y-3">
+                <template x-for="test in asigSeleccionada?.tests" :key="test">
+                  <div class="glass-card p-4 rounded-2xl border-l-4 border-emerald-400 hover:bg-gray-800/50 transition">
+                    <h5 class="font-bold text-white text-xs" x-text="test.replace('_test', '').replaceAll('_', ' ')"></h5>
+                    <p class="text-[11px] text-gray-400 mt-1">10 preguntas tipo test con formato oficial</p>
+                    <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="mt-3 w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
+                      Comenzar Simulacro
+                    </button>
+                  </div>
+                </template>
+                <div x-show="asigSeleccionada?.tests.length === 0" class="text-center py-10 text-gray-500 text-xs">
+                  <i class="fa-solid fa-list-check text-2xl mb-2 opacity-40"></i>
+                  <p>No hay tests generados aún.</p>
+                  <button @click="modalGenerador = true" class="mt-3 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg text-xs font-semibold hover:bg-emerald-500/30 transition">
+                    Crear Test con IA
                   </button>
                 </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- REJILLA GENERAL SI NO HAY ASIGNATURA SELECCIONADA -->
+        <div x-show="!asigSeleccionada" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
+            <div @click="abrirAsignatura(asig)" class="glass p-6 rounded-3xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/40 transition group">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full" x-text="asig.curso"></span>
+                <i class="fa-solid fa-chevron-right text-gray-500 group-hover:text-cyan-400 transition"></i>
+              </div>
+              <h3 class="text-base font-bold text-white mt-3 group-hover:text-cyan-300 transition" x-text="asig.nombre"></h3>
+              
+              <div class="mt-5 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
+                <span x-text="asig.total_materiales + ' temarios'"></span>
+                <span x-text="asig.total_clases + ' videoclases'"></span>
+                <span class="text-emerald-400 font-semibold" x-text="asig.tests.length + ' tests'"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ==================== 3. VISTA EXPEDIENTE Y CALIFICACIONES ==================== -->
+      <div x-show="tab === 'progreso'" x-transition class="space-y-6">
+        <div class="glass p-6 rounded-3xl border border-gray-800">
+          <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+            <i class="fa-solid fa-trophy text-amber-400"></i>
+            <span>Expediente Académico y Calificaciones</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-1">Registro de todos los simulacros de examen realizados</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div class="glass-card p-5 rounded-2xl">
+              <p class="text-xs text-gray-400 font-semibold">Nota Media General</p>
+              <h3 class="text-3xl font-extrabold text-emerald-400 mt-1" x-text="(progreso.media_global || 0) + ' / 10'"></h3>
+            </div>
+            <div class="glass-card p-5 rounded-2xl">
+              <p class="text-xs text-gray-400 font-semibold">Tests Completados</p>
+              <h3 class="text-3xl font-extrabold text-white mt-1" x-text="progreso.tests_realizados || 0"></h3>
+            </div>
+            <div class="glass-card p-5 rounded-2xl">
+              <p class="text-xs text-gray-400 font-semibold">Semáforo General</p>
+              <h3 class="text-2xl font-extrabold text-cyan-400 mt-1" x-text="(progreso.media_global >= 7 ? '🟢 Dominado' : (progreso.media_global >= 5 ? '🟡 Aprobado' : '🔴 En Repaso'))"></h3>
+            </div>
+          </div>
+
+          <div class="mt-8">
+            <h4 class="text-sm font-bold text-white mb-4">Últimos Simulacros Realizados</h4>
+            <div class="space-y-2">
+              <template x-for="item in progreso.historial" :key="item.fecha + item.tema">
+                <div class="glass-card p-4 rounded-xl flex items-center justify-between">
+                  <div>
+                    <h5 class="text-sm font-bold text-white" x-text="item.asignatura + ' — ' + item.tema"></h5>
+                    <p class="text-xs text-gray-400" x-text="item.fecha + ' • ' + item.aciertos + ' de ' + item.total + ' aciertos'"></p>
+                  </div>
+                  <span class="text-base font-black px-3 py-1 rounded-xl"
+                        :class="item.nota >= 5 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'"
+                        x-text="item.nota.toFixed(2) + ' / 10'"></span>
+                </div>
               </template>
-              <div x-show="asigSeleccionada?.tests.length === 0" class="text-center py-8 text-gray-500 text-xs">
-                <i class="fa-solid fa-list-check text-2xl mb-2 opacity-50"></i>
-                <p>No hay tests generados para esta materia aún.</p>
+              <div x-show="!progreso.historial || progreso.historial.length === 0" class="text-center py-10 text-gray-500 text-xs">
+                <p>Aún no has realizado ningún simulacro de examen.</p>
               </div>
             </div>
           </div>
-
         </div>
       </div>
 
-      <!-- REJILLA GENERAL SI NO HAY ASIGNATURA SELECCIONADA -->
-      <div x-show="!asigSeleccionada" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-          <div @click="abrirAsignatura(asig)" class="glass p-6 rounded-2xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/40 transition group">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full" x-text="asig.curso"></span>
-              <i class="fa-solid fa-chevron-right text-gray-500 group-hover:text-cyan-400 transition"></i>
+      <!-- ==================== 4. VISTA TUTOR NOVA EN DIRECTO ==================== -->
+      <div x-show="tab === 'tutor'" x-transition class="glass rounded-3xl flex flex-col h-[750px] overflow-hidden border border-gray-800">
+        <!-- HEADER CHAT -->
+        <div class="p-4 bg-gray-900/90 border-b border-gray-800 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg"
+                 :style="'background: ' + obtenerColorHex(programaActual?.color)">
+              <i class="fa-solid fa-robot"></i>
             </div>
-            <h3 class="text-base font-bold text-white mt-3 group-hover:text-cyan-300 transition" x-text="asig.nombre"></h3>
-            
-            <div class="mt-5 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
-              <span x-text="asig.total_materiales + ' temarios'"></span>
-              <span x-text="asig.total_clases + ' videoclases'"></span>
-              <span class="text-emerald-400 font-semibold" x-text="asig.tests.length + ' tests'"></span>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-bold text-white">NOVA — Copiloto Académico</h3>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase"
+                      :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)"
+                      x-text="'Modo ' + programaActual?.titulo_corto"></span>
+              </div>
+              <p class="text-xs text-emerald-400 flex items-center">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                Gemini 3 Flash Conectado
+              </p>
             </div>
           </div>
-        </template>
-      </div>
-    </div>
 
-    <!-- 3. VISTA TUTOR NOVA EN DIRECTO (ADAPTATIVO) -->
-    <div x-show="tab === 'tutor'" x-transition class="glass rounded-2xl flex flex-col h-[750px] overflow-hidden">
-      <!-- HEADER CHAT -->
-      <div class="p-4 bg-gray-900/80 border-b border-gray-800 flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg"
-               :style="'background: ' + obtenerColorHex(programaActual?.color)">
-            <i class="fa-solid fa-robot"></i>
-          </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <h3 class="font-bold text-white">NOVA — Copiloto Académico</h3>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase"
-                    :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)"
-                    x-text="'Modo ' + programaActual?.titulo_corto"></span>
-            </div>
-            <p class="text-xs text-emerald-400 flex items-center">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-              Gemini 3 Flash Conectado
-            </p>
+          <div class="flex items-center space-x-2">
+            <select x-model="chatAsignatura" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
+              <option value="">General (Todo el programa)</option>
+              <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
+                <option :value="asig.nombre" x-text="asig.nombre"></option>
+              </template>
+            </select>
           </div>
         </div>
 
-        <div>
-          <select x-model="chatAsignatura" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-lg border border-gray-700 outline-none">
-            <option value="">General (Todo el programa)</option>
-            <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-              <option :value="asig.nombre" x-text="asig.nombre"></option>
-            </template>
-          </select>
-        </div>
-      </div>
-
-      <!-- MENSAJES -->
-      <div class="flex-1 p-6 overflow-y-auto space-y-4" id="chatBox">
-        <template x-for="(msg, idx) in chatHistorial" :key="idx">
-          <div :class="msg.rol === 'user' ? 'flex justify-end' : 'flex justify-start'">
-            <div :class="msg.rol === 'user' ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none' : 'bg-gray-800/90 text-gray-200 rounded-2xl rounded-tl-none border border-gray-700'" class="max-w-2xl p-4 shadow-md">
-              <p class="text-xs font-bold mb-1 opacity-75" x-text="msg.rol === 'user' ? 'Tú' : 'NOVA'"></p>
-              <div class="markdown-content text-sm" x-html="marked.parse(msg.texto)"></div>
+        <!-- MENSAJES -->
+        <div class="flex-1 p-6 overflow-y-auto space-y-4" id="chatBox">
+          <template x-for="(msg, idx) in chatHistorial" :key="idx">
+            <div :class="msg.rol === 'user' ? 'flex justify-end' : 'flex justify-start'">
+              <div :class="msg.rol === 'user' ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none' : 'bg-gray-800/90 text-gray-200 rounded-2xl rounded-tl-none border border-gray-700'" class="max-w-2xl p-4 shadow-md">
+                <p class="text-xs font-bold mb-1 opacity-75" x-text="msg.rol === 'user' ? 'Tú' : 'NOVA'"></p>
+                <div class="markdown-content text-sm" x-html="marked.parse(msg.texto)"></div>
+              </div>
+            </div>
+          </template>
+          <div x-show="chatCargando" class="flex justify-start">
+            <div class="bg-gray-800 p-4 rounded-2xl rounded-tl-none text-gray-400 text-sm flex items-center space-x-2">
+              <i class="fa-solid fa-spinner fa-spin"></i><span>NOVA está razonando la respuesta técnica...</span>
             </div>
           </div>
-        </template>
-        <div x-show="chatCargando" class="flex justify-start">
-          <div class="bg-gray-800 p-4 rounded-2xl rounded-tl-none text-gray-400 text-sm flex items-center space-x-2">
-            <i class="fa-solid fa-spinner fa-spin"></i><span>NOVA está razonando la respuesta técnica...</span>
-          </div>
+        </div>
+
+        <!-- INPUT BAR -->
+        <div class="p-4 bg-gray-900/90 border-t border-gray-800 flex items-center space-x-3">
+          <input type="text" x-model="chatInput" @keydown.enter="enviarMensajeChat()"
+                 :placeholder="'Haz cualquier pregunta técnica sobre ' + programaActual?.titulo_corto + ', examen o código...'"
+                 class="flex-1 bg-gray-800 text-white placeholder-gray-500 text-xs px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-cyan-500">
+          <button @click="enviarMensajeChat()" :disabled="chatCargando || !chatInput.trim()"
+                  class="px-5 py-3 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold rounded-xl text-xs hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 transition">
+            <i class="fa-solid fa-paper-plane mr-1.5"></i>Enviar
+          </button>
         </div>
       </div>
 
-      <!-- INPUT BAR -->
-      <div class="p-4 bg-gray-900/90 border-t border-gray-800 flex items-center space-x-3">
-        <input type="text" x-model="chatInput" @keydown.enter="enviarMensajeChat()"
-               :placeholder="'Haz cualquier pregunta técnica sobre ' + programaActual?.titulo_corto + ', examen o código...'"
-               class="flex-1 bg-gray-800 text-white placeholder-gray-500 text-xs px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-cyan-500">
-        <button @click="enviarMensajeChat()" :disabled="chatCargando || !chatInput.trim()"
-                class="px-5 py-3 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold rounded-xl text-xs hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 transition">
-          <i class="fa-solid fa-paper-plane mr-1.5"></i>Enviar
+    </main>
+
+  </div>
+
+  <!-- ==================== MODAL: GENERADOR DE GUÍA IA ==================== -->
+  <div x-show="modalGenerador" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div class="glass w-full max-w-lg rounded-3xl p-6 border border-emerald-500/30 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <h4 class="font-bold text-white text-base flex items-center space-x-2">
+          <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i>
+          <span>Generar Guía y Test con IA</span>
+        </h4>
+        <button @click="modalGenerador = false" class="text-gray-400 hover:text-white p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-gray-400">NOVA procesará el temario oficial en PDF y la transcripción para sintetizar apuntes clave y 10 preguntas tipo test.</p>
+
+      <div>
+        <label class="block text-xs font-bold text-gray-300 mb-1">Materia Seleccionada:</label>
+        <p class="text-sm font-semibold text-white bg-gray-900 p-2.5 rounded-xl border border-gray-800" x-text="asigSeleccionada?.nombre"></p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-gray-300 mb-1">Nombre o Título del Tema:</label>
+        <input type="text" x-model="generadorTemaNombre" placeholder="Ej: Tema 1 - Fundamentos y Arquitectura" class="w-full bg-gray-900 text-white text-xs p-3 rounded-xl border border-gray-700 focus:outline-none focus:border-emerald-500">
+      </div>
+
+      <div class="pt-2 flex justify-end space-x-3">
+        <button @click="modalGenerador = false" class="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl text-xs font-semibold">Cancelar</button>
+        <button @click="ejecutarGeneracionIa()" :disabled="generandoIa || !generadorTemaNombre.trim()" class="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-xl text-xs transition flex items-center space-x-2 disabled:opacity-50">
+          <i :class="generandoIa ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-bolt'"></i>
+          <span x-text="generandoIa ? 'Generando con IA...' : 'Generar Paquete de Estudio'"></span>
         </button>
       </div>
     </div>
+  </div>
 
-  </main>
-
-  <!-- MODAL: VISOR DE GUÍAS Y TRANSCRIPCIONES -->
+  <!-- ==================== MODAL: VISOR DE DOCUMENTOS ==================== -->
   <div x-show="modalVisor" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-    <div class="glass w-full max-w-4xl max-h-[85vh] rounded-2xl flex flex-col overflow-hidden border border-gray-700 shadow-2xl">
+    <div class="glass w-full max-w-4xl max-h-[85vh] rounded-3xl flex flex-col overflow-hidden border border-gray-700 shadow-2xl">
       <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
         <h4 class="font-bold text-white text-sm truncate" x-text="modalTitulo"></h4>
         <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
@@ -660,9 +894,9 @@ def dashboard_html():
     </div>
   </div>
 
-  <!-- MODAL: SIMULADOR DE EXAMEN WEB -->
+  <!-- ==================== MODAL: SIMULADOR DE EXAMEN WEB ==================== -->
   <div x-show="modalTest" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-    <div class="glass w-full max-w-3xl max-h-[90vh] rounded-2xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
+    <div class="glass w-full max-w-3xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
       <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
         <div>
           <h4 class="font-bold text-white text-sm" x-text="'Simulacro: ' + testActivoAsig"></h4>
@@ -720,10 +954,17 @@ def dashboard_html():
         programas: [],
         programaActivoId: 'dam',
         cursoFiltro: 'todos',
+        busquedaTexto: '',
         catalogoTotal: [],
         catalogoFiltrado: [],
         progreso: {},
         asigSeleccionada: null,
+        sincronizando: false,
+
+        // Generador IA Modal
+        modalGenerador: false,
+        generadorTemaNombre: '',
+        generandoIa: false,
         
         // Modal Visor
         modalVisor: false,
@@ -793,16 +1034,18 @@ def dashboard_html():
           } catch(e) { console.error(e); }
         },
 
-        cambiarPrograma(progId) {
+        seleccionarPrograma(progId) {
           this.programaActivoId = progId;
           this.cursoFiltro = 'todos';
           this.asigSeleccionada = null;
+          this.tab = 'dashboard';
           this.aplicarFiltroCatalogo();
           this.actualizarMensajeBienvenidaChat();
         },
 
         filtrarCurso(cursoId) {
           this.cursoFiltro = cursoId;
+          this.asigSeleccionada = null;
           this.aplicarFiltroCatalogo();
         },
 
@@ -812,16 +1055,59 @@ def dashboard_html():
             const nombreCurso = this.cursoFiltro === '2dam' ? '2º Curso' : '1º Curso';
             lista = lista.filter(a => a.curso === nombreCurso);
           }
+          if (this.busquedaTexto.trim()) {
+            const q = this.busquedaTexto.toLowerCase();
+            lista = lista.filter(a => a.nombre.toLowerCase().includes(q) || a.materiales.some(m => m.toLowerCase().includes(q)));
+          }
           this.catalogoFiltrado = lista;
+        },
+
+        async sincronizarMateriales() {
+          this.sincronizando = true;
+          try {
+            await fetch('/api/sincronizar', { method: 'POST' });
+            await this.cargarProgramas();
+            await this.cargarCatalogo();
+          } catch(e) { console.error(e); }
+          finally { this.sincronizando = false; }
+        },
+
+        generarGuiaDesdePdf(pdfNombre) {
+          this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
+          this.modalGenerador = true;
+        },
+
+        async ejecutarGeneracionIa() {
+          if (!this.asigSeleccionada || !this.generadorTemaNombre.trim()) return;
+          this.generandoIa = true;
+          try {
+            await fetch('/api/generar-guia', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: this.asigSeleccionada.nombre,
+                nombre_tema: this.generadorTemaNombre.trim()
+              })
+            });
+            await this.cargarCatalogo();
+            // Refrescar asignatura seleccionada
+            this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
+            this.modalGenerador = false;
+            alert('¡Guía y test generados con éxito!');
+          } catch(e) {
+            alert('Error generando la guía con IA.');
+          } finally {
+            this.generandoIa = false;
+          }
         },
 
         actualizarMensajeBienvenidaChat() {
           const p = this.programaActual;
           let saludo = '';
           if (p?.id === 'ciber') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Ingeniería Inversa o Hacking Ético) repasamos hoy?';
+            saludo = '¡Hola Alex! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Malware o Hacking Ético) repasamos hoy?';
           } else if (p?.id === 'grado') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño de sistemas.';
+            saludo = '¡Hola Alex! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño formal.';
           } else if (p?.id === 'cert') {
             saludo = '¡Hola Alex! Soy **NOVA**, tu instructora para **Certificaciones Técnicas**. ¿Qué objetivo de certificación preparamos?';
           } else {
@@ -836,8 +1122,8 @@ def dashboard_html():
         },
 
         obtenerFondoHex(color) {
-          const map = { cyan: 'rgba(34, 211, 238, 0.1)', rose: 'rgba(251, 113, 133, 0.1)', indigo: 'rgba(129, 140, 248, 0.1)', amber: 'rgba(245, 158, 11, 0.1)' };
-          return map[color] || 'rgba(56, 189, 248, 0.1)';
+          const map = { cyan: 'rgba(34, 211, 238, 0.12)', rose: 'rgba(251, 113, 133, 0.12)', indigo: 'rgba(129, 140, 248, 0.12)', amber: 'rgba(245, 158, 11, 0.12)' };
+          return map[color] || 'rgba(56, 189, 248, 0.12)';
         },
 
         abrirAsignatura(asig) {
