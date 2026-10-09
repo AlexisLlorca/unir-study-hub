@@ -126,44 +126,44 @@ def ejecutar_test_interactivo(preguntas: List[PreguntaExamen]):
     )
 
 
-# Bloque de prueba con preguntas reales de PSP (Tema 1: Procesos)
-if __name__ == "__main__":
-    bateria_psp = [
-        PreguntaExamen(
-            enunciado="¿Cuál es la principal diferencia entre un proceso y un hilo (thread)?",
-            opciones={
-                "A": "Un proceso comparte memoria con otros procesos, mientras que los hilos tienen memoria aislada.",
-                "B": "Un proceso tiene su propio espacio de direcciones de memoria aislado, mientras que los hilos de un mismo proceso comparten memoria.",
-                "C": "Java no permite crear procesos nativos, solo hilos gestionados por la JVM.",
-                "D": "Los procesos siempre se ejecutan en modo kernel y los hilos en modo usuario.",
-            },
-            correcta="B",
-            justificacion="Los procesos poseen aislamiento de memoria en el sistema operativo, lo que aporta robustez. Los hilos comparten el segmento de datos del proceso padre.",
-        ),
-        PreguntaExamen(
-            enunciado="En Java, ¿qué método de la clase Process bloquea el hilo actual hasta que el subproceso finaliza y devuelve su código de retorno?",
-            opciones={
-                "A": "p.start()",
-                "B": "p.destroy()",
-                "C": "p.waitFor()",
-                "D": "p.getInputStream()",
-            },
-            correcta="C",
-            justificacion="waitFor() causa que el hilo invocador espere hasta que el proceso representado por el objeto Process haya finalizado, devolviendo el código de salida (exit code).",
-        ),
-        PreguntaExamen(
-            enunciado="¿Qué ventaja principal ofrece la clase ProcessBuilder frente a Runtime.getRuntime().exec() en Java?",
-            opciones={
-                "A": "ProcessBuilder permite configurar el entorno de variables, el directorio de trabajo y redirigir flujos de E/S de forma más flexible y segura.",
-                "B": "ProcessBuilder ejecuta los comandos directamente en la GPU para mayor velocidad.",
-                "C": "ProcessBuilder solo funciona en Windows y MacOS, no en distribuciones Linux.",
-                "D": "ProcessBuilder no genera excepciones verificadas de tipo IOException.",
-            },
-            correcta="A",
-            justificacion="ProcessBuilder introdujo en Java 5 una API modular orientada a objetos para configurar argumentos, variables de entorno y redirección de flujos estándar antes de iniciar el proceso.",
-        ),
-    ]
+# Batería de prueba con preguntas reales de PSP (Tema 1: Procesos)
+bateria_psp = [
+    PreguntaExamen(
+        enunciado="¿Cuál es la principal diferencia entre un proceso y un hilo (thread)?",
+        opciones={
+            "A": "Un proceso comparte memoria con otros procesos, mientras que los hilos tienen memoria aislada.",
+            "B": "Un proceso tiene su propio espacio de direcciones de memoria aislado, mientras que los hilos de un mismo proceso comparten memoria.",
+            "C": "Java no permite crear procesos nativos, solo hilos gestionados por la JVM.",
+            "D": "Los procesos siempre se ejecutan en modo kernel y los hilos en modo usuario.",
+        },
+        correcta="B",
+        justificacion="Los procesos poseen aislamiento de memoria en el sistema operativo, lo que aporta robustez. Los hilos comparten el segmento de datos del proceso padre.",
+    ),
+    PreguntaExamen(
+        enunciado="En Java, ¿qué método de la clase Process bloquea el hilo actual hasta que el subproceso finaliza y devuelve su código de retorno?",
+        opciones={
+            "A": "p.start()",
+            "B": "p.destroy()",
+            "C": "p.waitFor()",
+            "D": "p.getInputStream()",
+        },
+        correcta="C",
+        justificacion="waitFor() causa que el hilo invocador espere hasta que el proceso representado por el objeto Process haya finalizado, devolviendo el código de salida (exit code).",
+    ),
+    PreguntaExamen(
+        enunciado="¿Qué ventaja principal ofrece la clase ProcessBuilder frente a Runtime.getRuntime().exec() en Java?",
+        opciones={
+            "A": "ProcessBuilder permite configurar el entorno de variables, el directorio de trabajo y redirigir flujos de E/S de forma más flexible y segura.",
+            "B": "ProcessBuilder ejecuta los comandos directamente en la GPU para mayor velocidad.",
+            "C": "ProcessBuilder solo funciona en Windows y MacOS, no en distribuciones Linux.",
+            "D": "ProcessBuilder no genera excepciones verificadas de tipo IOException.",
+        },
+        correcta="A",
+        justificacion="ProcessBuilder introdujo en Java 5 una API modular orientada a objetos para configurar argumentos, variables de entorno y redirección de flujos estándar antes de iniciar el proceso.",
+    ),
+]
 
+if __name__ == "__main__":
     console.print("\n[bold cyan]🧪 Generando simulacro de examen en Markdown para PSP...[/bold cyan]")
     md_test = generar_markdown_examen(
         asignatura="PSP",

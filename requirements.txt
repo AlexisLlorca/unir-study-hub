@@ -1,11 +1,19 @@
-# 1. Automatización de navegador moderna para autenticación y descargas
-    playwright>=1.49.0
+# 1. Automatización de navegador moderna para autenticación y descargas del Campus UNIR
+playwright>=1.49.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
 
-    # 2. Extracción y análisis de texto de PDFs de la UNIR
-    pypdf>=5.0.0
+# 2. Extracción y análisis de texto de PDFs de la UNIR
+pypdf>=5.0.0
 
-    # 3. Gestión segura de configuración y variables de entorno
-    python-dotenv>=1.0.1
+# 3. Descarga y extracción de audio/vídeo de clases grabadas (Kaltura, Panopto, etc.)
+yt-dlp>=2025.1.0
 
-    # 4. Interfaz de consola elegante (mensajes, tablas y barras de progreso en terminal)
-    rich>=13.9.0
+# 4. Inteligencia Artificial (Tutor inteligente y generador académico de apuntes y exámenes)
+google-genai>=2.29.0
+
+# 5. Gestión segura de configuración y variables de entorno
+python-dotenv>=1.0.1
+
+# 6. Interfaz de consola elegante (mensajes, tablas y barras de progreso en terminal)
+rich>=13.9.0

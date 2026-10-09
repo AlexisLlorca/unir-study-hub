@@ -1,28 +1,33 @@
+# 1. Entornos virtuales y caché de Python
 .venv/
-    env/
-    __pycache__/
-    *.py[cod]
-    *$py.class
+env/
+__pycache__/
+*.py[cod]
+*$py.class
 
-    # 2. CIBERSEGURIDAD: Sesiones, tokens y credenciales (¡NUNCA SUBIR A GIT!)
-    auth/session_state.json
-    auth/*.json
-    *.env
-    .env
-    .env.*
-    secrets/
+# 2. CIBERSEGURIDAD: Sesiones, tokens y credenciales (¡NUNCA SUBIR A GIT!)
+auth/session_state.json
+auth/*.json
+*.env
+.env
+.env.*
+secrets/
 
-    # 3. Material docente y datos temporales de la UNIR (Privacidad y Copyright)
-    data/downloads/
-    data/raw/
-    data/cache/
-    *.pdf
-    *.mp4
-    *.mp3
-    *.wav
+# 3. Material docente y datos temporales de la UNIR (Privacidad y Copyright)
+data/downloads/
+data/raw/
+data/cache/
+data/materiales/
+data/clases_grabadas/
+data/bandeja_entrada/
+*.pdf
+*.mp4
+*.mp3
+*.wav
+*.m4a
 
-    # 4. Configuración de editores e IDEs
-    .idea/
-    .vscode/
-    *.swp
-    *.swo
+# 4. Configuración de editores e IDEs
+.idea/
+.vscode/
+*.swp
+*.swo

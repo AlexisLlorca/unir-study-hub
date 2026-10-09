@@ -1,7 +1,8 @@
 """
-Punto de entrada principal (CLI) para unir-study-hub.
-Proporciona un menú interactivo en terminal para gestionar la autenticación segura,
-el procesamiento de temarios y la extracción de código vivo de DAM y PFU.
+Punto de entrada principal (CLI) para UNIR Study Hub v2.0.
+Suite integral de estudio autónomo para 2º DAM & PFU Ingeniería del Software.
+Maneja sincronización del campus, descarga de clases, tutor de IA,
+generación automática de apuntes, ejercicios y simulacros de examen.
 """
 
 import sys
@@ -17,13 +18,19 @@ from rich.table import Table
 
 from src.core.config import (
     ensure_directories,
+    MATERIALES_DIR,
+    CLASES_GRABADAS_DIR,
+    PROCESADO_DIR,
     BANDEJA_DAM_DIR,
     BANDEJA_PFU_DIR,
-    PROCESADO_DIR,
-    SESSION_STATE_FILE,
+    get_gemini_api_key,
 )
 from src.auth.session_manager import login_interactivo, tiene_sesion_guardada
-from src.extractors.pdf_parser import extraer_texto_pdf
+from src.crawler.campus_scraper import CampusScraper
+from src.media.recordings_manager import RecordingsManager
+from src.ai.tutor import TutorIA
+from src.ai.llm_client import LLMClient
+from src.generators.ai_generator import FactoriaAcademicaIA
 from src.generators.exam_simulator import (
     ejecutar_test_interactivo,
     bateria_psp,
@@ -33,47 +40,129 @@ console = Console()
 
 
 def mostrar_banner():
+    estado_auth = "[green]✔ Activa[/green]" if tiene_sesion_guardada() else "[yellow]⚠ No iniciada[/yellow]"
+    estado_ia = "[green]✔ Conectada[/green]" if get_gemini_api_key() else "[yellow]⚠ Pendiente de clave[/yellow]"
+
     console.print(
         Panel.fit(
-            "[bold cyan]🎓 UNIR Study Hub v2.0[/bold cyan]\n"
-            "[bold white]Asistente Autónomo de Estudio y Código para 2º DAM & PFU Ingeniería del Software[/bold white]\n"
-            "[dim]Security by Design • Zero-Knowledge Auth • Code Extraction[/dim]",
+            "[bold cyan]🎓 UNIR Study Hub — Sistema Autónomo de Estudio y Copiloto de IA[/bold cyan]\n"
+            "[bold white]Especializado en 2º DAM & PFU Ingeniería del Software[/bold white]\n"
+            f"[dim]Sesión Campus: {estado_auth}  |  Inteligencia Artificial: {estado_ia}[/dim]",
             border_style="cyan",
         )
     )
 
 
-def listar_archivos_bandeja():
-    """
-    Muestra en una tabla los documentos pendientes en la bandeja de entrada.
-    """
-    table = Table(title="📥 Bandeja de Entrada (Dropzone)", border_style="cyan")
-    table.add_column("Programa", style="cyan", justify="center")
-    table.add_column("Asignatura / Carpeta", style="green")
-    table.add_column("Archivos PDF encontrados", style="white")
+def menu_sincronizacion(scraper: CampusScraper):
+    console.print(
+        Panel.fit(
+            "[bold cyan]📥 SINCRONIZACIÓN Y DESCARGA DE MATERIALES[/bold cyan]\n\n"
+            "[cyan]1.[/cyan] 📦 Importar automáticamente todos los PDFs de tu respaldo local de DAM\n"
+            "[cyan]2.[/cyan] 🌐 Conectar al Campus Virtual para buscar recursos nuevos con Playwright\n"
+            "[cyan]0.[/cyan] ↩ Volver al menú principal",
+            border_style="cyan",
+        )
+    )
+    op = console.input("👉 Selecciona una opción: ").strip()
+    if op == "1":
+        scraper.sincronizar_desde_respaldo_local()
+    elif op == "2":
+        scraper.explorar_y_descargar_campus()
 
-    archivos_dam = list(BANDEJA_DAM_DIR.glob("**/*.pdf"))
-    archivos_pfu = list(BANDEJA_PFU_DIR.glob("**/*.pdf"))
 
-    table.add_row("2º DAM", "data/bandeja_entrada/dam", f"{len(archivos_dam)} archivo(s)")
-    table.add_row("PFU Ing. Software", "data/bandeja_entrada/pfu", f"{len(archivos_pfu)} archivo(s)")
+def menu_clases_grabadas(recordings: RecordingsManager):
+    console.print(
+        Panel.fit(
+            "[bold cyan]🎙️ GESTOR DE CLASES GRABADAS (Kaltura, Panopto, Zoom)[/bold cyan]\n\n"
+            "[cyan]1.[/cyan] 📥 Descargar una clase por URL (audio ligero o vídeo con yt-dlp)\n"
+            "[cyan]2.[/cyan] 🧠 Transcribir y generar resumen de una clase ya descargada con IA\n"
+            "[cyan]3.[/cyan] 📋 Ver clases grabadas guardadas localmente\n"
+            "[cyan]0.[/cyan] ↩ Volver al menú principal",
+            border_style="cyan",
+        )
+    )
+    op = console.input("👉 Selecciona una opción: ").strip()
+    if op == "1":
+        url = console.input("👉 Pega la URL de la clase grabada: ").strip()
+        if not url:
+            return
+        asig = console.input("👉 Asignatura (ej: PSP, Acceso a Datos, PMDM): ").strip() or "General"
+        nom = console.input("👉 Nombre o título de la clase: ").strip() or "Clase_Magistral"
+        recordings.descargar_clase(url, asig, nom, solo_audio=True)
+    elif op == "2":
+        recordings.listar_clases_disponibles()
+        archivos = list(CLASES_GRABADAS_DIR.glob("**/*.*"))
+        archivos = [a for a in archivos if a.is_file() and a.suffix.lower() in [".mp3", ".mp4", ".m4a"]]
+        if not archivos:
+            return
+        nombre = console.input("👉 Escribe el nombre del archivo de audio a transcribir: ").strip()
+        coincidencias = [a for a in archivos if nombre.lower() in a.name.lower()]
+        if coincidencias:
+            archivo = coincidencias[0]
+            recordings.transcribir_y_resumir_clase(archivo, archivo.parent.name, archivo.stem)
+        else:
+            console.print("[yellow]No se encontró ningún archivo con ese nombre.[/yellow]")
+    elif op == "3":
+        recordings.listar_clases_disponibles()
+
+
+def menu_procesar_tema_ia(factoria: FactoriaAcademicaIA):
+    # Buscar todos los PDFs disponibles en materiales y bandejas
+    pdfs = list(MATERIALES_DIR.glob("**/*.pdf")) + list(BANDEJA_DAM_DIR.glob("**/*.pdf"))
+    if not pdfs:
+        console.print(
+            "\n[yellow]ℹ No hay ningún PDF cargado en el sistema todavía.[/yellow]\n"
+            "[dim]Utiliza la opción 2 del menú para importar tu respaldo de PDFs de DAM.[/dim]\n"
+        )
+        return
+
+    table = Table(title="📄 Selecciona un PDF para procesar con IA", border_style="cyan")
+    table.add_column("#", style="cyan", justify="right")
+    table.add_column("Asignatura", style="green")
+    table.add_column("Archivo PDF", style="white")
+
+    for i, pdf in enumerate(pdfs[:15], start=1):
+        asig = pdf.parent.name
+        table.add_row(str(i), asig, pdf.name)
 
     console.print(table)
+    seleccion = console.input("\n👉 Introduce el número del PDF a procesar (o 0 para cancelar): ").strip()
+    try:
+        idx = int(seleccion) - 1
+        if 0 <= idx < len(pdfs):
+            pdf_elegido = pdfs[idx]
+            asig_elegida = pdf_elegido.parent.name
+            tema_elegido = pdf_elegido.stem.replace(" ", "_")
+            factoria.procesar_tema_completo(pdf_elegido, asig_elegida, tema_elegido)
+    except ValueError:
+        pass
+
+
+def ver_biblioteca_completa(scraper: CampusScraper, recordings: RecordingsManager):
+    scraper.listar_materiales_locales()
+    recordings.listar_clases_disponibles()
 
 
 def menu_principal():
     ensure_directories()
+    llm_client = LLMClient()
+    tutor_ia = TutorIA(llm_client)
+    recordings = RecordingsManager(llm_client)
+    scraper = CampusScraper()
+    factoria = FactoriaAcademicaIA(tutor_ia)
+
     while True:
         mostrar_banner()
-        estado_auth = "[green]✔ Activa[/green]" if tiene_sesion_guardada() else "[yellow]⚠ No iniciada[/yellow]"
-        console.print(f"Estado de sesión UNIR: {estado_auth}\n")
 
-        console.print("[bold]Opciones disponibles:[/bold]")
-        console.print("[cyan]1.[/cyan] 🔐 Iniciar sesión segura interactiva en UNIR (Playwright Storage State)")
-        console.print("[cyan]2.[/cyan] 📥 Ver archivos en la Bandeja de Entrada (Dropzone)")
-        console.print("[cyan]3.[/cyan] 📄 Procesar un PDF de prueba de la bandeja")
-        console.print("[cyan]4.[/cyan] 📁 Ver estructura de carpetas del sistema")
-        console.print("[cyan]5.[/cyan] 🎯 Practicar con Simulacro de Examen Tipo Test (PSP - Tema 1)")
+        console.print("[bold]Menú de Operaciones:[/bold]")
+        console.print("[cyan]1.[/cyan] 🔐 Iniciar sesión segura interactiva en UNIR (Playwright 2FA)")
+        console.print("[cyan]2.[/cyan] 📥 Sincronizar e importar materiales (Campus & Respaldo local)")
+        console.print("[cyan]3.[/cyan] 🎙️ Clases Grabadas (Descargar con yt-dlp y transcribir con IA)")
+        console.print("[cyan]4.[/cyan] 🤖 Chat con tu Tutor de IA (Preguntas, dudas de código y explicaciones)")
+        console.print("[cyan]5.[/cyan] ⚡ Procesar Tema con IA (Apuntes + Ejercicios prácticos + Examen)")
+        console.print("[cyan]6.[/cyan] 🎯 Practicar Simulacro de Examen Tipo Test (PSP - Tema 1)")
+        console.print("[cyan]7.[/cyan] 📚 Ver Biblioteca de Materiales y Clases guardadas")
+        console.print("[cyan]8.[/cyan] 🔑 Configurar Clave de API de IA (Google Gemini)")
         console.print("[cyan]0.[/cyan] 🚪 Salir\n")
 
         opcion = console.input("👉 Selecciona una opción: ").strip()
@@ -81,33 +170,22 @@ def menu_principal():
         if opcion == "1":
             login_interactivo()
         elif opcion == "2":
-            listar_archivos_bandeja()
+            menu_sincronizacion(scraper)
         elif opcion == "3":
-            pdfs = list(BANDEJA_DAM_DIR.glob("**/*.pdf")) + list(BANDEJA_PFU_DIR.glob("**/*.pdf"))
-            if not pdfs:
-                console.print(
-                    "\n[yellow]ℹ No hay ningún PDF en la bandeja de entrada todavía.[/yellow]\n"
-                    "[dim]Copia cualquier PDF de apuntes en:[/dim]\n"
-                    f"  [cyan]{BANDEJA_DAM_DIR}[/cyan] (para DAM)\n"
-                    f"  [cyan]{BANDEJA_PFU_DIR}[/cyan] (para PFU)\n"
-                )
-            else:
-                primer_pdf = pdfs[0]
-                console.print(f"\n[green]Procesando:[/green] {primer_pdf.name}...")
-                datos = extraer_texto_pdf(primer_pdf)
-                console.print(f"[green]✔ Total páginas extraídas:[/green] {datos['total_paginas']}")
+            menu_clases_grabadas(recordings)
         elif opcion == "4":
-            console.print(f"\n[green]✔ Base:[/green] {BASE_DIR}")
-            console.print(f"[green]✔ DAM:[/green] {BANDEJA_DAM_DIR}")
-            console.print(f"[green]✔ PFU:[/green] {BANDEJA_PFU_DIR}")
-            console.print(f"[green]✔ Procesado:[/green] {PROCESADO_DIR}\n")
+            tutor_ia.sesion_chat_interactivo()
         elif opcion == "5":
+            menu_procesar_tema_ia(factoria)
+        elif opcion == "6":
             ejecutar_test_interactivo(bateria_psp)
+        elif opcion == "7":
+            ver_biblioteca_completa(scraper, recordings)
+        elif opcion == "8":
+            llm_client.solicitar_api_key_interactiva()
         elif opcion == "0":
-            console.print("\n[bold cyan]¡Hasta la próxima, Alexis! A por ese Grado y DAM.[/bold cyan] 👋\n")
+            console.print("\n[bold green]👋 ¡Hasta pronto Alex! Éxitos con el estudio.[/bold green]\n")
             break
-        else:
-            console.print("[red]Opción no válida. Inténtalo de nuevo.[/red]\n")
 
 
 if __name__ == "__main__":
