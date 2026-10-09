@@ -41,6 +41,7 @@ from src.core.academic_structure import (
     obtener_catalogo_academico,
     obtener_resumen_programas,
     reorganizar_biblioteca_completa,
+    sincronizar_estudios_externos,
     obtener_info_asignatura,
 )
 from src.core.progress_tracker import GestorProgreso
@@ -212,12 +213,19 @@ def api_sincronizar():
     return {"status": "ok"}
 
 
+@app.post("/api/sincronizar-respaldo")
 @app.post("/api/escanear-primer-ano")
-def api_escanear_primer_ano():
-    """Escanea el respaldo local e importa todos los temarios del 1er año de DAM."""
+def api_sincronizar_respaldo():
+    """Escanea el respaldo local (/home/alexllorca/Respaldo_Estudios) e importa temarios de DAM y Ciberseguridad."""
+    from src.crawler.campus_scraper import CampusScraper
+    scraper = CampusScraper()
+    importados_dam = scraper.sincronizar_desde_respaldo_local()
     sincronizar_estudios_externos()
     reorganizar_biblioteca_completa()
-    return {"status": "ok", "mensaje": "Se han sincronizado e importado 122 documentos y 75 PDFs de 1º DAM con éxito."}
+    return {
+        "status": "ok",
+        "mensaje": "Respaldo local sincronizado con éxito (temarios de 1º DAM y Máster en Ciberseguridad importados al Hub)."
+    }
 
 
 @app.post("/api/descargar-campus")
@@ -499,17 +507,29 @@ def dashboard_html():
 <body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-[#0b0f19] text-gray-100 overflow-x-hidden">
 
   <!-- ==================== SIDEBAR PRINCIPAL DE SECCIONES ==================== -->
-  <aside class="w-72 bg-[#0f172a]/95 border-r border-gray-800 flex flex-col shrink-0 min-h-screen sticky top-0 z-40 select-none">
+  <aside x-show="sidebarVisible"
+         x-transition:enter="transition-all ease-out duration-300"
+         x-transition:enter-start="-translate-x-full opacity-0"
+         x-transition:enter-end="translate-x-0 opacity-100"
+         x-transition:leave="transition-all ease-in duration-200"
+         x-transition:leave-start="translate-x-0 opacity-100"
+         x-transition:leave-end="-translate-x-full opacity-0"
+         class="w-72 bg-[#0f172a]/95 border-r border-gray-800 flex flex-col shrink-0 min-h-screen sticky top-0 z-40 select-none shadow-xl">
     
     <!-- BRAND / LOGO -->
-    <div class="p-5 border-b border-gray-800 flex items-center space-x-3">
-      <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
-        <i class="fa-solid fa-graduation-cap text-lg"></i>
+    <div class="p-5 border-b border-gray-800 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20 shrink-0">
+          <i class="fa-solid fa-graduation-cap text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400">UNIR Study Hub</h1>
+          <p class="text-[11px] text-gray-400 font-medium">Plataforma Multi-Titulación</p>
+        </div>
       </div>
-      <div>
-        <h1 class="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400">UNIR Study Hub</h1>
-        <p class="text-[11px] text-gray-400 font-medium">Plataforma Multi-Titulación</p>
-      </div>
+      <button @click="toggleSidebar()" class="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition" title="Ocultar barra lateral">
+        <i class="fa-solid fa-angles-left text-sm"></i>
+      </button>
     </div>
 
     <!-- NAVEGACIÓN DE PROGRAMAS / TITULACIONES -->
@@ -618,12 +638,20 @@ def dashboard_html():
   <div class="flex-1 flex flex-col min-h-screen max-w-full overflow-hidden">
     
     <!-- TOPBAR -->
-    <header class="glass sticky top-0 z-30 px-8 py-3.5 flex items-center justify-between border-b border-gray-800/80">
+    <header class="glass sticky top-0 z-30 px-6 py-3.5 flex items-center justify-between border-b border-gray-800/80">
       <div class="flex items-center space-x-3">
+        <!-- BOTÓN TOGGLE SIDEBAR -->
+        <button @click="toggleSidebar()" 
+                class="p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800/80 rounded-xl transition flex items-center space-x-1.5 text-xs font-semibold border border-transparent hover:border-gray-700"
+                :title="sidebarVisible ? 'Ocultar barra lateral' : 'Mostrar barra lateral'">
+          <i :class="sidebarVisible ? 'fa-solid fa-bars-staggered' : 'fa-solid fa-bars text-cyan-400 text-sm'"></i>
+          <span x-show="!sidebarVisible" class="text-xs text-gray-300 ml-1 font-semibold">Menú</span>
+        </button>
+
         <span class="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider"
               :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)"
               x-text="programaActual?.nombre"></span>
-        <span class="text-xs text-gray-400" x-text="cursoFiltro === 'todos' ? 'Todo el programa' : (cursoFiltro === '2dam' ? '2º Curso' : '1º Curso')"></span>
+        <span class="text-xs text-gray-400 hidden sm:inline" x-text="cursoFiltro === 'todos' ? 'Todo el programa' : (cursoFiltro === '2dam' ? '2º Curso' : '1º Curso')"></span>
       </div>
 
       <!-- BUSCADOR RÁPIDO -->
@@ -665,16 +693,18 @@ def dashboard_html():
 
             <!-- ACCIONES Y CURSO SELECTOR RÁPIDO -->
             <div class="flex flex-wrap items-center gap-2">
-              <div x-show="programaActivoId === 'dam'" class="flex items-center space-x-2">
-                <button @click="escanearPrimerAno()" :disabled="escaneando1dam"
-                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center space-x-1.5 shadow-sm">
-                  <i :class="escaneando1dam ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-folder-tree'"></i>
-                  <span x-text="escaneando1dam ? 'Sincronizando...' : '📥 Importar 1º DAM'"></span>
+              <div class="flex items-center space-x-2">
+                <button @click="sincronizarRespaldoLocal()" :disabled="sincronizandoRespaldo"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center space-x-1.5 shadow-sm"
+                        :title="'Sincronizar carpetas locales de estudio (/home/alexllorca/Respaldo_Estudios: DAM 1º/2º y Ciberseguridad M1-M7)'">
+                  <i :class="sincronizandoRespaldo ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-folder-tree'"></i>
+                  <span x-text="sincronizandoRespaldo ? 'Importando...' : ('📥 Importar Respaldo ' + (programaActivoId === 'dam' ? 'DAM' : (programaActivoId === 'ciber' ? 'Ciberseguridad' : 'Local')))"></span>
                 </button>
                 <button @click="descargarCanvasOnline()" :disabled="descargandoCanvas"
-                        class="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1.5 shadow-sm">
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1.5 shadow-sm"
+                        title="Sincronización 360° con Canvas UNIR: Archivos, CMS, Módulos y Clases Grabadas">
                   <i :class="descargandoCanvas ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-cloud-arrow-down'"></i>
-                  <span x-text="descargandoCanvas ? 'Conectando...' : '🌐 Descargar de Canvas'"></span>
+                  <span x-text="descargandoCanvas ? 'Sincronizando...' : '🌐 Sincronizar Canvas'"></span>
                 </button>
               </div>
 
@@ -1288,6 +1318,7 @@ def dashboard_html():
     function studyHubApp() {
       return {
         tab: 'dashboard',
+        sidebarVisible: localStorage.getItem('unir_sidebar_visible') !== 'false',
         programas: [],
         programaActivoId: 'dam',
         cursoFiltro: 'todos',
@@ -1298,6 +1329,7 @@ def dashboard_html():
         asigSeleccionada: null,
         sincronizando: false,
         escaneando1dam: false,
+        sincronizandoRespaldo: false,
         descargandoCanvas: false,
 
         // Generador IA Modal
@@ -1443,6 +1475,29 @@ def dashboard_html():
             await this.cargarVideoclases();
           } catch(e) { console.error(e); }
           finally { this.sincronizando = false; }
+        },
+
+        toggleSidebar() {
+          this.sidebarVisible = !this.sidebarVisible;
+          try {
+            localStorage.setItem('unir_sidebar_visible', this.sidebarVisible);
+          } catch(e) {}
+        },
+
+        async sincronizarRespaldoLocal() {
+          this.sincronizandoRespaldo = true;
+          try {
+            const res = await fetch('/api/sincronizar-respaldo', { method: 'POST' });
+            const data = await res.json();
+            await this.cargarProgramas();
+            await this.cargarCatalogo();
+            await this.cargarVideoclases();
+            alert(data.mensaje || 'Respaldo local sincronizado correctamente.');
+          } catch(e) {
+            alert('Error al sincronizar el respaldo local.');
+          } finally {
+            this.sincronizandoRespaldo = false;
+          }
         },
 
         async escanearPrimerAno() {
