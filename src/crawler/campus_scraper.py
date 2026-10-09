@@ -166,15 +166,15 @@ class CampusScraper:
                     dir_asig.mkdir(parents=True, exist_ok=True)
 
                     # 2. Consultar archivos del curso vía Canvas API
-                    archivos = page.evaluate(f"""async () => {{
-                        try {{
-                            const res = await fetch('/api/v1/courses/{c_id}/files?per_page=100');
+                    archivos = page.evaluate("""async (courseId) => {
+                        try {
+                            const res = await fetch(`/api/v1/courses/${courseId}/files?per_page=100`);
                             if (res.ok) return await res.json();
-                        } catch (e) {{
+                        } catch (e) {
                             return [];
-                        }}
+                        }
                         return [];
-                    }}""")
+                    }""", c_id)
 
                     if not isinstance(archivos, list):
                         continue
