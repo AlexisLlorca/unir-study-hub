@@ -20,6 +20,7 @@ data/cache/
 data/materiales/
 data/clases_grabadas/
 data/bandeja_entrada/
+data/procesado/transcripciones/
 *.pdf
 *.mp4
 *.mp3

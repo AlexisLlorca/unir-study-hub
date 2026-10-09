@@ -148,3 +148,20 @@ class TutorIA:
             "- Distribuye preguntas teóricas de concepto y preguntas prácticas con fragmentos de código donde haya que deducir la salida o el error.\n"
         )
         return self.client.generar_contenido(prompt, temperatura=0.3)
+
+    def generar_resumen_clase_magistral(self, texto_transcripcion: str, asignatura: str, nombre_clase: str) -> Optional[str]:
+        """Analiza la transcripción de una clase en directo y extrae avisos de examen, explicaciones de código y dudas de alumnos."""
+        prompt = (
+            f"Eres NOVA, tutor de IA para un alumno de 2º DAM en UNIR.\n"
+            f"A continuación tienes la transcripción oficial y literal de una clase en directo de la asignatura '{asignatura}' ({nombre_clase}):\n\n"
+            f"--- TRANSCRIPCIÓN DE LA CLASE ---\n{texto_transcripcion[:35000]}\n--- FIN TRANSCRIPCIÓN ---\n\n"
+            "Por favor, genera un informe de estudio de alto rendimiento estructurado en Markdown:\n"
+            "1. # 🎙️ RESUMEN Y ANÁLISIS DE LA CLASE: " + nombre_clase + "\n"
+            "2. ## 📢 1. Avisos del Profesor para el Examen y Actividades (¿Qué dijo el profesor que caería en examen? ¿Qué fechas, tareas o advertencias mencionó?)\n"
+            "3. ## 🧠 2. Conceptos Técnicos y Teoría Explicada (Explicación paso a paso de lo tratado en clase)\n"
+            "4. ## 💻 3. Código Desarrollado en Directo (Lógica, algoritmos, métodos y buenas prácticas explicadas por el profesor)\n"
+            "5. ## 🙋‍♂️ 4. Preguntas Destacadas de los Alumnos y Respuestas del Docente\n"
+            "6. ## 🎯 5. 3 Preguntas Tipo Test de esta Clase (formato UNIR con respuestas ocultas en <details><summary>Ver solución</summary>...</details>)\n"
+        )
+        return self.client.generar_contenido(prompt, temperatura=0.3)
+

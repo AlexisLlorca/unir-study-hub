@@ -244,14 +244,22 @@ class CampusScraper:
 
     def ejecutar_sincronizacion_completa(self) -> int:
         """
-        Ejecuta la sincronización completa (respaldo local + Canvas LMS) y emite
+        Ejecuta la sincronización completa (respaldo local + Canvas LMS + videoclases) y emite
         notificaciones de escritorio en caso de nuevos archivos.
         """
         console.print("\n[bold cyan]🔄 Iniciando ciclo de sincronización automática...[/bold cyan]")
         importados = self.sincronizar_desde_respaldo_local()
         descargados = self.explorar_y_descargar_campus()
 
-        total = importados + descargados
+        total_grabaciones = 0
+        try:
+            from src.media.unir_recordings_crawler import UnirRecordingsCrawler
+            crawler = UnirRecordingsCrawler()
+            total_grabaciones = crawler.sincronizar_todas_las_clases()
+        except Exception as e:
+            console.print(f"[dim]Nota: Sincronización de clases grabadas: {e}[/dim]")
+
+        total = importados + descargados + total_grabaciones
         if total > 0:
             try:
                 import subprocess
@@ -261,7 +269,7 @@ class CampusScraper:
                         "-a", "UNIR Study Hub",
                         "-i", "dialog-information",
                         "🎓 UNIR Study Hub Actualizado",
-                        f"Se han incorporado {total} nuevos temas y materiales al sistema.",
+                        f"Se han incorporado {total} nuevos recursos (temas, actividades o transcripciones de clase).",
                     ],
                     check=False,
                 )
