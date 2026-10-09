@@ -25,8 +25,11 @@ from src.core.config import (
     ensure_directories,
 )
 from src.core.academic_structure import (
+    PROGRAMAS,
     ASIGNATURAS_2DAM,
     ASIGNATURAS_1DAM,
+    MODULOS_CIBER,
+    ASIGNATURAS_PFU,
     obtener_catalogo_academico,
     reorganizar_biblioteca_completa,
 )
@@ -44,58 +47,86 @@ class NavegadorAcademico:
         ensure_directories()
 
     def mostrar_menu_asignaturas(self):
-        """Muestra la tabla limpia de asignaturas con sus recursos reales."""
+        """Muestra el selector de programas académicos."""
         reorganizar_biblioteca_completa()
-        catalogo = obtener_catalogo_academico()
 
         while True:
             console.print(
                 Panel.fit(
-                    "[bold cyan]📚 BIBLIOTECA Y NAVEGADOR ACADÉMICO — 2º DAM (UNIR)[/bold cyan]\n"
-                    "[dim]Selecciona una asignatura para explorar sus temas, clases grabadas y tests.[/dim]",
+                    "[bold cyan]📚 BIBLIOTECA Y NAVEGADOR ACADÉMICO MULTI-PROGRAMA (UNIR)[/bold cyan]\n"
+                    "[dim]Selecciona el programa académico que deseas explorar:[/dim]\n\n"
+                    "[cyan]1.[/cyan] 💻 [bold white]FP Grado Superior DAM[/bold white] [dim](1º y 2º Curso — Multiplataforma)[/dim]\n"
+                    "[cyan]2.[/cyan] 🛡️ [bold white]Máster en Ciberseguridad[/bold white] [dim](Módulos M1 a M7)[/dim]\n"
+                    "[cyan]3.[/cyan] 🏛️ [bold white]PFU / Grado en Ingeniería del Software[/bold white] [dim](Universidad UNIR)[/dim]\n"
+                    "[cyan]4.[/cyan] 📜 [bold white]Certificaciones & Nuevas Formaciones[/bold white]\n"
+                    "[cyan]0.[/cyan] ↩ [dim]Volver al menú principal[/dim]",
                     border_style="cyan",
                 )
             )
 
-            table = Table(title="🎓 Asignaturas Oficiales de 2º DAM", border_style="cyan")
-            table.add_column("#", style="cyan", justify="right")
-            table.add_column("Asignatura", style="bold white")
+            sel_prog = console.input("\n👉 Selecciona un programa: ").strip()
+            if sel_prog in ["0", "salir", "exit", "q"]:
+                break
+            elif sel_prog == "1":
+                self.explorar_programa("dam")
+            elif sel_prog == "2":
+                self.explorar_programa("ciber")
+            elif sel_prog == "3":
+                self.explorar_programa("grado")
+            elif sel_prog == "4":
+                self.explorar_programa("cert")
+
+    def explorar_programa(self, programa_id: str):
+        """Muestra la tabla de asignaturas del programa seleccionado."""
+        p_info = PROGRAMAS.get(programa_id, PROGRAMAS["dam"])
+        catalogo = obtener_catalogo_academico(programa_id=programa_id)
+
+        while True:
+            console.print(
+                Panel.fit(
+                    f"[bold {p_info['color']}]🎓 {p_info['nombre'].upper()}[/bold {p_info['color']}]\n"
+                    f"[dim]{p_info['descripcion']}[/dim]",
+                    border_style=p_info["color"],
+                )
+            )
+
+            table = Table(title=f"Materias y Módulos — {p_info['titulo_corto']}", border_style=p_info["color"])
+            table.add_column("#", style=p_info["color"], justify="right")
+            table.add_column("Materia / Módulo", style="bold white")
+            table.add_column("Curso / Nivel", style="dim white")
             table.add_column("Temarios (PDF)", style="green", justify="right")
             table.add_column("Clases Grabadas", style="yellow", justify="right")
             table.add_column("Guías / Tests IA", style="magenta", justify="right")
 
-            lista_asignaturas = [a for a in ASIGNATURAS_2DAM if a in catalogo]
+            lista_asignaturas = list(catalogo.keys())
 
             for i, asig in enumerate(lista_asignaturas, start=1):
                 info = catalogo[asig]
                 n_mat = len(info["materiales"])
                 n_clases = len(info["transcripciones"])
-                
+
                 dir_guias = GUIAS_DIR / asig
                 dir_examenes = EXAMENES_DIR / asig
                 n_guias = len(list(dir_guias.glob("*.md"))) if dir_guias.exists() else 0
                 n_tests = len(list(dir_examenes.glob("*.json"))) if dir_examenes.exists() else 0
-                
+
                 estado_ia = f"{n_guias} guías | {n_tests} tests" if (n_guias or n_tests) else "Pendiente"
 
                 table.add_row(
                     str(i),
                     asig,
+                    info.get("curso", ""),
                     f"{n_mat} archivo(s)",
-                    f"{n_clases} clase(s)" if n_clases > 0 else "Sin clases",
+                    f"{n_clases} clase(s)" if n_clases > 0 else "—",
                     estado_ia,
                 )
 
             console.print(table)
-            console.print("[dim]Introduce el número de asignatura, 'H' para ver 1º DAM histórico o 0 para volver.[/dim]")
+            console.print("[dim]Introduce el número de asignatura para entrar o 0 para volver.[/dim]")
 
-            sel = console.input("\n👉 Selecciona una opción: ").strip()
+            sel = console.input("\n👉 Selecciona una materia: ").strip()
             if sel in ["0", "salir", "exit", "q"]:
                 break
-
-            if sel.lower() == "h":
-                self.mostrar_historico_1dam(catalogo)
-                continue
 
             try:
                 idx = int(sel) - 1
