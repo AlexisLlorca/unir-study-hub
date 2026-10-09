@@ -145,26 +145,42 @@ class RecordingsManager:
         return archivo_md
 
     def listar_clases_disponibles(self):
-        """Muestra una tabla con todas las clases grabadas guardadas localmente."""
-        table = Table(title="🎙️ Clases Grabadas en el Sistema", border_style="cyan")
-        table.add_column("Asignatura", style="cyan")
-        table.add_column("Nombre de la Clase", style="white")
-        table.add_column("Tamaño", style="green", justify="right")
-        table.add_column("Transcripción IA", style="yellow")
+        """Muestra una tabla con todas las videoclases sincronizadas y sus transcripciones."""
+        transcripciones = list(TRANSCRIPCIONES_DIR.glob("**/*.md"))
+        fichas = list(CLASES_GRABADAS_DIR.glob("**/*_info.json"))
+        medios = [a for a in CLASES_GRABADAS_DIR.glob("**/*.*") if a.is_file() and a.suffix.lower() in [".mp3", ".mp4", ".m4a", ".mkv"]]
 
-        archivos = list(CLASES_GRABADAS_DIR.glob("**/*.*"))
-        archivos = [a for a in archivos if a.is_file() and a.suffix.lower() in [".mp3", ".mp4", ".m4a", ".mkv"]]
+        total_clases = len(transcripciones) or len(fichas)
 
-        if not archivos:
-            console.print("[dim]No hay ninguna clase grabada descargada todavía.[/dim]\n")
+        if total_clases == 0 and len(medios) == 0:
+            console.print("[dim]No hay ninguna clase grabada sincronizada todavía. Usa la opción 3 > 1 para sincronizar con el campus.[/dim]\n")
             return
 
-        for archivo in archivos:
-            asignatura = archivo.parent.name
-            tam_mb = archivo.stat().st_size / (1024 * 1024)
-            posible_md = TRANSCRIPCIONES_DIR / asignatura / f"{archivo.stem}.md"
-            tiene_ia = "✔ Generada" if posible_md.exists() else "Pendiente"
-            table.add_row(asignatura, archivo.name, f"{tam_mb:.1f} MB", tiene_ia)
+        table = Table(
+            title=f"🎙️ Videoclases y Lecciones Magistrales UNIR ({total_clases} clases sincronizadas)",
+            border_style="cyan"
+        )
+        table.add_column("Asignatura", style="cyan")
+        table.add_column("Fecha", style="yellow")
+        table.add_column("Sesión / Clase", style="white")
+        table.add_column("Transcripción Oficial", style="green")
+        table.add_column("Vídeo MP4", style="magenta")
+
+        # Agrupar por asignatura
+        for t in sorted(transcripciones, key=lambda x: (x.parent.name, x.name)):
+            asig = t.parent.name
+            nombre = t.stem
+            fecha = nombre[:10] if len(nombre) >= 10 and nombre[:4].isdigit() else "Reciente"
+            titulo = nombre[11:] if len(nombre) >= 11 and nombre[:4].isdigit() else nombre
+
+            # Comprobar si hay vídeo descargado o ficha lista
+            posible_mp4 = CLASES_GRABADAS_DIR / asig / f"{nombre}.mp4"
+            posible_info = CLASES_GRABADAS_DIR / asig / f"{nombre}_info.json"
+
+            estado_video = "💾 Guardado" if posible_mp4.exists() else ("🔗 Enlace Oficial" if posible_info.exists() else "No disp.")
+            tam_kb = t.stat().st_size / 1024
+
+            table.add_row(asig[:30], fecha, titulo[:38], f"✔ {tam_kb:.0f} KB (Markdown)", estado_video)
 
         console.print(table)
-        console.print("")
+        console.print(f"[dim]Total: {total_clases} lecciones magistrales con transcripción completa palabra por palabra.[/dim]\n")

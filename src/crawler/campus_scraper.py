@@ -70,9 +70,14 @@ class CampusScraper:
         table.add_column("Archivo PDF", style="white")
         table.add_column("Destino en Hub", style="green")
 
+        from src.core.academic_structure import normalizar_nombre_asignatura
+
         for pdf in pdfs_encontrados:
-            asignatura = pdf.parent.name
-            if asignatura == "FP DAM unir":
+            try:
+                rel = pdf.relative_to(RESPALDO_LOCAL_DAM)
+                top_folder = rel.parts[0]
+                asignatura = normalizar_nombre_asignatura(top_folder)
+            except Exception:
                 asignatura = "General"
 
             dir_destino = MATERIALES_DIR / asignatura
@@ -169,7 +174,7 @@ class CampusScraper:
                 for c in cursos:
                     c_id = c.get("id")
                     c_name = c.get("name") or f"Curso_{c_id}"
-                    c_name_limpio = limpiar_nombre_carpeta(c_name)
+                    c_name_limpio = normalizar_nombre_asignatura(c_name)
 
                     dir_asig = MATERIALES_DIR / c_name_limpio
                     dir_asig.mkdir(parents=True, exist_ok=True)

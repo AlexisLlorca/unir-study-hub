@@ -195,11 +195,12 @@ class UnirRecordingsCrawler:
         table.add_column("Nombre de la Sesión", style="white")
         table.add_column("Transcripción VTT", style="yellow")
 
+        from src.core.academic_structure import normalizar_nombre_asignatura
+
         for c in cursos:
             c_id = c.get("id")
             c_name = c.get("name", f"Curso_{c_id}")
-            # Limpiar nombre
-            c_name_limpio = re.sub(r'[\\/*?:"<>|]', "", c_name).strip()[:40]
+            c_name_limpio = normalizar_nombre_asignatura(c_name)
 
             console.print(f"[cyan]Escaneando clases de:[/cyan] [bold]{c_name_limpio}[/bold]...")
             clases = self.escanear_clases_de_curso(c_id, c_name_limpio)

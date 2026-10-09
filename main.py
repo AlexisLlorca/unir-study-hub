@@ -25,6 +25,8 @@ from src.core.config import (
     BANDEJA_PFU_DIR,
     TRANSCRIPCIONES_DIR,
     APUNTES_DIR,
+    GUIAS_DIR,
+    EXAMENES_DIR,
     get_gemini_api_key,
 )
 from src.auth.session_manager import login_interactivo, tiene_sesion_guardada
@@ -38,6 +40,14 @@ from src.generators.exam_simulator import (
     ejecutar_test_interactivo,
     bateria_psp,
 )
+
+from src.core.academic_structure import (
+    ASIGNATURAS_2DAM,
+    ASIGNATURAS_1DAM,
+    obtener_catalogo_academico,
+    reorganizar_biblioteca_completa,
+)
+from src.core.study_navigator import NavegadorAcademico
 
 console = Console()
 
@@ -229,9 +239,74 @@ def menu_programador_tareas(scheduler: SyncScheduler):
         scheduler.desactivar_programacion()
 
 
-def ver_biblioteca_completa(scraper: CampusScraper, recordings: RecordingsManager):
-    scraper.listar_materiales_locales()
+def ver_biblioteca_completa(recordings: RecordingsManager):
+    reorganizar_biblioteca_completa()
+    catalogo = obtener_catalogo_academico()
+
+    table = Table(title="📚 Biblioteca Académica Consolidada — 2º DAM", border_style="cyan")
+    table.add_column("Asignatura", style="bold cyan")
+    table.add_column("Temarios (PDF)", style="green", justify="right")
+    table.add_column("Videoclases", style="yellow", justify="right")
+    table.add_column("Guías / Tests IA", style="magenta", justify="right")
+
+    for asig in ASIGNATURAS_2DAM:
+        if asig in catalogo:
+            info = catalogo[asig]
+            n_mat = len(info["materiales"])
+            n_clases = len(info["transcripciones"])
+            dir_guias = GUIAS_DIR / asig
+            dir_examenes = EXAMENES_DIR / asig
+            n_guias = len(list(dir_guias.glob("*.md"))) if dir_guias.exists() else 0
+            n_tests = len(list(dir_examenes.glob("*.json"))) if dir_examenes.exists() else 0
+            estado_ia = f"{n_guias} guías | {n_tests} tests" if (n_guias or n_tests) else "Pendiente"
+
+            table.add_row(asig, f"{n_mat} docs", f"{n_clases} clases", estado_ia)
+
+    console.print(table)
+    console.print("")
     recordings.listar_clases_disponibles()
+
+
+def menu_simulacros_test():
+    import json
+    tests = list(EXAMENES_DIR.glob("**/*.json"))
+    if not tests:
+        console.print("[cyan]Iniciando test modelo oficial de PSP...[/cyan]\n")
+        ejecutar_test_interactivo(bateria_psp)
+        return
+
+    table = Table(title="🎯 Simulacros de Examen Tipo Test Disponibles", border_style="cyan")
+    table.add_column("#", style="cyan", justify="right")
+    table.add_column("Asignatura", style="green")
+    table.add_column("Test / Tema", style="white")
+
+    table.add_row("1", "PSP", "Batería Oficial PSP — Multiproceso (Tema 1)")
+    for idx, t in enumerate(tests, start=2):
+        table.add_row(str(idx), t.parent.name, t.stem.replace("_", " "))
+
+    console.print(table)
+    sel = console.input("\n👉 Selecciona el test a practicar (o 0 para volver): ").strip()
+    if sel == "1":
+        ejecutar_test_interactivo(bateria_psp)
+    else:
+        try:
+            i = int(sel) - 2
+            if 0 <= i < len(tests):
+                t_elegido = tests[i]
+                with open(t_elegido, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                preguntas = [
+                    PreguntaExamen(
+                        enunciado=p["enunciado"],
+                        opciones=p["opciones"],
+                        correcta=p["correcta"],
+                        justificacion=p["justificacion"],
+                    )
+                    for p in data
+                ]
+                ejecutar_test_interactivo(preguntas)
+        except Exception as e:
+            console.print(f"[red]Error cargando test: {e}[/red]")
 
 
 def menu_principal():
@@ -242,6 +317,7 @@ def menu_principal():
     scraper = CampusScraper()
     factoria = FactoriaAcademicaIA(tutor_ia)
     scheduler = SyncScheduler()
+    navigator = NavegadorAcademico(tutor_ia)
 
     while True:
         mostrar_banner()
@@ -249,11 +325,11 @@ def menu_principal():
         console.print("[bold]Menú de Operaciones:[/bold]")
         console.print("[cyan]1.[/cyan] 🔐 Iniciar sesión segura interactiva en UNIR (Playwright 2FA)")
         console.print("[cyan]2.[/cyan] 📥 Sincronizar e importar materiales (Campus & Respaldo local)")
-        console.print("[cyan]3.[/cyan] 🎙️ Clases Grabadas (Descargar con yt-dlp y transcribir con IA)")
+        console.print("[cyan]3.[/cyan] 🎙️ Clases Grabadas (49 videoclases, transcripciones y vídeos)")
         console.print("[cyan]4.[/cyan] 🤖 Chat con tu Tutor de IA (Preguntas, dudas de código y explicaciones)")
-        console.print("[cyan]5.[/cyan] ⚡ Procesar Tema con IA (Apuntes + Ejercicios prácticos + Examen)")
-        console.print("[cyan]6.[/cyan] 🎯 Practicar Simulacro de Examen Tipo Test (PSP - Tema 1)")
-        console.print("[cyan]7.[/cyan] 📚 Ver Biblioteca de Materiales y Clases guardadas")
+        console.print("[cyan]5.[/cyan] 📘 Navegador Académico & Guías por Tema (Explorar 2º DAM, temas y tests con IA)")
+        console.print("[cyan]6.[/cyan] 🎯 Practicar Simulacro de Examen Tipo Test (Por tema o PSP)")
+        console.print("[cyan]7.[/cyan] 📚 Ver Biblioteca Consolidada de Materiales y Clases")
         console.print("[cyan]8.[/cyan] 🔑 Configurar Clave de API de IA (Google Gemini)")
         console.print("[cyan]9.[/cyan] ⏰ Programar Descarga Automática (systemd timer desatendido)")
         console.print("[cyan]0.[/cyan] 🚪 Salir\n")
@@ -269,11 +345,11 @@ def menu_principal():
         elif opcion == "4":
             tutor_ia.sesion_chat_interactivo()
         elif opcion == "5":
-            menu_procesar_tema_ia(factoria)
+            navigator.mostrar_menu_asignaturas()
         elif opcion == "6":
-            ejecutar_test_interactivo(bateria_psp)
+            menu_simulacros_test()
         elif opcion == "7":
-            ver_biblioteca_completa(scraper, recordings)
+            ver_biblioteca_completa(recordings)
         elif opcion == "8":
             llm_client.solicitar_api_key_interactiva()
         elif opcion == "9":

@@ -34,6 +34,7 @@ CLASES_GRABADAS_DIR = DATA_DIR / "clases_grabadas"
 # Contenido generado y procesado
 PROCESADO_DIR = DATA_DIR / "procesado"
 APUNTES_DIR = PROCESADO_DIR / "apuntes"
+GUIAS_DIR = PROCESADO_DIR / "guias"
 EJERCICIOS_DIR = PROCESADO_DIR / "ejercicios"
 EXAMENES_DIR = PROCESADO_DIR / "examenes"
 CODIGO_DIR = PROCESADO_DIR / "codigo"
@@ -92,6 +93,7 @@ def ensure_directories():
         CLASES_GRABADAS_DIR,
         PROCESADO_DIR,
         APUNTES_DIR,
+        GUIAS_DIR,
         EJERCICIOS_DIR,
         EXAMENES_DIR,
         CODIGO_DIR,
