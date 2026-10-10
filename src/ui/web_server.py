@@ -347,6 +347,130 @@ def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None
     return contexto_str
 
 
+def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = None) -> str:
+    """
+    Detecta si el alumno pregunta por la última clase, por una sesión en particular o por un resumen de clase.
+    Si es así, inyecta la transcripción íntegra (hasta 55.000 caracteres) de la clase magistral correspondiente.
+    """
+    if not TRANSCRIPCIONES_DIR.exists():
+        return ""
+
+    q_lower = query.lower()
+    es_peticion_ultima_clase = any(kw in q_lower for kw in [
+        "última clase", "ultima clase", "última sesión", "ultima sesion", "ayer",
+        "último día", "ultimo dia", "última lección", "ultima leccion", "última videoclase", "ultima videoclase"
+    ])
+    es_peticion_resumen_clase = any(kw in q_lower for kw in [
+        "resumen de la clase", "resumen de clase", "que explicó", "que explico",
+        "que vimos en clase", "que se dio en clase", "que hizo el profesor",
+        "que dijo el profesor", "resumen de la sesión", "resumen de la sesion", "resumir la clase",
+        "en la sesión", "en la sesion"
+    ])
+
+    # Si no es pregunta orientada a resumir o analizar una clase, usamos la búsqueda tradicional
+    if not (es_peticion_ultima_clase or es_peticion_resumen_clase):
+        return buscar_contexto_transcripciones(query, asignatura)
+
+    # Determinar asignaturas candidatas
+    asigs_candidatas = []
+    if asignatura:
+        for d in TRANSCRIPCIONES_DIR.iterdir():
+            if d.is_dir() and (asignatura.lower() in d.name.lower() or d.name.lower() in asignatura.lower()):
+                asigs_candidatas.append(d.name)
+
+    if not asigs_candidatas:
+        # Inferir asignatura si el alumno la nombró en el mensaje
+        for d in TRANSCRIPCIONES_DIR.iterdir():
+            if d.is_dir():
+                nom_limpio = d.name.lower().replace("1º dam - ", "").replace("2º dam - ", "")
+                palabras_nom = [p for p in nom_limpio.split() if len(p) > 3]
+                if nom_limpio in q_lower or any(p in q_lower for p in palabras_nom):
+                    asigs_candidatas.append(d.name)
+
+    if not asigs_candidatas:
+        asigs_candidatas = [d.name for d in TRANSCRIPCIONES_DIR.iterdir() if d.is_dir()]
+
+    # Buscar la clase más reciente o la que coincida con la fecha/tema mencionada
+    mejor_clase = None
+    mejor_fecha = ""
+    mejor_asig = ""
+
+    for asig_nom in asigs_candidatas:
+        dir_t = TRANSCRIPCIONES_DIR / asig_nom
+        if not dir_t.exists():
+            continue
+        for f_md in dir_t.glob("*.md"):
+            fecha_str = f_md.stem[:10] if len(f_md.stem) >= 10 and f_md.stem[:4].isdigit() else "2000-01-01"
+            # Si el usuario nombró una fecha específica en la consulta
+            if fecha_str in query:
+                mejor_clase = f_md
+                mejor_asig = asig_nom
+                mejor_fecha = fecha_str
+                break
+            if fecha_str > mejor_fecha:
+                mejor_fecha = fecha_str
+                mejor_clase = f_md
+                mejor_asig = asig_nom
+
+    if mejor_clase and mejor_clase.exists():
+        try:
+            texto_trans = mejor_clase.read_text(encoding="utf-8")
+            stem = mejor_clase.stem
+            dir_i = CLASES_GRABADAS_DIR / mejor_asig
+            info_file = dir_i / f"{stem}_info.json"
+            session_name = stem
+            summary = ""
+            rec_url = ""
+            if info_file.exists():
+                try:
+                    idata = json.loads(info_file.read_text(encoding="utf-8"))
+                    session_name = idata.get("sessionName") or idata.get("name") or stem
+                    summary = idata.get("summary", "")
+                    rec_url = idata.get("recordingUrl", "")
+                except Exception:
+                    pass
+
+            from src.core.config import RESUMENES_CLASES_DIR
+            resumen_guardado = ""
+            cache_res = RESUMENES_CLASES_DIR / mejor_asig / f"{stem}_resumen.md"
+            if cache_res.exists():
+                try:
+                    resumen_guardado = cache_res.read_text(encoding="utf-8")
+                except Exception:
+                    pass
+
+            bloque = [
+                f"\n================================================================================",
+                f"🎓 [DOCUMENTO COMPLETO: TRANSCRIPCIÓN OFICIAL LITERAL DE LA CLASE MAGISTRAL]",
+                f"📌 Asignatura: {mejor_asig} | Sesión: \"{session_name}\" | Fecha: {mejor_fecha}",
+            ]
+            if rec_url:
+                bloque.append(f"🔗 Enlace oficial a grabación: {rec_url}")
+            if summary:
+                bloque.append(f"📝 Síntesis oficial del campus: {summary}")
+            if resumen_guardado:
+                bloque.append(f"\n💡 [INFORME SINTÉTICO PREVIO DE ESTA CLASE]:\n{resumen_guardado[:3500]}\n")
+
+            bloque.append(f"\n--- TRANSCRIPCIÓN LITERAL ÍNTEGRA DE LA SESIÓN (HASTA 55.000 CARACTERES) ---")
+            bloque.append(texto_trans[:55000])
+            bloque.append(f"--- FIN DE LA TRANSCRIPCIÓN LITERAL ---\n")
+            bloque.append(
+                "🎯 DIRECTRICES PEDAGÓGICAS DE MÁXIMA PRIORIDAD PARA NOVA:\n"
+                "El alumno te ha preguntado qué se hizo en esta clase o por un resumen de la misma.\n"
+                "NO DES RESPUESTAS VAGAS NI GENÉRICAS. Tienes toda la transcripción oficial arriba.\n"
+                "Detalla con total precisión y estructura:\n"
+                "1. 📢 AVISOS DE EXAMEN Y FECHAS: ¿Qué dijo el profesor que entraría en examen? ¿Qué PACs o advertencias dio?\n"
+                "2. 🧠 TEMAS Y CONCEPTOS: Explicación paso a paso de la materia tratada en la clase.\n"
+                "3. 💻 CÓDIGO Y PRÁCTICA: ¿Qué código programó el profesor en directo? Nombres de clases, métodos, archivos y buenas prácticas explicadas.\n"
+                "4. ⏱️ Citas literales y marcas de tiempo reales [MM:SS] de los momentos clave."
+            )
+            return "\n".join(bloque)
+        except Exception as e:
+            console.print(f"[yellow]Error cargando transcripción completa de clase:[/yellow] {e}")
+
+    return buscar_contexto_transcripciones(query, asignatura)
+
+
 @app.get("/api/videoclases")
 def api_videoclases(programa: Optional[str] = None):
     """Devuelve el catálogo de todas las clases grabadas con sus metadatos y resúmenes oficiales."""
@@ -380,6 +504,8 @@ def api_videoclases(programa: Optional[str] = None):
                     pass
 
             cues_file = dir_asig / f"{f_md.stem}_cues.json"
+            from src.core.config import RESUMENES_CLASES_DIR
+            resumen_file = RESUMENES_CLASES_DIR / asig / f"{f_md.stem}_resumen.md"
 
             clases.append({
                 "asignatura": asig,
@@ -390,6 +516,7 @@ def api_videoclases(programa: Optional[str] = None):
                 "nombre_archivo": f_md.name,
                 "recording_url": rec_url,
                 "has_cues": cues_file.exists(),
+                "has_resumen": resumen_file.exists(),
                 "duration": duration,
             })
     return clases
@@ -416,6 +543,69 @@ def api_clase_cues(asig: str, nombre_archivo: str):
     if f_md.exists():
         return [{"start_str": "00:00", "speaker": "Clase", "text": f_md.read_text(encoding="utf-8")[:4000]}]
     return []
+
+
+class ResumenClaseRequest(BaseModel):
+    asignatura: str
+    nombre_archivo: str
+    forzar: Optional[bool] = False
+
+
+@app.post("/api/resumen-clase")
+def api_resumen_clase(req: ResumenClaseRequest):
+    """Genera o recupera de caché un informe exhaustivo de una videoclase oficial."""
+    from src.core.config import RESUMENES_CLASES_DIR
+    stem = Path(req.nombre_archivo).stem.replace("_cues", "").replace("_info", "").replace("_resumen", "")
+
+    asig_dir_cache = RESUMENES_CLASES_DIR / req.asignatura
+    asig_dir_cache.mkdir(parents=True, exist_ok=True)
+    cache_file = asig_dir_cache / f"{stem}_resumen.md"
+
+    if cache_file.exists() and not req.forzar:
+        try:
+            return {
+                "resumen": cache_file.read_text(encoding="utf-8"),
+                "cached": True,
+                "archivo": str(cache_file.relative_to(BASE_DIR))
+            }
+        except Exception:
+            pass
+
+    f_md = TRANSCRIPCIONES_DIR / req.asignatura / f"{stem}.md"
+    if not f_md.exists():
+        encontrados = list(TRANSCRIPCIONES_DIR.glob(f"**/{stem}.md"))
+        if encontrados:
+            f_md = encontrados[0]
+        else:
+            raise HTTPException(status_code=404, detail="Transcripción de la clase no encontrada.")
+
+    texto_transcripcion = f_md.read_text(encoding="utf-8")
+
+    info_file = CLASES_GRABADAS_DIR / req.asignatura / f"{stem}_info.json"
+    nombre_clase = stem
+    if info_file.exists():
+        try:
+            idata = json.loads(info_file.read_text(encoding="utf-8"))
+            nombre_clase = idata.get("sessionName") or idata.get("name") or stem
+        except Exception:
+            pass
+
+    resumen = tutor_ia.generar_resumen_clase_magistral(
+        texto_transcripcion=texto_transcripcion,
+        asignatura=req.asignatura,
+        nombre_clase=nombre_clase
+    )
+
+    if not resumen:
+        raise HTTPException(status_code=500, detail="No se pudo generar el resumen con la IA.")
+
+    cache_file.write_text(resumen, encoding="utf-8")
+
+    return {
+        "resumen": resumen,
+        "cached": False,
+        "archivo": str(cache_file.relative_to(BASE_DIR))
+    }
 
 
 @app.get("/api/agenda")
@@ -560,9 +750,9 @@ def api_chat(msg: ChatMessage):
             "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot y patrones de arquitectura limpia. "
         )
 
-    # Inyección RAG con minutaje exacto de videoclases y transcripciones
+    # Inyección RAG con minutaje exacto de videoclases y transcripciones completas
     contexto_citas = formatear_contexto_para_tutor(msg.mensaje, msg.asignatura)
-    contexto_trans_general = buscar_contexto_transcripciones(msg.mensaje, msg.asignatura)
+    contexto_trans_general = obtener_contexto_inteligente_clases(msg.mensaje, msg.asignatura)
     contexto_asig = f"\n[Asignatura / Módulo activo: {msg.asignatura}]" if msg.asignatura else ""
 
     instrucciones_base = (
@@ -1545,13 +1735,19 @@ def dashboard_html():
                 <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
               </div>
 
-              <div class="mt-4 pt-3 border-t border-gray-800 flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center space-x-1.5">
-                  <button @click="abrirMinutero(clase)" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-amber-500/30 shadow-sm">
-                    <i class="fa-solid fa-clock"></i>
-                    <span>Minutero y Citas</span>
+                <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                  <button @click="abrirMinutero(clase)" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-amber-500/30 shadow-sm" title="Ver marcas de tiempo e intervenciones">
+                    <i class="fa-solid fa-clock text-[10px]"></i>
+                    <span>Minutero</span>
                   </button>
-                  <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1">
+                  <button @click="abrirResumenClase(clase)"
+                          :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
+                          class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 border shadow-sm"
+                          title="Generar o consultar el informe pedagógico estructurado de la clase con IA">
+                    <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
+                    <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen IA'"></span>
+                  </button>
+                  <button @click="verContenidoArchivo(clase.archivo)" class="px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1" title="Ver transcripción literal en texto">
                     <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
                     <span>Texto</span>
                   </button>
@@ -1561,12 +1757,11 @@ def dashboard_html():
                     <i class="fa-solid fa-play text-[10px]"></i>
                     <span>Vídeo</span>
                   </a>
-                  <button @click="preguntarSobreClase(clase)" class="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1">
+                  <button @click="preguntarSobreClase(clase)" class="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1" title="Preguntar dudas a NOVA en el chat">
                     <i class="fa-solid fa-robot"></i>
                     <span>NOVA</span>
                   </button>
                 </div>
-              </div>
             </div>
           </template>
         </div>
@@ -1747,6 +1942,67 @@ def dashboard_html():
           <p>No se encontraron fragmentos para este filtro.</p>
         </div>
       </div>
+  </div>
+
+  <!-- ==================== MODAL: INFORME Y RESUMEN EJECUTIVO IA DE LA CLASE ==================== -->
+  <div x-show="modalResumenClase" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-5xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/30 shadow-2xl">
+      <!-- HEADER -->
+      <div class="p-4 bg-gray-900/95 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 uppercase" x-text="resumenClaseActual?.asignatura"></span>
+              <span class="text-xs text-amber-400 font-mono" x-text="resumenClaseActual?.fecha"></span>
+              <span x-show="resumenClaseCached" class="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">En caché local</span>
+            </div>
+            <h3 class="font-bold text-white text-sm mt-0.5" x-text="resumenClaseActual?.titulo"></h3>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button @click="regenerarResumenClase()" :disabled="cargandoResumenClase" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-purple-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 border border-purple-500/20 disabled:opacity-50" title="Volver a generar con IA">
+            <i class="fa-solid fa-arrows-rotate" :class="cargandoResumenClase ? 'fa-spin' : ''"></i>
+            <span>Regenerar</span>
+          </button>
+          <button @click="copiarResumenClase()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 border border-gray-700">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copiar</span>
+          </button>
+          <a x-show="resumenClaseActual?.recording_url" :href="resumenClaseActual?.recording_url" target="_blank" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-amber-500/30">
+            <i class="fa-solid fa-play"></i>
+            <span>Vídeo</span>
+          </a>
+          <button @click="modalResumenClase = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- CONTENIDO O SPINNER DE CARGA -->
+      <div class="flex-1 p-6 md:p-8 overflow-y-auto">
+        <!-- ESTADO CARGANDO -->
+        <div x-show="cargandoResumenClase" class="text-center py-20 space-y-4">
+          <div class="w-16 h-16 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-2xl mx-auto animate-bounce border border-purple-500/20">
+            <i class="fa-solid fa-brain"></i>
+          </div>
+          <h4 class="text-base font-bold text-white">Analizando Transcripción Completa con NOVA...</h4>
+          <p class="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+            Procesando hasta 60.000 caracteres de la lección para extraer avisos de examen, explicaciones de código, minutero y preguntas resueltas.
+          </p>
+        </div>
+
+        <!-- REPORTE MARKDOWN RENDERIZADO -->
+        <div x-show="!cargandoResumenClase && resumenClaseTexto" class="markdown-content text-sm leading-relaxed text-gray-200 space-y-4" x-html="marked.parse(resumenClaseTexto)">
+        </div>
+
+        <div x-show="!cargandoResumenClase && !resumenClaseTexto" class="text-center py-16 text-gray-500 text-xs">
+          <p>No se pudo generar el resumen de esta clase.</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1838,6 +2094,13 @@ def dashboard_html():
         minuteroClase: null,
         minuteroCues: [],
         minuteroFiltro: '',
+
+        // Resumen Ejecutivo IA de Videoclases
+        modalResumenClase: false,
+        resumenClaseActual: null,
+        resumenClaseTexto: '',
+        cargandoResumenClase: false,
+        resumenClaseCached: false,
 
         // Visor PDF Integrado
         modalVisorPdf: false,
@@ -2057,6 +2320,67 @@ def dashboard_html():
           this.tab = 'tutor';
           this.chatInput = '¿Qué explicó el profesor en la sesión ' + clase.titulo + ' (' + clase.fecha + ') y qué indicaciones concretas dio?';
           this.enviarMensajeChat();
+        },
+
+        async abrirResumenClase(clase) {
+          this.resumenClaseActual = clase;
+          this.modalResumenClase = true;
+          this.cargandoResumenClase = true;
+          this.resumenClaseTexto = '';
+          this.resumenClaseCached = false;
+          try {
+            const res = await fetch('/api/resumen-clase', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: clase.asignatura,
+                nombre_archivo: clase.nombre_archivo
+              })
+            });
+            const data = await res.json();
+            if (data.resumen) {
+              this.resumenClaseTexto = data.resumen;
+              this.resumenClaseCached = !!data.cached;
+              clase.has_resumen = true;
+            } else {
+              this.resumenClaseTexto = 'No se pudo generar el informe para esta clase.';
+            }
+          } catch(e) {
+            console.error(e);
+            this.resumenClaseTexto = 'Error de conexión al generar el resumen con NOVA.';
+          } finally {
+            this.cargandoResumenClase = false;
+          }
+        },
+
+        async regenerarResumenClase() {
+          if (!this.resumenClaseActual || this.cargandoResumenClase) return;
+          this.cargandoResumenClase = true;
+          this.resumenClaseTexto = '';
+          try {
+            const res = await fetch('/api/resumen-clase', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: this.resumenClaseActual.asignatura,
+                nombre_archivo: this.resumenClaseActual.nombre_archivo,
+                forzar: true
+              })
+            });
+            const data = await res.json();
+            this.resumenClaseTexto = data.resumen || 'Error al regenerar.';
+            this.resumenClaseCached = false;
+          } catch(e) {
+            console.error(e);
+          } finally {
+            this.cargandoResumenClase = false;
+          }
+        },
+
+        copiarResumenClase() {
+          if (!this.resumenClaseTexto) return;
+          navigator.clipboard.writeText(this.resumenClaseTexto);
+          alert('¡Resumen copiado al portapapeles!');
         },
 
         lanzarPreguntaRapida(texto) {

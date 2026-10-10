@@ -39,6 +39,8 @@ EJERCICIOS_DIR = PROCESADO_DIR / "ejercicios"
 EXAMENES_DIR = PROCESADO_DIR / "examenes"
 CODIGO_DIR = PROCESADO_DIR / "codigo"
 TRANSCRIPCIONES_DIR = PROCESADO_DIR / "transcripciones"
+RESUMENES_CLASES_DIR = PROCESADO_DIR / "resumenes_clases"
+RESUMENES_CLASES_DIR.mkdir(parents=True, exist_ok=True)
 
 # 5. CIBERSEGURIDAD: Rutas de autenticación y sesiones
 AUTH_DIR = BASE_DIR / "auth"
