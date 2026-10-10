@@ -702,13 +702,19 @@ class GenerarCardsReq(BaseModel):
     asignatura: str
     programa: str
     texto: str
+    cantidad: Optional[int] = 4
 
 
 @app.post("/api/flashcards/generar")
 def api_generar_flashcards(req: GenerarCardsReq):
     from src.ai.flashcards import GestorFlashcards
     gestor = GestorFlashcards()
-    nuevas = gestor.generar_flashcards_con_ia(req.texto, req.asignatura, req.programa)
+    nuevas = gestor.generar_flashcards_con_ia(
+        texto_tema=req.texto,
+        asignatura=req.asignatura,
+        programa_id=req.programa,
+        cantidad=req.cantidad or 4
+    )
     return {"status": "ok", "creadas": len(nuevas), "tarjetas": nuevas}
 
 
@@ -1587,6 +1593,10 @@ def dashboard_html():
                 <option :value="asig" x-text="asig"></option>
               </template>
             </select>
+            <button @click="abrirModalGenerarCards()" class="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-purple-500/20">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Crear con IA</span>
+            </button>
           </div>
         </div>
 
@@ -2060,6 +2070,63 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== MODAL: GENERADOR DE FLASHCARDS CON IA ==================== -->
+  <div x-show="modalGenerarFlashcards" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="glass w-full max-w-lg rounded-3xl p-6 border border-purple-500/40 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Crear Flashcards con IA</h3>
+            <p class="text-xs text-gray-400">Genera preguntas y respuestas de examen con NOVA</p>
+          </div>
+        </div>
+        <button @click="modalGenerarFlashcards = false" class="text-gray-400 hover:text-white p-2">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1.5">Materia / Asignatura</label>
+          <select x-model="nuevaCardAsig" class="w-full bg-gray-900 text-white text-xs px-3.5 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-purple-500">
+            <template x-for="asig in todasLasAsignaturasPrograma" :key="asig">
+              <option :value="asig" x-text="asig"></option>
+            </template>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1.5">Tema o Concepto a Reforzar</label>
+          <input type="text" x-model="nuevaCardTema" placeholder="Ej: Consultas SQL complejas, JavaFX Layouts, Sockets TCP..."
+                 class="w-full bg-gray-900 text-white placeholder-gray-500 text-xs px-3.5 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-purple-500">
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-gray-400">
+          <span>Cantidad de tarjetas:</span>
+          <div class="flex space-x-2">
+            <button @click="nuevaCardCantidad = 3" :class="nuevaCardCantidad === 3 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300'" class="px-3 py-1 rounded-lg font-bold">3</button>
+            <button @click="nuevaCardCantidad = 5" :class="nuevaCardCantidad === 5 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300'" class="px-3 py-1 rounded-lg font-bold">5</button>
+            <button @click="nuevaCardCantidad = 8" :class="nuevaCardCantidad === 8 ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-300'" class="px-3 py-1 rounded-lg font-bold">8</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 flex items-center justify-end space-x-3">
+        <button @click="modalGenerarFlashcards = false" class="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition">
+          Cancelar
+        </button>
+        <button @click="ejecutarGeneracionFlashcards()" :disabled="generandoFlashcards || !nuevaCardTema.trim()"
+                class="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 disabled:opacity-50 shadow-lg shadow-purple-500/20">
+          <i :class="generandoFlashcards ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-wand-magic-sparkles'"></i>
+          <span x-text="generandoFlashcards ? 'Generando con NOVA...' : 'Generar Flashcards'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== MODAL: VISOR DE PDF INTEGRADO ==================== -->
   <div x-show="modalVisorPdf" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-black/85 backdrop-blur-md">
     <div class="glass w-full max-w-6xl h-[95vh] rounded-3xl flex flex-col overflow-hidden border border-cyan-500/30 shadow-2xl">
@@ -2169,6 +2236,11 @@ def dashboard_html():
         flashcardIndice: 0,
         flashcardVolteada: false,
         flashcardFiltroAsig: '',
+        modalGenerarFlashcards: false,
+        nuevaCardAsig: '',
+        nuevaCardTema: '',
+        nuevaCardCantidad: 4,
+        generandoFlashcards: false,
 
         get programaActual() {
           return this.programas.find(p => p.id === this.programaActivoId) || this.programas[0];
@@ -2227,6 +2299,13 @@ def dashboard_html():
 
         get asignaturasConFlashcards() {
           return [...new Set(this.flashcards.map(f => f.asignatura))].sort();
+        },
+
+        get todasLasAsignaturasPrograma() {
+          const asigs = new Set();
+          this.catalogoFiltrado.forEach(a => asigs.add(a.nombre));
+          this.flashcards.forEach(f => asigs.add(f.asignatura));
+          return [...asigs].sort();
         },
 
         async init() {
@@ -2675,6 +2754,46 @@ def dashboard_html():
             });
           } catch(e) {}
           this.siguienteFlashcard();
+        },
+
+        abrirModalGenerarCards() {
+          this.nuevaCardAsig = this.flashcardFiltroAsig || (this.todasLasAsignaturasPrograma[0] || 'Acceso a Datos');
+          this.nuevaCardTema = '';
+          this.nuevaCardCantidad = 4;
+          this.modalGenerarFlashcards = true;
+        },
+
+        async ejecutarGeneracionFlashcards() {
+          if (!this.nuevaCardTema.trim() || this.generandoFlashcards) return;
+          this.generandoFlashcards = true;
+          try {
+            const res = await fetch('/api/flashcards/generar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: this.nuevaCardAsig || (this.todasLasAsignaturasPrograma[0] || 'Acceso a Datos'),
+                programa: this.programaActivoId,
+                texto: this.nuevaCardTema.trim(),
+                cantidad: this.nuevaCardCantidad || 4
+              })
+            });
+            const data = await res.json();
+            if (data.tarjetas && data.tarjetas.length > 0) {
+              await this.cargarFlashcards();
+              this.flashcardFiltroAsig = this.nuevaCardAsig;
+              this.flashcardIndice = 0;
+              this.modalGenerarFlashcards = false;
+              this.nuevaCardTema = '';
+              alert(`¡Se han añadido ${data.tarjetas.length} nuevas flashcards con éxito!`);
+            } else {
+              alert('No se pudieron generar tarjetas. Intenta con otro término.');
+            }
+          } catch(e) {
+            console.error(e);
+            alert('Error al conectar con NOVA.');
+          } finally {
+            this.generandoFlashcards = false;
+          }
         },
 
         async abrirMinutero(clase) {
