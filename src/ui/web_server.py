@@ -530,14 +530,29 @@ def api_chat(msg: ChatMessage):
             "ROL: Eres NOVA, mentora y consultora senior en Ciberseguridad, Red Team, SOC, SIEM y Forense. "
             "Responde con rigor técnico citando estándares oficiales (OWASP, MITRE ATT&CK, NIST, RFC, ISO 27001). "
         )
-    elif msg.programa == "grado":
+    elif msg.programa in ["pfu", "grado"]:
         contexto_rol = (
             "ROL: Eres NOVA, profesora de Grado en Ingeniería del Software y PFU en UNIR. "
             "Enfócate en metodología de software, estructuras de datos formales, complejidad O(n) y arquitectura limpia. "
         )
-    elif msg.programa == "cert":
+    elif msg.programa == "bootcamp":
         contexto_rol = (
-            "ROL: Eres NOVA, instructora de certificaciones profesionales en Cloud (AWS), Linux (LPIC), DevOps y Seguridad. "
+            "ROL: Eres NOVA, consultora y mentora en Metodologías Ágiles (Scrum, Kanban), Gestión de Proyectos Digitales y Liderazgo Ágil. "
+        )
+    elif msg.programa == "python":
+        contexto_rol = (
+            "ROL: Eres NOVA, mentora de programación experta en Python (ESIT UNIR). "
+            "Explicas con ejemplos de código limpios, PEP8, buenas prácticas y casos de uso prácticos. "
+        )
+    elif msg.programa == "aws":
+        contexto_rol = (
+            "ROL: Eres NOVA, instructora certificada en Amazon Web Services (AWS Cloud Practitioner CLF-C02). "
+            "Explicas conceptos de nube, arquitectura, IAM, S3, EC2 y modelos de precios oficiales de AWS. "
+        )
+    elif msg.programa == "azure":
+        contexto_rol = (
+            "ROL: Eres NOVA, instructora certificada en Microsoft Azure (AZ-900 Azure Fundamentals). "
+            "Explicas conceptos de cloud computing, SLA, seguridad, gobernanza y servicios core de Azure. "
         )
     else:
         contexto_rol = (
@@ -2083,10 +2098,16 @@ def dashboard_html():
           let saludo = '';
           if (p?.id === 'ciber') {
             saludo = '¡Hola Alex! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Malware o Hacking Ético) repasamos hoy?';
-          } else if (p?.id === 'grado') {
+          } else if (p?.id === 'pfu' || p?.id === 'grado') {
             saludo = '¡Hola Alex! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño formal.';
-          } else if (p?.id === 'cert') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu instructora para **Certificaciones Técnicas**. ¿Qué objetivo de certificación preparamos?';
+          } else if (p?.id === 'bootcamp') {
+            saludo = '¡Hola Alex! Soy **NOVA**, tu mentora en **Gestión Ágil y Habilidades Digitales**. ¿Repasamos Scrum, Kanban o transformación digital?';
+          } else if (p?.id === 'python') {
+            saludo = '¡Hola Alex! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio de ESIT ponemos a prueba hoy?';
+          } else if (p?.id === 'aws') {
+            saludo = '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **AWS Cloud Practitioner (CLF-C02)**. ¿Hacemos un test rápido o repasamos servicios de AWS?';
+          } else if (p?.id === 'azure') {
+            saludo = '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **Microsoft Azure Fundamentals (AZ-900)**. ¿Repasamos modelos cloud, seguridad o preguntas de examen?';
           } else {
             saludo = '¡Hola Alex! Soy **NOVA**, tu copiloto para **FP DAM**. ¿Qué duda de examen o de código quieres que resolvamos hoy?';
           }
@@ -2094,12 +2115,28 @@ def dashboard_html():
         },
 
         obtenerColorHex(color) {
-          const map = { cyan: '#22d3ee', rose: '#fb7185', indigo: '#818cf8', amber: '#f59e0b' };
+          const map = {
+            cyan: '#22d3ee',
+            rose: '#fb7185',
+            indigo: '#818cf8',
+            amber: '#f59e0b',
+            emerald: '#10b981',
+            violet: '#a855f7',
+            sky: '#38bdf8'
+          };
           return map[color] || '#38bdf8';
         },
 
         obtenerFondoHex(color) {
-          const map = { cyan: 'rgba(34, 211, 238, 0.12)', rose: 'rgba(251, 113, 133, 0.12)', indigo: 'rgba(129, 140, 248, 0.12)', amber: 'rgba(245, 158, 11, 0.12)' };
+          const map = {
+            cyan: 'rgba(34, 211, 238, 0.12)',
+            rose: 'rgba(251, 113, 133, 0.12)',
+            indigo: 'rgba(129, 140, 248, 0.12)',
+            amber: 'rgba(245, 158, 11, 0.12)',
+            emerald: 'rgba(16, 185, 129, 0.12)',
+            violet: 'rgba(168, 85, 247, 0.12)',
+            sky: 'rgba(56, 189, 248, 0.12)'
+          };
           return map[color] || 'rgba(56, 189, 248, 0.12)';
         },
 

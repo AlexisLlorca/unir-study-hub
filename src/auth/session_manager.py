@@ -64,7 +64,21 @@ def login_interactivo(timeout_segundos: int = 300) -> bool:
         except EOFError:
             pass
 
-        # 3. Guarda el estado de almacenamiento (cookies de sesión cifradas y tokens de origen)
+        # 3. Sincroniza sesión en todos los portales UNIR (Canvas FP, Canvas Universidad, Moodle ESIT y Campus Virtual)
+        console.print("[dim]Vinculando credenciales SSO en todos los portales UNIR...[/dim]")
+        for portal_url in [
+            "https://campusfp.unir.net/",
+            "https://micampus.unir.net/",
+            "https://campusonline.unir.net/",
+            "https://campusvirtual.unir.net/p/home",
+        ]:
+            try:
+                page.goto(portal_url, timeout=15000, wait_until="domcontentloaded")
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
+        # 4. Guarda el estado de almacenamiento (cookies de sesión cifradas y tokens de origen de todos los dominios)
         context.storage_state(path=str(SESSION_STATE_FILE))
         browser.close()
 

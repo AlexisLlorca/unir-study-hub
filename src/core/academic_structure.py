@@ -37,7 +37,7 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
         "icono": "fa-code",
         "badge": "Desarrollo Multiplataforma",
         "color": "cyan",
-        "descripcion": "Ciclo Formativo de Grado Superior en Desarrollo de Aplicaciones Multiplataforma.",
+        "descripcion": "Ciclo Formativo de Grado Superior en Desarrollo de Aplicaciones Multiplataforma (2º en curso, 1º completado).",
         "cursos": {
             "2dam": {
                 "id": "2dam",
@@ -73,6 +73,105 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
             },
         },
     },
+    "pfu": {
+        "id": "pfu",
+        "nombre": "PFU en Ingeniería de Software",
+        "titulo_corto": "PFU Software",
+        "icono": "fa-graduation-cap",
+        "badge": "Grado Universitario",
+        "color": "indigo",
+        "descripcion": "Programa de Formación Universitaria en Ingeniería de Software (PER 16645 - Octubre 2026).",
+        "cursos": {
+            "pfu": {
+                "id": "pfu",
+                "nombre": "Plan de Formación Universitaria",
+                "asignaturas": [
+                    "Aula de Información General (PFU)",
+                    "PFU - Ingeniería del Software",
+                    "PFU - Estructura de Datos y Algoritmos",
+                    "PFU - Arquitectura de Computadores",
+                    "PFU - Matemáticas y Lógica Computacional",
+                ],
+            }
+        },
+    },
+    "bootcamp": {
+        "id": "bootcamp",
+        "nombre": "Bootcamp en Habilidades Digitales y Gestión Ágil",
+        "titulo_corto": "Bootcamp Ágil",
+        "icono": "fa-bolt",
+        "badge": "Gestión Ágil & Digital",
+        "color": "violet",
+        "descripcion": "Formación en marcos ágiles (Scrum, Kanban), transformación digital y liderazgo de proyectos (PER 14915).",
+        "cursos": {
+            "bootcamp": {
+                "id": "bootcamp",
+                "nombre": "Módulos del Bootcamp",
+                "asignaturas": [
+                    "Bootcamp - Habilidades Digitales y Gestión Ágil",
+                    "Bootcamp - Metodologías Ágiles (Scrum & Kanban)",
+                    "Bootcamp - Transformación Digital e Innovación",
+                ],
+            }
+        },
+    },
+    "python": {
+        "id": "python",
+        "nombre": "Curso de Programación en Python",
+        "titulo_corto": "Python ESIT",
+        "icono": "fa-brands fa-python",
+        "badge": "UNIR ESIT",
+        "color": "emerald",
+        "descripcion": "Especialización técnica en desarrollo con Python: sintaxis, POO, scripts y estructuras de datos (PER 13236).",
+        "cursos": {
+            "python": {
+                "id": "python",
+                "nombre": "Temario y Prácticas Python",
+                "asignaturas": [
+                    "Curso de Programación en Python",
+                    "Python - Ejercicios y Casos Prácticos",
+                ],
+            }
+        },
+    },
+    "aws": {
+        "id": "aws",
+        "nombre": "Certificación AWS Cloud Practitioner",
+        "titulo_corto": "AWS Cloud",
+        "icono": "fa-brands fa-aws",
+        "badge": "Cloud Practitioner CLF-C02",
+        "color": "amber",
+        "descripcion": "Preparación oficial para la certificación Amazon Web Services Cloud Practitioner CLF-C02 (PER 13239).",
+        "cursos": {
+            "aws": {
+                "id": "aws",
+                "nombre": "Preparación Examen Oficial AWS",
+                "asignaturas": [
+                    "Curso de Preparación Certificación AWS Cloud Practitioner",
+                    "AWS - Simulacros y Exámenes de Prueba",
+                ],
+            }
+        },
+    },
+    "azure": {
+        "id": "azure",
+        "nombre": "Certificación AZ-900: Microsoft Azure",
+        "titulo_corto": "Azure AZ-900",
+        "icono": "fa-brands fa-microsoft",
+        "badge": "Azure Fundamentals",
+        "color": "sky",
+        "descripcion": "Preparación oficial para la certificación Microsoft Certified: Azure Fundamentals AZ-900 (PER 13238).",
+        "cursos": {
+            "azure": {
+                "id": "azure",
+                "nombre": "Preparación Examen Oficial Azure",
+                "asignaturas": [
+                    "Curso de Preparación Certificación AZ-900 (Azure)",
+                    "AZ-900 - Simulacros y Cuestionarios",
+                ],
+            }
+        },
+    },
     "ciber": {
         "id": "ciber",
         "nombre": "Máster en Ciberseguridad",
@@ -97,66 +196,32 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
             }
         },
     },
-    "grado": {
-        "id": "grado",
-        "nombre": "PFU / Grado en Ing. del Software",
-        "titulo_corto": "PFU / Grado",
-        "icono": "fa-university",
-        "badge": "Universidad (UNIR)",
-        "color": "indigo",
-        "descripcion": "Programa de Formación Universitaria y Grado en Ingeniería del Software.",
-        "cursos": {
-            "pfu": {
-                "id": "pfu",
-                "nombre": "Módulos PFU / Grado",
-                "asignaturas": [
-                    "PFU - Ingeniería del Software",
-                    "PFU - Estructura de Datos y Algoritmos",
-                    "PFU - Arquitectura de Computadores",
-                    "PFU - Matemáticas y Lógica Computacional",
-                ],
-            }
-        },
-    },
-    "cert": {
-        "id": "cert",
-        "nombre": "Certificaciones & Nuevas Formaciones",
-        "titulo_corto": "Certificaciones",
-        "icono": "fa-certificate",
-        "badge": "Formación Continua",
-        "color": "amber",
-        "descripcion": "Especializaciones y certificaciones técnicas (AWS, Linux, Redes, Docker, Seguridad).",
-        "cursos": {
-            "cert": {
-                "id": "cert",
-                "nombre": "Cursos y Certificaciones",
-                "asignaturas": [
-                    "AWS Certified Solutions Architect",
-                    "Linux Professional Institute (LPIC-1)",
-                    "Docker & Kubernetes Developer",
-                    "CompTIA Security+ / CEH",
-                ],
-            }
-        },
-    },
 }
 
 # Aliases para compatibilidad con código existente
 ASIGNATURAS_2DAM = PROGRAMAS["dam"]["cursos"]["2dam"]["asignaturas"]
 ASIGNATURAS_1DAM = PROGRAMAS["dam"]["cursos"]["1dam"]["asignaturas"]
 MODULOS_CIBER = PROGRAMAS["ciber"]["cursos"]["master"]["asignaturas"]
-ASIGNATURAS_PFU = PROGRAMAS["grado"]["cursos"]["pfu"]["asignaturas"]
+ASIGNATURAS_PFU = PROGRAMAS["pfu"]["cursos"]["pfu"]["asignaturas"]
+ASIGNATURAS_BOOTCAMP = PROGRAMAS["bootcamp"]["cursos"]["bootcamp"]["asignaturas"]
+ASIGNATURAS_PYTHON = PROGRAMAS["python"]["cursos"]["python"]["asignaturas"]
+ASIGNATURAS_AWS = PROGRAMAS["aws"]["cursos"]["aws"]["asignaturas"]
+ASIGNATURAS_AZURE = PROGRAMAS["azure"]["cursos"]["azure"]["asignaturas"]
 
 
 def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
     """
-    Convierte cualquier nombre de carpeta, curso de Canvas o backup local
+    Convierte cualquier nombre de carpeta, curso de Canvas, Moodle o backup local
     en el nombre canónico oficial y limpio de la asignatura.
     """
     s = nombre_sucio.lower().strip()
 
     # Si ya es un nombre canónico oficial, no tocar
-    todos_canonicos = set(ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER + ASIGNATURAS_PFU)
+    todos_canonicos = set(
+        ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER +
+        ASIGNATURAS_PFU + ASIGNATURAS_BOOTCAMP + ASIGNATURAS_PYTHON +
+        ASIGNATURAS_AWS + ASIGNATURAS_AZURE
+    )
     for c in todos_canonicos:
         if s == c.lower():
             return c
@@ -177,7 +242,31 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
     if "m7" in s or "forense" in s:
         return "M7 - Análisis Forense Digital"
 
-    # 2. 1º DAM (Prioridad si indica primer curso, 1º o asignaturas exclusivas de 1º)
+    # 2. Cursos Técnicos, Certificaciones y Bootcamps UNIR
+    if "bootcamp" in s or "habilidades digitales" in s or "gestión ágil" in s or "gestion agil" in s or "14915" in s:
+        return "Bootcamp - Habilidades Digitales y Gestión Ágil"
+    if ("python" in s and ("13236" in s or "programación" in s or "programacion" in s)) or s == "python" or "curso de programación en python" in s:
+        return "Curso de Programación en Python"
+    if "aws" in s or "cloud practitioner" in s or "13239" in s:
+        return "Curso de Preparación Certificación AWS Cloud Practitioner"
+    if "az-900" in s or "az900" in s or "azure fundamentals" in s or "13238" in s:
+        return "Curso de Preparación Certificación AZ-900 (Azure)"
+
+    # 3. PFU / Grado
+    if "aula de información general" in s or "aula de informacion" in s or "aig" in s:
+        if "pfu" in s or "16645" in s or "universitaria" in s or "software" in s:
+            return "Aula de Información General (PFU)"
+        return "Aula de Información General"
+    if "ingeniería del software" in s or "ingenieria del software" in s or "16645" in s:
+        return "PFU - Ingeniería del Software"
+    if "estructura de datos" in s or ("algoritmos" in s and "pfu" in s):
+        return "PFU - Estructura de Datos y Algoritmos"
+    if "arquitectura de computadores" in s:
+        return "PFU - Arquitectura de Computadores"
+    if "matemáticas" in s or "lógica computacional" in s or "logica computacional" in s:
+        return "PFU - Matemáticas y Lógica Computacional"
+
+    # 4. 1º DAM (Prioridad si indica primer curso, 1º o asignaturas exclusivas de 1º)
     if "bases de datos" in s:
         return "1º DAM - Bases de Datos"
     if "lenguajes de marcas" in s or "llmm" in s:
@@ -198,7 +287,7 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
             return "Inglés Profesional"
         return "1º DAM - Inglés Técnico I"
 
-    # 3. 2º DAM
+    # 5. 2º DAM
     if "acceso a datos" in s or "clasead" in s:
         return "Acceso a Datos"
     if "interfaces" in s:
@@ -219,18 +308,8 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
         return "Proyecto Intermodular DAM"
     if "formación en empresa" in s or "formacion en empresa" in s or "ffe" in s:
         return "Formación en Empresa (FFE)"
-    if "aula de información" in s or "aula de informacion" in s or "información general" in s or "informacion general" in s or "aig" in s:
-        return "Aula de Información General"
 
-    # 4. PFU / Grado
-    if "ingeniería del software" in s or "ingenieria del software" in s:
-        return "PFU - Ingeniería del Software"
-    if "estructura de datos" in s or "algoritmos" in s:
-        return "PFU - Estructura de Datos y Algoritmos"
-    if "arquitectura de computadores" in s:
-        return "PFU - Arquitectura de Computadores"
-    if "matemáticas" in s or "logica" in s or "lógica" in s:
-        return "PFU - Matemáticas y Lógica Computacional"
+    return nombre_sucio.strip()
 
     return nombre_sucio.strip()
 
@@ -302,9 +381,10 @@ def sincronizar_estudios_externos():
                             except Exception:
                                 pass
 
-    # 3. Crear carpetas de PFU y Certificaciones para cuando haya material
-    for asig_pfu in ASIGNATURAS_PFU:
-        (MATERIALES_DIR / asig_pfu).mkdir(parents=True, exist_ok=True)
+    # 3. Crear carpetas de PFU, Bootcamps y Certificaciones para cuando haya material
+    for asig_list in [ASIGNATURAS_PFU, ASIGNATURAS_BOOTCAMP, ASIGNATURAS_PYTHON, ASIGNATURAS_AWS, ASIGNATURAS_AZURE]:
+        for asig in asig_list:
+            (MATERIALES_DIR / asig).mkdir(parents=True, exist_ok=True)
 
 
 def reorganizar_biblioteca_completa():
@@ -324,7 +404,11 @@ def reorganizar_biblioteca_completa():
 
     # 1. Reorganizar data/materiales/
     if MATERIALES_DIR.exists():
-        todos_canonicos = set(ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER + ASIGNATURAS_PFU)
+        todos_canonicos = set(
+            ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER +
+            ASIGNATURAS_PFU + ASIGNATURAS_BOOTCAMP + ASIGNATURAS_PYTHON +
+            ASIGNATURAS_AWS + ASIGNATURAS_AZURE
+        )
         carpetas = [d for d in MATERIALES_DIR.iterdir() if d.is_dir()]
         for carpeta in carpetas:
             # Si la carpeta ya es un directorio canónico oficial, no tocar sus archivos
@@ -421,8 +505,6 @@ def obtener_info_asignatura(asig: str) -> Dict[str, Any]:
     guias = sorted([f.name for f in dir_guias.glob("*.md")]) if dir_guias.exists() else []
 
     # Determinar programa y curso
-    prog_id = "dam"
-    curso_nombre = "2º DAM"
     if asig in ASIGNATURAS_2DAM:
         prog_id = "dam"
         curso_nombre = "2º Curso"
@@ -433,11 +515,23 @@ def obtener_info_asignatura(asig: str) -> Dict[str, Any]:
         prog_id = "ciber"
         curso_nombre = "Máster Ciberseguridad"
     elif asig in ASIGNATURAS_PFU:
-        prog_id = "grado"
-        curso_nombre = "PFU / Grado"
+        prog_id = "pfu"
+        curso_nombre = "PFU Software"
+    elif asig in ASIGNATURAS_BOOTCAMP:
+        prog_id = "bootcamp"
+        curso_nombre = "Bootcamp Ágil"
+    elif asig in ASIGNATURAS_PYTHON:
+        prog_id = "python"
+        curso_nombre = "Python ESIT"
+    elif asig in ASIGNATURAS_AWS:
+        prog_id = "aws"
+        curso_nombre = "AWS Cloud"
+    elif asig in ASIGNATURAS_AZURE:
+        prog_id = "azure"
+        curso_nombre = "Azure AZ-900"
     else:
-        prog_id = "cert"
-        curso_nombre = "Certificaciones"
+        prog_id = "dam"
+        curso_nombre = "General"
 
     return {
         "nombre": asig,
@@ -462,6 +556,12 @@ def obtener_catalogo_academico(programa_id: Optional[str] = None, curso_id: Opti
     Si no se especifica filtro, devuelve todas las asignaturas activas.
     """
     catalogo = {}
+
+    # Aliases de compatibilidad
+    if programa_id == "grado":
+        programa_id = "pfu"
+    elif programa_id == "cert":
+        programa_id = "aws"
 
     # Recorrer programas
     programas_a_escanear = [programa_id] if programa_id and programa_id in PROGRAMAS else list(PROGRAMAS.keys())

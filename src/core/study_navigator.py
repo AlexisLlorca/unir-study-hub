@@ -48,33 +48,22 @@ class NavegadorAcademico:
 
     def mostrar_menu_asignaturas(self):
         """Muestra el selector de programas académicos."""
-        reorganizar_biblioteca_completa()
-
         while True:
-            console.print(
-                Panel.fit(
-                    "[bold cyan]📚 BIBLIOTECA Y NAVEGADOR ACADÉMICO MULTI-PROGRAMA (UNIR)[/bold cyan]\n"
-                    "[dim]Selecciona el programa académico que deseas explorar:[/dim]\n\n"
-                    "[cyan]1.[/cyan] 💻 [bold white]FP Grado Superior DAM[/bold white] [dim](1º y 2º Curso — Multiplataforma)[/dim]\n"
-                    "[cyan]2.[/cyan] 🛡️ [bold white]Máster en Ciberseguridad[/bold white] [dim](Módulos M1 a M7)[/dim]\n"
-                    "[cyan]3.[/cyan] 🏛️ [bold white]PFU / Grado en Ingeniería del Software[/bold white] [dim](Universidad UNIR)[/dim]\n"
-                    "[cyan]4.[/cyan] 📜 [bold white]Certificaciones & Nuevas Formaciones[/bold white]\n"
-                    "[cyan]0.[/cyan] ↩ [dim]Volver al menú principal[/dim]",
-                    border_style="cyan",
-                )
-            )
+            lineas = ["[bold cyan]📚 BIBLIOTECA Y NAVEGADOR ACADÉMICO MULTI-PROGRAMA (UNIR)[/bold cyan]",
+                      "[dim]Selecciona el programa académico que deseas explorar:[/dim]\n"]
+            lista_keys = list(PROGRAMAS.keys())
+            for idx, pid in enumerate(lista_keys, 1):
+                pinfo = PROGRAMAS[pid]
+                lineas.append(f"[{pinfo['color']}]{idx}.[/{pinfo['color']}] [bold white]{pinfo['nombre']}[/bold white] [dim]({pinfo['badge']})[/dim]")
+            lineas.append("[cyan]0.[/cyan] ↩ [dim]Volver al menú principal[/dim]")
+
+            console.print(Panel.fit("\n".join(lineas), border_style="cyan"))
 
             sel_prog = console.input("\n👉 Selecciona un programa: ").strip()
             if sel_prog in ["0", "salir", "exit", "q"]:
                 break
-            elif sel_prog == "1":
-                self.explorar_programa("dam")
-            elif sel_prog == "2":
-                self.explorar_programa("ciber")
-            elif sel_prog == "3":
-                self.explorar_programa("grado")
-            elif sel_prog == "4":
-                self.explorar_programa("cert")
+            if sel_prog.isdigit() and 1 <= int(sel_prog) <= len(lista_keys):
+                self.explorar_programa(lista_keys[int(sel_prog) - 1])
 
     def explorar_programa(self, programa_id: str):
         """Muestra la tabla de asignaturas del programa seleccionado."""
