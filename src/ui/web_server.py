@@ -334,8 +334,17 @@ def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None
     if not coincidencias:
         return ""
 
-    top = coincidencias[:3]
+    top = coincidencias[:4]
     contexto_str = "\n[ACCESO A VIDEOCLASES Y TRANSCRIPCIONES OFICIALES DISPONIBLES EN UNIR STUDY HUB]:\n"
+
+    # Incluir índice completo de fechas disponibles para evitar alucinaciones
+    for asig in asigs_a_buscar:
+        dir_t = TRANSCRIPCIONES_DIR / asig
+        if dir_t.exists():
+            fechas_disp = sorted([f.stem[:10] for f in dir_t.glob("*.md") if f.stem[:4].isdigit()], reverse=True)
+            if fechas_disp:
+                contexto_str += f"📋 Clases indexadas para {asig}: {', '.join(fechas_disp)}\n"
+
     for c in top:
         contexto_str += f"\n📌 ASIGNATURA: {c['asig']} | SESIÓN: {c['clase']} (Fecha: {c['fecha']})\n"
         if c['summary']:
@@ -347,28 +356,63 @@ def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None
     return contexto_str
 
 
+def extraer_patron_fecha_query(q: str) -> Optional[str]:
+    """Extrae un patrón de fecha normalizado (ej. '-10-08' o '2026-10-08') a partir de expresiones humanas."""
+    q_l = q.lower()
+
+    # 1. Formato YYYY-MM-DD
+    m_iso = re.search(r'\b(202[0-9]-[0-1][0-9]-[0-3][0-9])\b', q_l)
+    if m_iso:
+        return m_iso.group(1)
+
+    # 2. Formato DD/MM o DD-MM (ej. 08/10, 8/10, 08-10, 8-10)
+    m_slash = re.search(r'\b([0-3]?[0-9])[/-]([0-1]?[0-9])\b', q_l)
+    if m_slash:
+        d = m_slash.group(1).zfill(2)
+        m = m_slash.group(2).zfill(2)
+        return f"-{m}-{d}"
+
+    # 3. Formato textual (ej. '8 de octubre', '08 de octubre', '1 de octubre')
+    meses = {
+        'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04',
+        'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08',
+        'septiembre': '09', 'setiembre': '09', 'octubre': '10',
+        'noviembre': '11', 'diciembre': '12'
+    }
+    for mes_nom, mes_num in meses.items():
+        m_txt = re.search(rf'\b([0-3]?[0-9])\s+(?:de\s+)?{mes_nom}\b', q_l)
+        if m_txt:
+            d = m_txt.group(1).zfill(2)
+            return f"-{mes_num}-{d}"
+
+    return None
+
+
 def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = None) -> str:
     """
-    Detecta si el alumno pregunta por la última clase, por una sesión en particular o por un resumen de clase.
-    Si es así, inyecta la transcripción íntegra (hasta 55.000 caracteres) de la clase magistral correspondiente.
+    Detecta si el alumno pregunta por una fecha concreta (ej. 08/10), por la última clase o por un resumen.
+    Inyecta la transcripción íntegra (hasta 55.000 caracteres) de la clase magistral correspondiente.
     """
     if not TRANSCRIPCIONES_DIR.exists():
         return ""
 
     q_lower = query.lower()
+    patron_fecha = extraer_patron_fecha_query(query)
+
     es_peticion_ultima_clase = any(kw in q_lower for kw in [
         "última clase", "ultima clase", "última sesión", "ultima sesion", "ayer",
         "último día", "ultimo dia", "última lección", "ultima leccion", "última videoclase", "ultima videoclase"
     ])
-    es_peticion_resumen_clase = any(kw in q_lower for kw in [
+    es_peticion_clase = any(kw in q_lower for kw in [
         "resumen de la clase", "resumen de clase", "que explicó", "que explico",
         "que vimos en clase", "que se dio en clase", "que hizo el profesor",
         "que dijo el profesor", "resumen de la sesión", "resumen de la sesion", "resumir la clase",
-        "en la sesión", "en la sesion"
-    ])
+        "en la sesión", "en la sesion", "en la clase", "de la clase", "clase del", "clase de",
+        "se vio", "se hizo"
+    ]) or bool(patron_fecha)
 
-    # Si no es pregunta orientada a resumir o analizar una clase, usamos la búsqueda tradicional
-    if not (es_peticion_ultima_clase or es_peticion_resumen_clase):
+    # Si no es pregunta orientada a una clase ni hay fecha, usamos la búsqueda tradicional de fragmentos
+    if not (es_peticion_ultima_clase or es_peticion_clase or patron_fecha):
         return buscar_contexto_transcripciones(query, asignatura)
 
     # Determinar asignaturas candidatas
@@ -390,27 +434,37 @@ def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = 
     if not asigs_candidatas:
         asigs_candidatas = [d.name for d in TRANSCRIPCIONES_DIR.iterdir() if d.is_dir()]
 
-    # Buscar la clase más reciente o la que coincida con la fecha/tema mencionada
     mejor_clase = None
     mejor_fecha = ""
     mejor_asig = ""
 
-    for asig_nom in asigs_candidatas:
-        dir_t = TRANSCRIPCIONES_DIR / asig_nom
-        if not dir_t.exists():
-            continue
-        for f_md in dir_t.glob("*.md"):
-            fecha_str = f_md.stem[:10] if len(f_md.stem) >= 10 and f_md.stem[:4].isdigit() else "2000-01-01"
-            # Si el usuario nombró una fecha específica en la consulta
-            if fecha_str in query:
-                mejor_clase = f_md
-                mejor_asig = asig_nom
-                mejor_fecha = fecha_str
+    # 1. Si el usuario especificó una fecha (ej. 08/10 -> '-10-08'), buscar coincidencia EXACTA
+    if patron_fecha:
+        for asig_nom in asigs_candidatas:
+            dir_t = TRANSCRIPCIONES_DIR / asig_nom
+            if not dir_t.exists():
+                continue
+            for f_md in dir_t.glob("*.md"):
+                if patron_fecha in f_md.stem:
+                    mejor_clase = f_md
+                    mejor_asig = asig_nom
+                    mejor_fecha = f_md.stem[:10]
+                    break
+            if mejor_clase:
                 break
-            if fecha_str > mejor_fecha:
-                mejor_fecha = fecha_str
-                mejor_clase = f_md
-                mejor_asig = asig_nom
+
+    # 2. Si no hubo coincidencia por fecha, buscar la más reciente
+    if not mejor_clase:
+        for asig_nom in asigs_candidatas:
+            dir_t = TRANSCRIPCIONES_DIR / asig_nom
+            if not dir_t.exists():
+                continue
+            for f_md in dir_t.glob("*.md"):
+                fecha_str = f_md.stem[:10] if len(f_md.stem) >= 10 and f_md.stem[:4].isdigit() else "2000-01-01"
+                if fecha_str > mejor_fecha:
+                    mejor_fecha = fecha_str
+                    mejor_clase = f_md
+                    mejor_asig = asig_nom
 
     if mejor_clase and mejor_clase.exists():
         try:
@@ -457,7 +511,7 @@ def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = 
             bloque.append(
                 "🎯 DIRECTRICES PEDAGÓGICAS DE MÁXIMA PRIORIDAD PARA NOVA:\n"
                 "El alumno te ha preguntado qué se hizo en esta clase o por un resumen de la misma.\n"
-                "NO DES RESPUESTAS VAGAS NI GENÉRICAS. Tienes toda la transcripción oficial arriba.\n"
+                "NO DIGAS JAMÁS QUE LA SESIÓN NO ESTÁ DISPONIBLE, ya que la tienes completamente transcrita arriba.\n"
                 "Detalla con total precisión y estructura:\n"
                 "1. 📢 AVISOS DE EXAMEN Y FECHAS: ¿Qué dijo el profesor que entraría en examen? ¿Qué PACs o advertencias dio?\n"
                 "2. 🧠 TEMAS Y CONCEPTOS: Explicación paso a paso de la materia tratada en la clase.\n"
