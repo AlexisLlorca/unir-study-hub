@@ -388,7 +388,11 @@ def extraer_patron_fecha_query(q: str) -> Optional[str]:
     return None
 
 
-def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = None) -> str:
+def obtener_contexto_inteligente_clases(
+    query: str,
+    asignatura: Optional[str] = None,
+    historial: Optional[List[Any]] = None
+) -> str:
     """
     Detecta si el alumno pregunta por una fecha concreta (ej. 08/10), por la última clase o por un resumen.
     Inyecta la transcripción íntegra (hasta 55.000 caracteres) de la clase magistral correspondiente.
@@ -399,6 +403,15 @@ def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = 
     q_lower = query.lower()
     patron_fecha = extraer_patron_fecha_query(query)
 
+    # Si no hay fecha en la pregunta actual pero hay historial previo, rastrear si veníamos hablando de una clase concreta
+    if not patron_fecha and historial:
+        for item in reversed(historial[-4:]):
+            txt = getattr(item, 'texto', '') if hasattr(item, 'texto') else (item.get('texto', '') if isinstance(item, dict) else '')
+            pf = extraer_patron_fecha_query(txt)
+            if pf:
+                patron_fecha = pf
+                break
+
     es_peticion_ultima_clase = any(kw in q_lower for kw in [
         "última clase", "ultima clase", "última sesión", "ultima sesion", "ayer",
         "último día", "ultimo dia", "última lección", "ultima leccion", "última videoclase", "ultima videoclase"
@@ -408,7 +421,7 @@ def obtener_contexto_inteligente_clases(query: str, asignatura: Optional[str] = 
         "que vimos en clase", "que se dio en clase", "que hizo el profesor",
         "que dijo el profesor", "resumen de la sesión", "resumen de la sesion", "resumir la clase",
         "en la sesión", "en la sesion", "en la clase", "de la clase", "clase del", "clase de",
-        "se vio", "se hizo"
+        "se vio", "se hizo", "que codigo", "que código", "hicimos", "puso", "ejemplo de clase"
     ]) or bool(patron_fecha)
 
     # Si no es pregunta orientada a una clase ni hay fecha, usamos la búsqueda tradicional de fragmentos
@@ -763,16 +776,23 @@ def api_evaluar_test_unir(req: EvaluarTestReq):
     }
 
 
+class ChatHistorialItem(BaseModel):
+    rol: str
+    texto: str
+
+
 class ChatMessage(BaseModel):
     mensaje: str
     asignatura: Optional[str] = None
     programa: Optional[str] = "dam"
+    historial: Optional[List[ChatHistorialItem]] = None
 
 
 @app.post("/api/chat")
 def api_chat(msg: ChatMessage):
-    """Responde preguntas mediante NOVA con rol especializado e inyección RAG con minutaje exacto."""
+    """Responde preguntas mediante NOVA con rol especializado, memoria multi-turno e inyección RAG completa."""
     from src.ai.transcription_search import formatear_contexto_para_tutor
+    from src.ai.materials_search import buscar_en_materiales
 
     contexto_rol = ""
     if msg.programa == "ciber":
@@ -806,28 +826,68 @@ def api_chat(msg: ChatMessage):
         )
     else:
         contexto_rol = (
-            "ROL: Eres NOVA, mentora senior en FP DAM (Desarrollo Multiplataforma). "
-            "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot y patrones de arquitectura limpia. "
+            "ROL: Eres NOVA, mentora de élite y tutora senior de FP DAM (Desarrollo de Aplicaciones Multiplataforma) en UNIR. "
+            "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot, JDBC, XML/DOM y patrones de arquitectura limpia. "
         )
 
-    # Inyección RAG con minutaje exacto de videoclases y transcripciones completas
+    # Inyección RAG con minutaje exacto de videoclases, transcripciones completas y temarios/actividades
     contexto_citas = formatear_contexto_para_tutor(msg.mensaje, msg.asignatura)
-    contexto_trans_general = obtener_contexto_inteligente_clases(msg.mensaje, msg.asignatura)
+    contexto_trans_general = obtener_contexto_inteligente_clases(msg.mensaje, msg.asignatura, historial=msg.historial)
+    contexto_materiales = buscar_en_materiales(msg.mensaje, msg.asignatura)
     contexto_asig = f"\n[Asignatura / Módulo activo: {msg.asignatura}]" if msg.asignatura else ""
 
     instrucciones_base = (
         "\nINSTRUCCIONES CLAVE DE NOVA:\n"
-        "1. Eres NOVA, la copiloto y mentora académica integrada dentro de UNIR Study Hub.\n"
-        "2. Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios.\n"
+        "1. Eres NOVA, la mentora y copiloto académica personal del alumno Alex en UNIR Study Hub.\n"
+        "2. Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios y actividades.\n"
         "3. NUNCA digas que no tienes acceso al campus virtual ni que los datos están protegidos por login. Toda la información ya ha sido indexada localmente en el Hub.\n"
-        "4. Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, responde con la máxima exactitud. "
-        "MENCIONA SIEMPRE EL MINUTO EXACTO [MM:SS] o [HH:MM:SS], el nombre del profesor/alumno que habló y sus declaraciones literales.\n"
+        "4. Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, responde con la máxima exactitud: "
+        "MENCIONA SIEMPRE EL MINUTO EXACTO [MM:SS] o [HH:MM:SS], el profesor que habló y citas textuales.\n"
+        "5. MEMORIA: Mantén siempre en cuenta lo hablado en los mensajes anteriores de la conversación. Si el alumno pregunta '¿y qué más?', '¿puedes explicarlo mejor?' o '¿qué código se hizo?', continúa sobre el tema previo sin desorientarte.\n"
+        "6. ESTRUCTURA: Usa Markdown limpio, explicaciones pedagógicas paso a paso, código listo para compilar con comentarios, y advertencias claras para los exámenes de UNIR.\n"
     )
 
-    prompt = f"{contexto_rol}{instrucciones_base}{contexto_asig}{contexto_citas}{contexto_trans_general}\nAlumno: {msg.mensaje}\nNOVA:"
-    
-    respuesta = tutor_ia.client.generar_contenido(prompt, temperatura=0.3)
-    return {"respuesta": respuesta or "No se pudo generar respuesta."}
+    system_instruction_completo = f"{contexto_rol}\n{instrucciones_base}\n{contexto_asig}".strip()
+
+    # Preparar el contexto local para este turno
+    bloques_contexto = []
+    if contexto_citas:
+        bloques_contexto.append(contexto_citas)
+    if contexto_trans_general:
+        bloques_contexto.append(contexto_trans_general)
+    if contexto_materiales:
+        bloques_contexto.append(contexto_materiales)
+
+    contexto_inyectado = "\n\n".join(bloques_contexto)
+    if contexto_inyectado:
+        mensaje_actual_con_contexto = f"{contexto_inyectado}\n\nPregunta / Mensaje del alumno: {msg.mensaje}"
+    else:
+        mensaje_actual_con_contexto = msg.mensaje
+
+    # Construir historial multi-turno para Gemini
+    mensajes_chat = []
+    if msg.historial:
+        for item in msg.historial[-8:]:  # Últimos 8 turnos de memoria
+            rol = "user" if item.rol in ["user", "alumno", "usuario"] else "model"
+            if item.texto and item.texto.strip():
+                mensajes_chat.append({"role": rol, "text": item.texto.strip()})
+
+    # Añadir el turno actual del alumno con el contexto enriquecido
+    mensajes_chat.append({"role": "user", "text": mensaje_actual_con_contexto})
+
+    # Generar respuesta multi-turno con Gemini 3.7 Flash
+    respuesta = tutor_ia.client.generar_chat(
+        mensajes=mensajes_chat,
+        system_instruction=system_instruction_completo,
+        temperatura=0.4
+    )
+
+    if not respuesta:
+        # Fallback a generación estándar si fallara el chat estructurado
+        prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
+        respuesta = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
+
+    return {"respuesta": respuesta or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."}
 
 
 # --- FRONTEND HTML SPA CON SIDEBAR DE SECCIONES ---
@@ -1675,12 +1735,12 @@ def dashboard_html():
               </div>
               <p class="text-xs text-emerald-400 flex items-center">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-                Gemini 3 Flash Conectado
+                Gemini 3.7 Flash · Memoria Conversacional Activa
               </p>
             </div>
           </div>
 
-          <div class="flex items-center space-x-3">
+          <div class="flex items-center space-x-2">
             <span class="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-xl flex items-center space-x-1.5"
                   x-show="clasesDeAsignaturaActual.length > 0">
               <i class="fa-solid fa-video"></i>
@@ -1692,6 +1752,10 @@ def dashboard_html():
                 <option :value="asig.nombre" x-text="asig.nombre"></option>
               </template>
             </select>
+            <button @click="limpiarChat()" class="text-xs text-gray-400 hover:text-rose-400 px-2.5 py-1.5 rounded-xl bg-gray-800 border border-gray-700 hover:border-rose-500/30 transition flex items-center space-x-1" title="Reiniciar memoria del chat">
+              <i class="fa-solid fa-rotate-right text-[11px]"></i>
+              <span class="hidden sm:inline">Reiniciar</span>
+            </button>
           </div>
         </div>
 
@@ -2829,9 +2893,24 @@ def dashboard_html():
           this.enviarMensajeChat();
         },
 
+        limpiarChat() {
+          const asig = this.chatAsignatura || this.programaActual?.titulo || 'tu programa';
+          this.chatHistorial = [{
+            rol: 'model',
+            texto: `¡Memoria reiniciada! Hola Alex, soy NOVA. ¿En qué duda técnica de **${asig}** nos enfocamos ahora?`
+          }];
+        },
+
         async enviarMensajeChat() {
           if (!this.chatInput.trim() || this.chatCargando) return;
           const texto = this.chatInput.trim();
+
+          // Capturar historial previo antes de registrar el nuevo mensaje en pantalla
+          const historialPrevio = this.chatHistorial.map(m => ({
+            rol: m.rol,
+            texto: m.texto
+          })).slice(-8);
+
           this.chatHistorial.push({ rol: 'user', texto });
           this.chatInput = '';
           this.chatCargando = true;
@@ -2843,7 +2922,8 @@ def dashboard_html():
               body: JSON.stringify({
                 mensaje: texto,
                 asignatura: this.chatAsignatura,
-                programa: this.programaActivoId
+                programa: this.programaActivoId,
+                historial: historialPrevio
               })
             });
             const data = await res.json();
