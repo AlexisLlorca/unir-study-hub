@@ -109,6 +109,22 @@ class GeneradorGuiaEstudio:
         )
 
         guia_md = self.tutor.client.generar_contenido(prompt_guia, temperatura=0.3)
+        if not guia_md:
+            console.print("[yellow]⚠ Reintentando redacción de guía con versión concisa...[/yellow]")
+            prompt_guia_conciso = (
+                f"Eres NOVA, tutor de IA de FP DAM en UNIR.\n"
+                f"A partir del siguiente material oficial de '{asignatura}' ({nombre_tema}):\n\n"
+                f"{contexto_combinado[:15000]}\n\n"
+                "Redacta una GUÍA DE ESTUDIO COMPLETA en Markdown con:\n"
+                "# 📘 GUÍA DE ESTUDIO: " + nombre_tema.upper() + "\n"
+                "## 📌 1. Resumen Ejecutivo\n"
+                "## 📢 2. Avisos de Examen y Trampas\n"
+                "## 🧠 3. Conceptos Clave (Tabla)\n"
+                "## 💻 4. Código Ejemplo\n"
+                "## ⚠️ 5. Puntos Críticos y Preguntas Trampa\n"
+            )
+            guia_md = self.tutor.client.generar_contenido(prompt_guia_conciso, temperatura=0.3)
+
         if guia_md:
             dir_asig_guia = GUIAS_DIR / asignatura
             dir_asig_guia.mkdir(parents=True, exist_ok=True)
@@ -117,6 +133,8 @@ class GeneradorGuiaEstudio:
                 f.write(guia_md)
             resultados["guia"] = ruta_guia
             console.print(f"[bold green]✔ Guía guardada en:[/bold green] {ruta_guia}")
+        else:
+            console.print(f"[bold red]❌ No se pudo redactar la guía de estudio para '{nombre_tema}'[/bold red]")
 
         # 4. Generar Banco de Preguntas Tipo Test (JSON + MD)
         console.print("\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial de UNIR (10 preguntas)...[/cyan]")

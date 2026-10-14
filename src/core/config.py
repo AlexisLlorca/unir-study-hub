@@ -48,7 +48,7 @@ SESSION_STATE_FILE = AUTH_DIR / "session_state.json"
 
 # 6. Variables del Campus y Servicios de IA
 UNIR_CAMPUS_URL = os.getenv("UNIR_CAMPUS_URL", "https://campusfp.unir.net/")
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 
 def get_gemini_api_key() -> str:

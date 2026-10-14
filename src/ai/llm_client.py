@@ -108,7 +108,14 @@ class LLMClient:
             temperature=temperatura,
         )
 
-        modelos_candidatos = [self.model_name, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+        modelos_candidatos = [
+            self.model_name,
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.7-flash",
+        ]
         modelos = []
         for m in modelos_candidatos:
             if m and m not in modelos:
@@ -124,9 +131,11 @@ class LLMClient:
                 if response and response.text:
                     return response.text
             except Exception as e:
+                err_str = str(e)
                 console.print(f"[dim]Reintentando con modelo de respaldo tras error en {mod}: {e}[/dim]")
-                import time
-                time.sleep(1)
+                if "429" not in err_str and "RESOURCE_EXHAUSTED" not in err_str:
+                    import time
+                    time.sleep(1)
                 continue
 
         console.print("[bold red]❌ Error de comunicación con Gemini en todos los modelos disponibles.[/bold red]")
@@ -176,7 +185,14 @@ class LLMClient:
             else:
                 contents_limpio.append(c)
 
-        modelos_candidatos = [self.model_name, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+        modelos_candidatos = [
+            self.model_name,
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.7-flash",
+        ]
         modelos = []
         for m in modelos_candidatos:
             if m and m not in modelos:
@@ -192,9 +208,11 @@ class LLMClient:
                 if response and response.text:
                     return response.text
             except Exception as e:
+                err_str = str(e)
                 console.print(f"[dim]Reintentando chat con modelo de respaldo tras error en {mod}: {e}[/dim]")
-                import time
-                time.sleep(1)
+                if "429" not in err_str and "RESOURCE_EXHAUSTED" not in err_str:
+                    import time
+                    time.sleep(1)
                 continue
 
         console.print("[bold red]❌ Error de comunicación con Gemini en chat multi-turno.[/bold red]")

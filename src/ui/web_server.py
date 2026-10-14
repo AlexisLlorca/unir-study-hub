@@ -242,19 +242,46 @@ def api_generar_guia(req: GenerarGuiaRequest):
         p = MATERIALES_DIR / req.asignatura / req.archivo_pdf
         if p.exists():
             ruta_pdf = p
-    else:
+
+    # Si no se especificó PDF o no existe, buscar el más relevante según el tema
+    if not ruta_pdf:
         dir_mats = MATERIALES_DIR / req.asignatura
         if dir_mats.exists():
             pdfs = [f for f in dir_mats.glob("*.pdf")]
-            if pdfs:
+            # 1. Búsqueda por texto normalizado
+            q_norm = re.sub(r"[^\w]", "", req.nombre_tema.lower())
+            for f in pdfs:
+                f_norm = re.sub(r"[^\w]", "", f.stem.lower())
+                if q_norm and (q_norm in f_norm or f_norm in q_norm):
+                    ruta_pdf = f
+                    break
+
+            # 2. Búsqueda por número de tema (ej: Tema 1 -> buscar si tiene "1" o "tema_1")
+            if not ruta_pdf:
+                num_match = re.search(r"\b(\d+)\b", req.nombre_tema)
+                if num_match:
+                    num = num_match.group(1)
+                    for f in pdfs:
+                        f_stem_lower = f.stem.lower()
+                        if f"tema_{num}" in f_stem_lower or f"tema {num}" in f_stem_lower or f"tema{num}" in f_stem_lower or re.search(rf"\b0*{num}\b", f.stem):
+                            ruta_pdf = f
+                            break
+
+            # 3. Fallback al primer PDF si ninguno coincide
+            if not ruta_pdf and pdfs:
                 ruta_pdf = pdfs[0]
 
     ruta_trans = None
     dir_trans = TRANSCRIPCIONES_DIR / req.asignatura
     if dir_trans.exists():
         trans = [f for f in dir_trans.glob("*.md")]
-        if trans:
-            ruta_trans = trans[0]
+        q_norm = re.sub(r"[^\w]", "", req.nombre_tema.lower())
+        for t in trans:
+            if q_norm and q_norm in re.sub(r"[^\w]", "", t.stem.lower()):
+                ruta_trans = t
+                break
+        if not ruta_trans and trans:
+            ruta_trans = trans[-1]
 
     res = generador.generar_paquete_tema(
         asignatura=req.asignatura,
@@ -262,7 +289,26 @@ def api_generar_guia(req: GenerarGuiaRequest):
         ruta_pdf=ruta_pdf,
         ruta_transcripcion=ruta_trans,
     )
-    return {"status": "ok", "resultado": res}
+
+    tiene_guia = bool(res.get("guia"))
+    tiene_test = bool(res.get("test_json"))
+
+    if not tiene_guia and not tiene_test:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo generar ni la guía ni el test. El servicio de IA está temporalmente saturado, por favor intenta en unos momentos."
+        )
+
+    return {
+        "status": "ok",
+        "resultado": {
+            "guia": str(res.get("guia")) if tiene_guia else None,
+            "test_json": str(res.get("test_json")) if tiene_test else None,
+            "test_md": str(res.get("test_md")) if res.get("test_md") else None,
+        },
+        "tiene_guia": tiene_guia,
+        "tiene_test": tiene_test,
+    }
 
 
 @app.post("/api/sincronizar")
@@ -1526,8 +1572,9 @@ def dashboard_html():
                         <button @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + m, m)" title="Visualizar PDF integrado" class="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px] transition font-semibold hover:bg-cyan-500/30">
                           👁️ Ver
                         </button>
-                        <button @click="generarGuiaDesdePdf(m)" title="Generar Guía IA de este tema" class="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[10px] transition hover:bg-emerald-500/30">
-                          IA
+                        <button @click="generarGuiaDesdePdf(m)" title="Generar Guía y Test IA de este tema" class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded text-[10px] transition hover:bg-emerald-500/30 font-semibold flex items-center space-x-1">
+                          <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
+                          <span>IA</span>
                         </button>
                       </div>
                     </div>
@@ -1980,6 +2027,18 @@ def dashboard_html():
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-1">Materia Seleccionada:</label>
         <p class="text-sm font-semibold text-white bg-gray-900 p-2.5 rounded-xl border border-gray-800" x-text="asigSeleccionada?.nombre"></p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-gray-300 mb-1">Documento / Temario Oficial (PDF):</label>
+        <select x-model="generadorPdfSeleccionado"
+                @change="if (!generadorTemaNombre && generadorPdfSeleccionado) generadorTemaNombre = generadorPdfSeleccionado.replace('.pdf', '').replaceAll('_', ' ')"
+                class="w-full bg-gray-900 text-white text-xs p-3 rounded-xl border border-gray-700 focus:outline-none focus:border-emerald-500">
+          <option value="">🔍 Detección automática según el nombre del tema</option>
+          <template x-for="m in asigSeleccionada?.materiales" :key="m">
+            <option :value="m" x-text="m"></option>
+          </template>
+        </select>
       </div>
 
       <div>
@@ -2455,6 +2514,7 @@ def dashboard_html():
         // Generador IA Modal
         modalGenerador: false,
         generadorTemaNombre: '',
+        generadorPdfSeleccionado: '',
         generandoIa: false,
         
         // Modal Visor
@@ -2802,6 +2862,7 @@ def dashboard_html():
         },
 
         generarGuiaDesdePdf(pdfNombre) {
+          this.generadorPdfSeleccionado = pdfNombre;
           this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
           this.modalGenerador = true;
         },
@@ -2810,21 +2871,37 @@ def dashboard_html():
           if (!this.asigSeleccionada || !this.generadorTemaNombre.trim()) return;
           this.generandoIa = true;
           try {
-            await fetch('/api/generar-guia', {
+            const res = await fetch('/api/generar-guia', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 asignatura: this.asigSeleccionada.nombre,
-                nombre_tema: this.generadorTemaNombre.trim()
+                nombre_tema: this.generadorTemaNombre.trim(),
+                archivo_pdf: this.generadorPdfSeleccionado || null
               })
             });
+            const data = await res.json();
+            if (!res.ok) {
+              alert(data.detail || 'Error al generar material con IA');
+              return;
+            }
             await this.cargarCatalogo();
+            await this.cargarProgreso();
             // Refrescar asignatura seleccionada
             this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
             this.modalGenerador = false;
-            alert('¡Guía y test generados con éxito!');
+            this.generadorPdfSeleccionado = '';
+            
+            if (data.tiene_guia && data.tiene_test) {
+              alert('¡Guía de estudio y test interactivo generados con éxito!');
+            } else if (data.tiene_guia) {
+              alert('¡Guía de estudio generada con éxito!');
+            } else if (data.tiene_test) {
+              alert('Se ha generado el simulacro de test, pero la redacción de la guía no pudo completarse debido a saturación temporal de la IA.');
+            }
           } catch(e) {
-            alert('Error generando la guía con IA.');
+            console.error(e);
+            alert('Error de conexión al generar con IA.');
           } finally {
             this.generandoIa = false;
           }
