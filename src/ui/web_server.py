@@ -12,6 +12,7 @@ generar guías y tests con IA y realizar simulacros tipo test directamente desde
 import os
 import re
 import json
+import socket
 import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -2945,10 +2946,24 @@ def dashboard_html():
 </html>"""
 
 
-def iniciar_servidor_web(host: str = "127.0.0.1", port: int = 8080):
-    """Lanza el servidor web de FastAPI en un puerto local."""
+def obtener_ip_red_local() -> str:
+    """Obtiene la dirección IP del equipo en la red local (Wi-Fi o LAN)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def iniciar_servidor_web(host: str = "0.0.0.0", port: int = 8080):
+    """Lanza el servidor web de FastAPI accesible en local y desde cualquier dispositivo de la red local."""
+    ip_local = obtener_ip_red_local()
     console.print(f"\n[bold green]🚀 Iniciando Interfaz Gráfica Web de UNIR Study Hub (Multi-Titulación)...[/bold green]")
-    console.print(f"[bold cyan]👉 Abre en tu navegador:[/bold cyan] [bold white underline]http://{host}:{port}[/bold white underline]\n")
+    console.print(f"[bold cyan]💻 En tu ordenador:[/bold cyan]                       [bold white underline]http://localhost:{port}[/bold white underline]")
+    console.print(f"[bold yellow]📱 En tu móvil (misma red Wi-Fi):[/bold yellow]          [bold white underline]http://{ip_local}:{port}[/bold white underline]\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
