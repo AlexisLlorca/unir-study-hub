@@ -182,6 +182,52 @@ def api_guardar_test(sub: TestSubmission):
     return {"status": "ok"}
 
 
+@app.delete("/api/guia/{asignatura}/{guia_name}")
+def api_eliminar_guia(asignatura: str, guia_name: str):
+    """Elimina una guía de estudio generada."""
+    guia_path = (GUIAS_DIR / asignatura / guia_name).resolve()
+    guias_root = GUIAS_DIR.resolve()
+    if not str(guia_path).startswith(str(guias_root)):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    if not guia_path.exists() or not guia_path.is_file():
+        raise HTTPException(status_code=404, detail="Guía no encontrada")
+
+    try:
+        guia_path.unlink()
+        return {"ok": True, "mensaje": f"Guía {guia_name} eliminada correctamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al eliminar la guía: {str(e)}")
+
+
+@app.delete("/api/test/{asignatura}/{test_name}")
+def api_eliminar_test(asignatura: str, test_name: str):
+    """Elimina un simulacro de test (JSON y Markdown acompañante si existe)."""
+    stem = test_name.replace(".json", "").replace(".md", "")
+    base_dir = (EXAMENES_DIR / asignatura).resolve()
+    examenes_root = EXAMENES_DIR.resolve()
+    if not str(base_dir).startswith(str(examenes_root)):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+
+    f_json = (base_dir / f"{stem}.json").resolve()
+    f_md = (base_dir / f"{stem}.md").resolve()
+
+    eliminado = False
+    try:
+        if f_json.exists() and f_json.is_file() and str(f_json).startswith(str(examenes_root)):
+            f_json.unlink()
+            eliminado = True
+        if f_md.exists() and f_md.is_file() and str(f_md).startswith(str(examenes_root)):
+            f_md.unlink()
+            eliminado = True
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al eliminar el test: {str(e)}")
+
+    if not eliminado:
+        raise HTTPException(status_code=404, detail="Test no encontrado")
+
+    return {"ok": True, "mensaje": f"Test {stem} eliminado correctamente"}
+
+
 class GenerarGuiaRequest(BaseModel):
     asignatura: str
     nombre_tema: str
@@ -1451,14 +1497,19 @@ def dashboard_html():
               <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                 <!-- GUÍAS RESUMIDAS IA -->
                 <template x-for="guia in asigSeleccionada?.guias" :key="guia">
-                  <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between">
+                  <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between group">
                     <div class="overflow-hidden pr-2 flex-1">
                       <p class="text-[10px] text-cyan-400 font-bold">Guía de Alto Rendimiento</p>
                       <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="guia.replace('_guia.md', '').replaceAll('_', ' ')"></h5>
                     </div>
-                    <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0 ml-2">
-                      Estudiar
-                    </button>
+                    <div class="flex items-center space-x-1 shrink-0 ml-2">
+                      <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0">
+                        Estudiar
+                      </button>
+                      <button @click="eliminarGuia(asigSeleccionada.nombre, guia)" title="Eliminar guía" class="p-1.5 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition text-xs shrink-0">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
                   </div>
                 </template>
 
@@ -1501,7 +1552,12 @@ def dashboard_html():
               <div class="space-y-3">
                 <template x-for="test in asigSeleccionada?.tests" :key="test">
                   <div class="glass-card p-4 rounded-2xl border-l-4 border-emerald-400 hover:bg-gray-800/50 transition">
-                    <h5 class="font-bold text-white text-xs" x-text="test.replace('_test', '').replaceAll('_', ' ')"></h5>
+                    <div class="flex items-start justify-between gap-2">
+                      <h5 class="font-bold text-white text-xs flex-1 break-words" x-text="test.replace('_test', '').replaceAll('_', ' ')"></h5>
+                      <button @click="eliminarTest(asigSeleccionada.nombre, test)" title="Eliminar simulacro" class="text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 p-1.5 rounded-lg transition text-xs shrink-0">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
                     <p class="text-[11px] text-gray-400 mt-1">10 preguntas tipo test con formato oficial</p>
                     <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="mt-3 w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
                       Comenzar Simulacro
@@ -2839,6 +2895,56 @@ def dashboard_html():
             this.modalContenido = data.contenido;
             this.modalVisor = true;
           } catch(e) { alert('No se pudo abrir el archivo'); }
+        },
+
+        async eliminarGuia(asignatura, guia) {
+          const nombreLegible = guia.replace('_guia.md', '').replaceAll('_', ' ');
+          if (!confirm(`¿Estás seguro de que deseas eliminar la guía de estudio "${nombreLegible}"?`)) {
+            return;
+          }
+          try {
+            const res = await fetch(`/api/guia/${encodeURIComponent(asignatura)}/${encodeURIComponent(guia)}`, {
+              method: 'DELETE'
+            });
+            if (res.ok) {
+              await this.cargarCatalogo();
+              await this.cargarProgreso();
+              if (this.asigSeleccionada && this.asigSeleccionada.nombre === asignatura) {
+                this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asignatura) || this.asigSeleccionada;
+              }
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Error al eliminar la guía');
+            }
+          } catch(e) {
+            console.error(e);
+            alert('Error de red al intentar eliminar la guía');
+          }
+        },
+
+        async eliminarTest(asignatura, test) {
+          const nombreLegible = test.replace('_test', '').replaceAll('_', ' ');
+          if (!confirm(`¿Estás seguro de que deseas eliminar el simulacro "${nombreLegible}"?`)) {
+            return;
+          }
+          try {
+            const res = await fetch(`/api/test/${encodeURIComponent(asignatura)}/${encodeURIComponent(test)}`, {
+              method: 'DELETE'
+            });
+            if (res.ok) {
+              await this.cargarCatalogo();
+              await this.cargarProgreso();
+              if (this.asigSeleccionada && this.asigSeleccionada.nombre === asignatura) {
+                this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asignatura) || this.asigSeleccionada;
+              }
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Error al eliminar el test');
+            }
+          } catch(e) {
+            console.error(e);
+            alert('Error de red al intentar eliminar el test');
+          }
         },
 
         async iniciarTestWeb(asignatura, testNombre) {
