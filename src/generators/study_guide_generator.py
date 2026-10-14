@@ -134,6 +134,7 @@ class GeneradorGuiaEstudio:
             '      "D": "Opción D"\n'
             "    },\n"
             '    "correcta": "A",\n'
+            '    "pista": "Pista conceptual breve que oriente al estudiante sin desvelar la letra de la respuesta...",\n'
             '    "justificacion": "Explicación técnica detallada de por qué es la correcta y por qué las demás fallan..."\n'
             "  }\n"
             "]\n"
@@ -154,6 +155,7 @@ class GeneradorGuiaEstudio:
                         opciones=p["opciones"],
                         correcta=p["correcta"],
                         justificacion=p["justificacion"],
+                        pista=p.get("pista", ""),
                     )
                     for p in preguntas_data
                 ]

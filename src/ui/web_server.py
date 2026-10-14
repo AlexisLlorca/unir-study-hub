@@ -1954,34 +1954,176 @@ def dashboard_html():
     </div>
   </div>
 
-  <!-- ==================== MODAL: SIMULADOR DE EXAMEN WEB ==================== -->
-  <div x-show="modalTest" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-    <div class="glass w-full max-w-3xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
+  <!-- ==================== MODAL: SIMULADOR DE EXAMEN WEB (MODO NOTEBOOK & EXAMEN) ==================== -->
+  <div x-show="modalTest" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-3xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
+      
+      <!-- HEADER TEST -->
       <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
-        <div>
-          <h4 class="font-bold text-white text-sm" x-text="'Simulacro: ' + testActivoAsig"></h4>
-          <p class="text-xs text-gray-400" x-text="'Pregunta ' + (testIndice + 1) + ' de ' + (testPreguntas.length)"></p>
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-spell-check"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h4 class="font-bold text-white text-sm" x-text="'Simulacro: ' + testActivoAsig"></h4>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono"
+                    x-text="'Pregunta ' + (testIndice + 1) + ' / ' + (testPreguntas.length)"></span>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5" x-text="testActivoNombre.replace('_test', '').replaceAll('_', ' ')"></p>
+          </div>
         </div>
-        <button @click="modalTest = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
+
+        <div class="flex items-center space-x-2.5">
+          <!-- SELECTOR DE MODO -->
+          <div class="flex items-center bg-gray-950 rounded-xl p-1 border border-gray-800 text-xs">
+            <button @click="testModo = 'notebook'"
+                    :class="testModo === 'notebook' ? 'bg-emerald-500 text-gray-950 font-black shadow' : 'text-gray-400 hover:text-white'"
+                    class="px-2.5 py-1 rounded-lg transition text-[11px] flex items-center space-x-1"
+                    title="Feedback inmediato pregunta a pregunta con explicaciones y pistas">
+              <i class="fa-solid fa-bolt text-[10px]"></i>
+              <span class="hidden sm:inline">Notebook</span>
+            </button>
+            <button @click="testModo = 'examen'"
+                    :class="testModo === 'examen' ? 'bg-emerald-500 text-gray-950 font-black shadow' : 'text-gray-400 hover:text-white'"
+                    class="px-2.5 py-1 rounded-lg transition text-[11px] flex items-center space-x-1"
+                    title="Examen oficial a ciegas con corrección al terminar">
+              <i class="fa-solid fa-clock text-[10px]"></i>
+              <span class="hidden sm:inline">Examen</span>
+            </button>
+          </div>
+
+          <button @click="modalTest = false" class="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
       </div>
 
-      <div class="flex-1 p-6 overflow-y-auto space-y-5" x-show="!testFinalizado && testPreguntas.length > 0">
-        <h3 class="text-base font-bold text-white" x-text="testPreguntas[testIndice]?.enunciado"></h3>
+      <!-- BARRA DE PROGRESO -->
+      <div class="w-full bg-gray-950 h-1.5 overflow-hidden" x-show="!testFinalizado && testPreguntas.length > 0">
+        <div class="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 h-full transition-all duration-300"
+             :style="'width: ' + (((testIndice + (testRespuestasUsuario[testIndice] ? 1 : 0)) / testPreguntas.length) * 100) + '%'"></div>
+      </div>
 
-        <div class="space-y-3">
+      <!-- CUERPO PREGUNTA Y OPCIONES -->
+      <div class="flex-1 p-6 overflow-y-auto space-y-4" x-show="!testFinalizado && testPreguntas.length > 0">
+        <!-- ENUNCIADO -->
+        <h3 class="text-base font-bold text-white leading-snug" x-text="testPreguntas[testIndice]?.enunciado"></h3>
+
+        <!-- PISTA CONCEPTUAL DESPLEGABLE -->
+        <div>
+          <button @click="testMostrarPista = !testMostrarPista"
+                  class="inline-flex items-center space-x-2 text-xs font-semibold px-3 py-1.5 rounded-xl transition border"
+                  :class="testMostrarPista ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm' : 'bg-gray-800 hover:bg-gray-700 text-amber-400/90 border-gray-700'">
+            <i class="fa-solid fa-lightbulb text-[11px]"></i>
+            <span x-text="testMostrarPista ? 'Ocultar pista' : '💡 ¿Dudas con la pregunta? Ver pista conceptual'"></span>
+          </button>
+
+          <div x-show="testMostrarPista"
+               x-transition:enter="transition ease-out duration-200"
+               x-transition:enter-start="opacity-0 -translate-y-1"
+               x-transition:enter-end="opacity-100 translate-y-0"
+               class="mt-2.5 p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30 text-amber-200 text-xs leading-relaxed flex items-start space-x-3 shadow-lg">
+            <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+              <i class="fa-solid fa-key text-xs"></i>
+            </div>
+            <div class="flex-1">
+              <span class="font-bold text-amber-300 block mb-0.5">Pista para razonar la respuesta:</span>
+              <p class="text-amber-100/90 text-xs" x-text="obtenerPistaPregunta(testPreguntas[testIndice])"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- OPCIONES -->
+        <div class="space-y-3 pt-1">
           <template x-for="(texto, letra) in testPreguntas[testIndice]?.opciones" :key="letra">
             <button @click="seleccionarOpcion(letra)"
-                    :class="testRespuestaSeleccionada === letra ? 'border-cyan-500 bg-cyan-500/10 text-white' : 'border-gray-700 bg-gray-800/40 text-gray-300 hover:bg-gray-800'"
-                    class="w-full text-left p-4 rounded-xl border transition flex items-start space-x-3">
-              <span class="w-6 h-6 rounded-lg bg-gray-700 flex items-center justify-center text-xs font-bold text-white shrink-0" x-text="letra"></span>
-              <span class="text-sm" x-text="texto"></span>
+                    :disabled="testModo === 'notebook' && !!testRespuestasUsuario[testIndice]"
+                    :class="{
+                      'border-emerald-500 bg-emerald-500/20 text-emerald-100 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/10':
+                        testModo === 'notebook' && testRespuestasUsuario[testIndice] && letra === testPreguntas[testIndice]?.correcta,
+                      'border-rose-500 bg-rose-500/20 text-rose-100 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/10':
+                        testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta,
+                      'opacity-40 border-gray-800 bg-gray-900/40 text-gray-400':
+                        testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] !== letra && letra !== testPreguntas[testIndice]?.correcta,
+                      'border-cyan-500 bg-cyan-500/10 text-white':
+                        (testModo !== 'notebook' || !testRespuestasUsuario[testIndice]) && testRespuestaSeleccionada === letra,
+                      'border-gray-700/80 bg-gray-800/50 text-gray-300 hover:bg-gray-800 hover:border-gray-600':
+                        !testRespuestasUsuario[testIndice] && testRespuestaSeleccionada !== letra
+                    }"
+                    class="w-full text-left p-4 rounded-2xl border transition-all duration-200 flex items-start justify-between space-x-3 group relative">
+              
+              <div class="flex items-start space-x-3.5">
+                <span class="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors"
+                      :class="{
+                        'bg-emerald-500 text-gray-950 font-black shadow':
+                          testModo === 'notebook' && testRespuestasUsuario[testIndice] && letra === testPreguntas[testIndice]?.correcta,
+                        'bg-rose-500 text-white font-black shadow':
+                          testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta,
+                        'bg-gray-700 text-white group-hover:bg-gray-600':
+                          !testRespuestasUsuario[testIndice] || testModo !== 'notebook'
+                      }"
+                      x-text="letra"></span>
+                <span class="text-sm font-medium leading-relaxed pt-0.5" x-text="texto"></span>
+              </div>
+
+              <!-- Indicador de acierto / fallo -->
+              <div x-show="testModo === 'notebook' && testRespuestasUsuario[testIndice]" class="shrink-0 pt-0.5">
+                <span x-show="letra === testPreguntas[testIndice]?.correcta" class="flex items-center space-x-1 text-emerald-400 font-bold text-xs bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                  <i class="fa-solid fa-check"></i>
+                  <span>Correcta</span>
+                </span>
+                <span x-show="testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta" class="flex items-center space-x-1 text-rose-400 font-bold text-xs bg-rose-500/20 px-2.5 py-0.5 rounded-full border border-rose-500/30">
+                  <i class="fa-solid fa-xmark"></i>
+                  <span>Tu fallo</span>
+                </span>
+              </div>
             </button>
           </template>
         </div>
+
+        <!-- EXPLICACIÓN INSTANTÁNEA (JUSTIFICACIÓN ESTILO GEMINI NOTEBOOK) -->
+        <div x-show="testModo === 'notebook' && testRespuestasUsuario[testIndice]"
+             x-transition:enter="transition ease-out duration-300 transform"
+             x-transition:enter-start="opacity-0 translate-y-3"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             class="mt-4 p-4.5 rounded-2xl border"
+             :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'bg-emerald-950/30 border-emerald-500/40' : 'bg-rose-950/30 border-rose-500/40'">
+          
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm"
+                   :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'">
+                <i :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'"></i>
+              </div>
+              <div>
+                <h5 class="text-sm font-bold"
+                    :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'text-emerald-300' : 'text-rose-300'"
+                    x-text="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? '¡Respuesta Correcta!' : '¡Respuesta Incorrecta!'"></h5>
+                <p class="text-[11px] text-gray-400"
+                   x-show="testRespuestasUsuario[testIndice] !== testPreguntas[testIndice]?.correcta">
+                  La opción correcta es la <strong class="text-emerald-400 font-bold" x-text="'[' + testPreguntas[testIndice]?.correcta + ']'"></strong>
+                </p>
+              </div>
+            </div>
+
+            <span class="text-[10px] font-mono px-2.5 py-1 rounded-full uppercase tracking-wider font-bold"
+                  :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'">
+              <span x-text="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? '+1.0 Punto' : '-0.33 UNIR'"></span>
+            </span>
+          </div>
+
+          <div class="bg-gray-900/90 rounded-xl p-3.5 border border-white/5 space-y-1.5 mt-2">
+            <div class="flex items-center space-x-1.5 text-cyan-400 text-xs font-bold">
+              <i class="fa-solid fa-graduation-cap text-[11px]"></i>
+              <span>¿Por qué? Justificación técnica oficial:</span>
+            </div>
+            <p class="text-xs text-gray-200 leading-relaxed font-sans" x-text="testPreguntas[testIndice]?.justificacion"></p>
+          </div>
+        </div>
       </div>
 
+      <!-- PANTALLA DE RESULTADOS AL FINALIZAR -->
       <div class="flex-1 p-8 text-center space-y-4" x-show="testFinalizado">
         <div class="w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl"
              :class="testNota >= 5 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'">
@@ -2003,12 +2145,27 @@ def dashboard_html():
         </button>
       </div>
 
+      <!-- FOOTER NAVEGACIÓN -->
       <div class="p-4 bg-gray-900 border-t border-gray-800 flex items-center justify-between" x-show="!testFinalizado">
-        <button @click="testIndice = Math.max(0, testIndice - 1)" :disabled="testIndice === 0" class="px-4 py-2 bg-gray-800 rounded-lg text-xs font-semibold text-gray-300 disabled:opacity-40">
-          Anterior
+        <button @click="anteriorPregunta()" :disabled="testIndice === 0" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1.5">
+          <i class="fa-solid fa-chevron-left text-[10px]"></i>
+          <span>Anterior</span>
         </button>
-        <button @click="siguientePregunta()" class="px-6 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-lg text-xs transition">
-          <span x-text="testIndice === testPreguntas.length - 1 ? 'Finalizar Examen' : 'Siguiente'"></span>
+
+        <div class="hidden sm:flex items-center space-x-3 text-xs font-mono" x-show="testModo === 'notebook'">
+          <span class="text-emerald-400 font-bold flex items-center space-x-1">
+            <i class="fa-solid fa-check text-[10px]"></i>
+            <span x-text="contarAciertosVivos() + ' Aciertos'"></span>
+          </span>
+          <span class="text-rose-400 font-bold flex items-center space-x-1">
+            <i class="fa-solid fa-xmark text-[10px]"></i>
+            <span x-text="contarFallosVivos() + ' Fallos'"></span>
+          </span>
+        </div>
+
+        <button @click="siguientePregunta()" class="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-gray-950 font-black rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 flex items-center space-x-2">
+          <span x-text="testIndice === testPreguntas.length - 1 ? 'Finalizar y Ver Nota' : (testModo === 'notebook' && !testRespuestasUsuario[testIndice] ? 'Saltar Pregunta' : 'Siguiente Pregunta')"></span>
+          <i class="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
       </div>
     </div>
@@ -2269,6 +2426,8 @@ def dashboard_html():
         testBlancos: 0,
         testPuntosNetos: 0,
         testNota: 0,
+        testMostrarPista: false,
+        testModo: 'notebook', // 'notebook' (feedback inmediato estilo NotebookLM) o 'examen'
 
         // Videoclases y Transcripciones
         todasLasClases: [],
@@ -2692,22 +2851,74 @@ def dashboard_html():
             this.testRespuestasUsuario = {};
             this.testRespuestaSeleccionada = null;
             this.testFinalizado = false;
+            this.testMostrarPista = false;
+            this.testModo = 'notebook';
             this.modalTest = true;
           } catch(e) { alert('No se pudo cargar el test'); }
         },
 
         seleccionarOpcion(letra) {
+          // En modo notebook, una vez respondida la pregunta, se bloquea para evitar trampas
+          if (this.testModo === 'notebook' && this.testRespuestasUsuario[this.testIndice]) {
+            return;
+          }
           this.testRespuestaSeleccionada = letra;
           this.testRespuestasUsuario[this.testIndice] = letra;
         },
 
         siguientePregunta() {
+          this.testMostrarPista = false;
           if (this.testIndice < this.testPreguntas.length - 1) {
             this.testIndice++;
             this.testRespuestaSeleccionada = this.testRespuestasUsuario[this.testIndice] || null;
           } else {
             this.finalizarTest();
           }
+        },
+
+        anteriorPregunta() {
+          this.testMostrarPista = false;
+          if (this.testIndice > 0) {
+            this.testIndice--;
+            this.testRespuestaSeleccionada = this.testRespuestasUsuario[this.testIndice] || null;
+          }
+        },
+
+        obtenerPistaPregunta(p) {
+          if (!p) return '';
+          if (p.pista && String(p.pista).trim()) return p.pista;
+          if (p.justificacion) {
+            const limpio = p.justificacion
+              .replace(/la\\s+opción\\s+[A-D]\\s+es\\s+correcta/gi, 'la respuesta correcta se basa en')
+              .replace(/opción\\s+[A-D]/gi, 'la opción adecuada')
+              .replace(/respuesta\\s+correcta:\\s*[A-D]/gi, '')
+              .replace(/\\([A-D]\\)/g, '');
+            const oraciones = limpio.split('.').filter(s => s.trim().length > 15);
+            if (oraciones.length > 0) {
+              return oraciones[0].trim() + '. Recuerda relacionar los términos técnicos con la arquitectura de la materia.';
+            }
+          }
+          return 'Recuerda los conceptos y definiciones clave tratados en el temario oficial de UNIR.';
+        },
+
+        contarAciertosVivos() {
+          let count = 0;
+          for (let idx in this.testRespuestasUsuario) {
+            if (this.testPreguntas[idx] && this.testRespuestasUsuario[idx] === this.testPreguntas[idx].correcta) {
+              count++;
+            }
+          }
+          return count;
+        },
+
+        contarFallosVivos() {
+          let count = 0;
+          for (let idx in this.testRespuestasUsuario) {
+            if (this.testPreguntas[idx] && this.testRespuestasUsuario[idx] && this.testRespuestasUsuario[idx] !== this.testPreguntas[idx].correcta) {
+              count++;
+            }
+          }
+          return count;
         },
 
         async finalizarTest() {

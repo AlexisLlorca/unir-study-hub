@@ -30,11 +30,13 @@ class PreguntaExamen:
         opciones: Dict[str, str],
         correcta: str,
         justificacion: str,
+        pista: Optional[str] = None,
     ):
         self.enunciado = enunciado
         self.opciones = opciones  # {"A": "...", "B": "...", "C": "...", "D": "..."}
         self.correcta = correcta.upper()  # "A", "B", "C" o "D"
         self.justificacion = justificacion
+        self.pista = pista or ""
 
 
 def generar_markdown_examen(
