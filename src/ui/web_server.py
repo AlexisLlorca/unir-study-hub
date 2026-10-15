@@ -1148,51 +1148,92 @@ def dashboard_html():
       <div>
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold px-3 mb-2">Herramientas</p>
         <div class="space-y-1">
-          <button @click="tab = 'dashboard'; asigSeleccionada = null"
-                  :class="tab === 'dashboard' && !asigSeleccionada ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-            <i class="fa-solid fa-chart-pie w-4 text-center"></i>
-            <span>Dashboard y Métricas</span>
-          </button>
-          <button @click="tab = 'asignaturas'"
-                  :class="tab === 'asignaturas' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-            <i class="fa-solid fa-book-bookmark w-4 text-center"></i>
-            <span>Temarios y Asignaturas</span>
-          </button>
-          <button @click="tab = 'clases'; asigSeleccionada = null"
-                  :class="tab === 'clases' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-            <i class="fa-solid fa-video w-4 text-center text-amber-400"></i>
-            <span>Videoclases y Transcripciones</span>
-          </button>
-          <button @click="tab = 'tutor'"
-                  :class="tab === 'tutor' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-            <i class="fa-solid fa-robot w-4 text-center text-cyan-400"></i>
-            <span>Tutor Inteligente NOVA</span>
-          </button>
-          <button @click="tab = 'agenda'; asigSeleccionada = null"
-                  :class="tab === 'agenda' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
-            <div class="flex items-center space-x-2.5">
-              <i class="fa-solid fa-calendar-check w-4 text-center text-rose-400"></i>
-              <span>Agenda y PACs Canvas</span>
-            </div>
-            <span x-show="agendaEventos.length > 0" class="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded-full font-bold" x-text="agendaEventos.length"></span>
-          </button>
-          <button @click="tab = 'flashcards'; asigSeleccionada = null"
-                  :class="tab === 'flashcards' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-            <i class="fa-solid fa-clone w-4 text-center text-purple-400"></i>
-            <span>Flashcards (Repaso Activo)</span>
-          </button>
-          <button @click="tab = 'progreso'"
-                  :class="tab === 'progreso' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                  class="w-full text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-            <i class="fa-solid fa-trophy w-4 text-center text-amber-400"></i>
-            <span>Expediente y Calificaciones</span>
-          </button>
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('dashboard')"
+                    :class="tab === 'dashboard' && !asigSeleccionada ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+              <i class="fa-solid fa-chart-pie w-4 text-center"></i>
+              <span>Dashboard y Métricas</span>
+            </button>
+            <a href="/?tab=dashboard" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('asignaturas')"
+                    :class="tab === 'asignaturas' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+              <i class="fa-solid fa-book-bookmark w-4 text-center"></i>
+              <span>Temarios y Asignaturas</span>
+            </button>
+            <a href="/?tab=asignaturas" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('clases')"
+                    :class="tab === 'clases' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+              <i class="fa-solid fa-video w-4 text-center text-amber-400"></i>
+              <span>Videoclases y Transcripciones</span>
+            </button>
+            <a href="/?tab=clases" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('tutor')"
+                    :class="tab === 'tutor' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+              <i class="fa-solid fa-robot w-4 text-center text-cyan-400"></i>
+              <span>Tutor Inteligente NOVA</span>
+            </button>
+            <a href="/?tab=tutor" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('agenda')"
+                    :class="tab === 'agenda' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <i class="fa-solid fa-calendar-check w-4 text-center text-rose-400"></i>
+                <span>Agenda y PACs Canvas</span>
+              </div>
+              <span x-show="agendaEventos.length > 0" class="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded-full font-bold" x-text="agendaEventos.length"></span>
+            </button>
+            <a href="/?tab=agenda" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-rose-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('flashcards')"
+                    :class="tab === 'flashcards' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+              <i class="fa-solid fa-clone w-4 text-center text-purple-400"></i>
+              <span>Flashcards (Repaso Activo)</span>
+            </button>
+            <a href="/?tab=flashcards" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-purple-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('progreso')"
+                    :class="tab === 'progreso' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
+              <i class="fa-solid fa-trophy w-4 text-center text-amber-400"></i>
+              <span>Expediente y Calificaciones</span>
+            </button>
+            <a href="/?tab=progreso" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -1241,6 +1282,47 @@ def dashboard_html():
         </button>
       </div>
     </header>
+
+    <!-- ==================== BARRA DE PESTAÑAS MULTI-TAREA ==================== -->
+    <nav class="bg-[#0c1222]/95 border-b border-gray-800/80 px-4 py-2 flex items-center justify-between gap-3 overflow-x-auto select-none shrink-0 sticky top-[57px] z-20 backdrop-blur-md">
+      <div class="flex items-center space-x-1.5 overflow-x-auto py-0.5 max-w-full">
+        <template x-for="(p, index) in pestanasAbiertas" :key="p.id">
+          <div class="group flex items-center rounded-xl text-xs transition border cursor-pointer shrink-0 pl-3 pr-2 py-1.5"
+               :class="pestanaActivaId === p.id 
+                       ? 'bg-gray-800/95 text-white border-cyan-500/40 shadow-lg shadow-cyan-500/10 font-medium ring-1 ring-cyan-500/20' 
+                       : 'bg-gray-900/60 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-gray-800/80'"
+               @click="activarPestana(p.id)">
+            <!-- ICONO -->
+            <i :class="'fa-solid ' + p.icono + ' mr-2 text-[11px] ' + (pestanaActivaId === p.id ? 'text-cyan-400' : 'text-gray-500')"></i>
+            
+            <!-- TÍTULO -->
+            <span class="max-w-[130px] sm:max-w-[180px] truncate" x-text="p.titulo"></span>
+            
+            <!-- BOTÓN ABRIR EN PESTAÑA NUEVA DEL NAVEGADOR -->
+            <a :href="p.url" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" 
+               class="ml-2 p-1 text-gray-500 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-md transition opacity-0 group-hover:opacity-100">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+            </a>
+
+            <!-- BOTÓN CERRAR PESTAÑA -->
+            <button x-show="pestanasAbiertas.length > 1" @click.stop="cerrarPestana(p.id)" 
+                    class="ml-1 p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition" 
+                    title="Cerrar pestaña">
+              <i class="fa-solid fa-xmark text-[10px]"></i>
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <!-- BOTONES ACCIONES RÁPIDAS DE PESTAÑAS -->
+      <div class="flex items-center space-x-1.5 shrink-0 text-xs">
+        <button x-show="pestanasAbiertas.length > 1" @click="cerrarOtrasPestanas()" title="Cerrar las demás pestañas" 
+                class="px-2 py-1 text-[11px] text-gray-400 hover:text-gray-200 bg-gray-900/60 hover:bg-gray-800 rounded-lg border border-gray-800 transition hidden sm:inline-flex items-center space-x-1">
+          <i class="fa-solid fa-compress text-[10px]"></i>
+          <span>Cerrar otras</span>
+        </button>
+      </div>
+    </nav>
 
     <!-- CUERPO DE LA APLICACIÓN -->
     <main class="flex-1 p-8 space-y-6 overflow-y-auto max-w-7xl w-full mx-auto">
@@ -1436,14 +1518,19 @@ def dashboard_html():
 
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-              <div @click="abrirAsignatura(asig)" class="glass-card p-5 rounded-2xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/60 transition group flex flex-col justify-between">
+              <div @click="abrirAsignatura(asig)" class="glass-card p-5 rounded-2xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/60 transition group flex flex-col justify-between relative">
                 <div>
                   <div class="flex items-start justify-between">
                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700" x-text="asig.curso"></span>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                          :class="asig.progreso.total_evaluados > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-400'"
-                          x-text="asig.progreso.total_evaluados > 0 ? asig.progreso.estado : 'Sin evaluar'">
-                    </span>
+                    <div class="flex items-center space-x-1.5">
+                      <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" class="p-1 text-gray-500 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition rounded-lg hover:bg-gray-800">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
+                      </a>
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            :class="asig.progreso.total_evaluados > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-400'"
+                            x-text="asig.progreso.total_evaluados > 0 ? asig.progreso.estado : 'Sin evaluar'">
+                      </span>
+                    </div>
                   </div>
                   <h4 class="font-bold text-white text-sm mt-3 group-hover:text-cyan-400 transition" x-text="asig.nombre"></h4>
                 </div>
@@ -1518,9 +1605,14 @@ def dashboard_html():
                       <p class="text-[10px] text-amber-400 font-bold" x-text="clase.fecha"></p>
                       <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="clase.titulo"></h5>
                     </div>
-                    <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition shrink-0 ml-2">
-                      Leer
-                    </button>
+                    <div class="flex items-center space-x-1 shrink-0 ml-2">
+                      <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition">
+                        Leer
+                      </button>
+                      <a :href="'/?guia=' + encodeURIComponent(clase.archivo) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-gray-800 rounded-lg transition text-xs">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                      </a>
+                    </div>
                   </div>
                 </template>
                 <div x-show="asigSeleccionada?.clases.length === 0" class="text-center py-10 text-gray-500 text-xs">
@@ -1552,6 +1644,9 @@ def dashboard_html():
                       <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0">
                         Estudiar
                       </button>
+                      <a :href="'/?guia=' + encodeURIComponent('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 hover:bg-gray-800 rounded-lg transition text-xs shrink-0">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                      </a>
                       <button @click="eliminarGuia(asigSeleccionada.nombre, guia)" title="Eliminar guía" class="p-1.5 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition text-xs shrink-0">
                         <i class="fa-solid fa-trash-can"></i>
                       </button>
@@ -1572,6 +1667,9 @@ def dashboard_html():
                         <button @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + m, m)" title="Visualizar PDF integrado" class="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px] transition font-semibold hover:bg-cyan-500/30">
                           👁️ Ver
                         </button>
+                        <a :href="'/api/archivo-raw?ruta=' + encodeURIComponent('data/materiales/' + asigSeleccionada.nombre + '/' + m)" target="_blank" title="Abrir PDF en pestaña nueva del navegador" class="px-1.5 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] transition font-semibold flex items-center">
+                          <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                        </a>
                         <button @click="generarGuiaDesdePdf(m)" title="Generar Guía y Test IA de este tema" class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded text-[10px] transition hover:bg-emerald-500/30 font-semibold flex items-center space-x-1">
                           <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
                           <span>IA</span>
@@ -1606,9 +1704,14 @@ def dashboard_html():
                       </button>
                     </div>
                     <p class="text-[11px] text-gray-400 mt-1">10 preguntas tipo test con formato oficial</p>
-                    <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="mt-3 w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
-                      Comenzar Simulacro
-                    </button>
+                    <div class="mt-3 flex items-center space-x-2">
+                      <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
+                        Comenzar Simulacro
+                      </button>
+                      <a :href="'/?test=' + encodeURIComponent(test) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir simulacro en pestaña nueva del navegador" class="p-2 bg-gray-800 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 rounded-xl transition border border-gray-700/80">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+                      </a>
+                    </div>
                   </div>
                 </template>
                 <div x-show="asigSeleccionada?.tests.length === 0" class="text-center py-10 text-gray-500 text-xs">
@@ -1627,10 +1730,15 @@ def dashboard_html():
         <!-- REJILLA GENERAL SI NO HAY ASIGNATURA SELECCIONADA -->
         <div x-show="!asigSeleccionada" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-            <div @click="abrirAsignatura(asig)" class="glass p-6 rounded-3xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/40 transition group">
+            <div @click="abrirAsignatura(asig)" class="glass p-6 rounded-3xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/40 transition group relative">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full" x-text="asig.curso"></span>
-                <i class="fa-solid fa-chevron-right text-gray-500 group-hover:text-cyan-400 transition"></i>
+                <div class="flex items-center space-x-1.5">
+                  <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" class="p-1 text-gray-500 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition rounded-lg hover:bg-gray-800">
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
+                  </a>
+                  <i class="fa-solid fa-chevron-right text-gray-500 group-hover:text-cyan-400 transition"></i>
+                </div>
               </div>
               <h3 class="text-base font-bold text-white mt-3 group-hover:text-cyan-300 transition" x-text="asig.nombre"></h3>
               
@@ -2061,9 +2169,18 @@ def dashboard_html():
     <div class="glass w-full max-w-5xl lg:max-w-6xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-gray-700 shadow-2xl">
       <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between gap-4">
         <h4 class="font-bold text-white text-sm break-words pr-2 line-clamp-2" x-text="modalTitulo"></h4>
-        <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg shrink-0">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
+        <div class="flex items-center space-x-1.5 shrink-0">
+          <a :href="'/?guia=' + encodeURIComponent(modalRutaActiva || '') + '&asig=' + encodeURIComponent(asigSeleccionada?.nombre || '')" 
+             target="_blank" title="Abrir en pestaña nueva del navegador" class="p-2 text-gray-400 hover:text-cyan-400 rounded-lg hover:bg-gray-800 transition">
+            <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
+          </a>
+          <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg" title="Minimizar (conservar en pestañas)">
+            <i class="fa-solid fa-minus text-sm"></i>
+          </button>
+          <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg" title="Cerrar visor">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
       </div>
       <div class="flex-1 p-6 overflow-y-auto markdown-content text-sm leading-relaxed" x-html="marked.parse(modalContenido)"></div>
     </div>
@@ -2108,7 +2225,15 @@ def dashboard_html():
             </button>
           </div>
 
-          <button @click="modalTest = false" class="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition">
+          <a :href="'/?test=' + encodeURIComponent(testActivoNombre) + '&asig=' + encodeURIComponent(testActivoAsig)" target="_blank"
+             title="Abrir este simulacro en pestaña nueva del navegador" class="text-gray-400 hover:text-emerald-400 p-2 rounded-xl hover:bg-gray-800 transition">
+            <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
+          </a>
+          <button @click="modalTest = false" title="Minimizar (conservar respuestas en curso)" class="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition">
+            <i class="fa-solid fa-minus text-sm"></i>
+          </button>
+          <button @click="if (confirm('¿Deseas cerrar el simulador? Podrás retomarlo desde la pestaña superior en cualquier momento.')) { modalTest = false; }" 
+                  class="text-gray-400 hover:text-rose-400 p-2 rounded-xl hover:bg-gray-800 transition" title="Cerrar simulacro">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
@@ -2478,10 +2603,13 @@ def dashboard_html():
             <i class="fa-solid fa-robot"></i>
             <span>Preguntar a NOVA</span>
           </button>
-          <a :href="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" target="_blank" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs transition" title="Abrir en pestaña nueva">
+          <a :href="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" target="_blank" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs transition" title="Abrir en pestaña nueva del navegador">
             <i class="fa-solid fa-arrow-up-right-from-square"></i>
           </a>
-          <button @click="modalVisorPdf = false" class="text-gray-400 hover:text-white p-1.5 rounded-lg">
+          <button @click="modalVisorPdf = false" class="text-gray-400 hover:text-white p-1.5 rounded-lg" title="Minimizar (conservar en pestañas)">
+            <i class="fa-solid fa-minus text-sm"></i>
+          </button>
+          <button @click="modalVisorPdf = false" class="text-gray-400 hover:text-white p-1.5 rounded-lg" title="Cerrar visor">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
@@ -2498,6 +2626,14 @@ def dashboard_html():
       return {
         tab: 'dashboard',
         sidebarVisible: localStorage.getItem('unir_sidebar_visible') !== 'false',
+        
+        // Sistema de Pestañas Multi-tarea
+        pestanasAbiertas: [
+          { id: 'dashboard', titulo: 'Inicio (Dashboard)', icono: 'fa-house', tipo: 'seccion', seccion: 'dashboard', url: '/?tab=dashboard' }
+        ],
+        pestanaActivaId: 'dashboard',
+        modalRutaActiva: '',
+
         programas: [],
         programaActivoId: 'dam',
         cursoFiltro: 'todos',
@@ -2662,6 +2798,181 @@ def dashboard_html():
           await this.cargarAgenda();
           await this.cargarFlashcards();
           this.actualizarMensajeBienvenidaChat();
+          await this.procesarUrlInicial();
+        },
+
+        abrirOPestana(p) {
+          const index = this.pestanasAbiertas.findIndex(x => x.id === p.id);
+          if (index === -1) {
+            this.pestanasAbiertas.push(p);
+          } else {
+            this.pestanasAbiertas[index] = { ...this.pestanasAbiertas[index], ...p };
+          }
+          this.activarPestana(p.id);
+        },
+
+        activarPestana(id) {
+          this.pestanaActivaId = id;
+          const p = this.pestanasAbiertas.find(x => x.id === id);
+          if (!p) return;
+
+          if (p.url && window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', p.url);
+          }
+
+          if (p.tipo === 'seccion') {
+            this.tab = p.seccion;
+            this.asigSeleccionada = null;
+            this.modalVisor = false;
+            this.modalTest = false;
+            this.modalVisorPdf = false;
+          } else if (p.tipo === 'asignatura') {
+            this.tab = 'asignaturas';
+            const asigObj = this.catalogoTotal.find(a => a.nombre.toLowerCase() === (p.data?.nombre || p.data || '').toLowerCase());
+            if (asigObj) {
+              this.asigSeleccionada = asigObj;
+            } else if (p.data && typeof p.data === 'object') {
+              this.asigSeleccionada = p.data;
+            }
+            this.modalVisor = false;
+            this.modalTest = false;
+            this.modalVisorPdf = false;
+          } else if (p.tipo === 'guia') {
+            this.modalTitulo = p.titulo;
+            this.modalContenido = p.data?.contenido || this.modalContenido;
+            this.modalRutaActiva = p.data?.ruta || '';
+            this.modalVisor = true;
+            this.modalTest = false;
+            this.modalVisorPdf = false;
+          } else if (p.tipo === 'test') {
+            this.modalTest = true;
+            this.modalVisor = false;
+            this.modalVisorPdf = false;
+          } else if (p.tipo === 'pdf') {
+            this.modalRutaPdf = p.data?.ruta || '';
+            this.modalTitulo = p.titulo;
+            this.modalVisorPdf = true;
+            this.modalVisor = false;
+            this.modalTest = false;
+          }
+        },
+
+        cerrarPestana(id) {
+          const index = this.pestanasAbiertas.findIndex(x => x.id === id);
+          if (index === -1) return;
+
+          const cerradaEsActiva = (this.pestanaActivaId === id);
+          const pCerrada = this.pestanasAbiertas[index];
+
+          if (pCerrada.tipo === 'test' && this.modalTest && this.testActivoNombre) {
+            if (!this.testFinalizado) {
+              if (!confirm('¿Cerrar la pestaña del test en curso? Se perderán las respuestas actuales de este intento.')) {
+                return;
+              }
+            }
+            this.modalTest = false;
+          } else if (pCerrada.tipo === 'guia' && this.modalVisor) {
+            this.modalVisor = false;
+          } else if (pCerrada.tipo === 'pdf' && this.modalVisorPdf) {
+            this.modalVisorPdf = false;
+          }
+
+          this.pestanasAbiertas.splice(index, 1);
+
+          if (this.pestanasAbiertas.length === 0) {
+            this.pestanasAbiertas.push({
+              id: 'dashboard',
+              titulo: 'Inicio (Dashboard)',
+              icono: 'fa-house',
+              tipo: 'seccion',
+              seccion: 'dashboard',
+              url: '/?tab=dashboard'
+            });
+            this.activarPestana('dashboard');
+            return;
+          }
+
+          if (cerradaEsActiva) {
+            const nuevoIndex = Math.max(0, index - 1);
+            this.activarPestana(this.pestanasAbiertas[nuevoIndex].id);
+          }
+        },
+
+        cerrarOtrasPestanas() {
+          const activa = this.pestanasAbiertas.find(x => x.id === this.pestanaActivaId);
+          if (activa) {
+            this.pestanasAbiertas = [activa];
+          }
+        },
+
+        cerrarPestanaActiva() {
+          this.cerrarPestana(this.pestanaActivaId);
+        },
+
+        irASeccion(sec) {
+          const titulos = {
+            dashboard: 'Inicio',
+            asignaturas: 'Materias & Temarios',
+            clases: 'Videoclases',
+            tutor: 'Tutor NOVA',
+            agenda: 'Agenda & PACs',
+            flashcards: 'Flashcards',
+            progreso: 'Calificaciones'
+          };
+          const iconos = {
+            dashboard: 'fa-house',
+            asignaturas: 'fa-folder-tree',
+            clases: 'fa-video',
+            tutor: 'fa-robot',
+            agenda: 'fa-calendar-check',
+            flashcards: 'fa-clone',
+            progreso: 'fa-trophy'
+          };
+          this.tab = sec;
+          this.asigSeleccionada = null;
+          this.abrirOPestana({
+            id: 'sec-' + sec,
+            titulo: titulos[sec] || sec,
+            icono: iconos[sec] || 'fa-folder',
+            tipo: 'seccion',
+            seccion: sec,
+            url: '/?tab=' + encodeURIComponent(sec)
+          });
+        },
+
+        async procesarUrlInicial() {
+          const params = new URLSearchParams(window.location.search);
+          const tabParam = params.get('tab');
+          const asigParam = params.get('asig');
+          const guiaParam = params.get('guia');
+          const testParam = params.get('test');
+          const pdfParam = params.get('pdf');
+
+          if (asigParam) {
+            const asigObj = this.catalogoTotal.find(a => a.nombre.toLowerCase() === asigParam.toLowerCase());
+            if (asigObj) {
+              this.asigSeleccionada = asigObj;
+            }
+          }
+
+          if (testParam && asigParam) {
+            await this.iniciarTestWeb(asigParam, testParam);
+          } else if (guiaParam) {
+            await this.verContenidoArchivo(guiaParam);
+          } else if (pdfParam) {
+            const nombre = pdfParam.split('/').pop() || 'Documento PDF';
+            this.abrirPdf(pdfParam, nombre);
+          } else if (asigParam && !tabParam) {
+            if (this.asigSeleccionada) {
+              this.abrirAsignatura(this.asigSeleccionada);
+            }
+          } else if (tabParam) {
+            if (tabParam === 'tutor' && asigParam) {
+              this.abrirChatConAsignatura(asigParam);
+            } else {
+              this.irASeccion(tabParam);
+            }
+          }
         },
 
         async cargarProgramas() {
@@ -2957,20 +3268,47 @@ def dashboard_html():
         abrirAsignatura(asig) {
           this.asigSeleccionada = asig;
           this.tab = 'asignaturas';
+          this.abrirOPestana({
+            id: 'asig-' + asig.nombre,
+            titulo: asig.nombre,
+            icono: 'fa-book-bookmark',
+            tipo: 'asignatura',
+            data: asig,
+            url: '/?asig=' + encodeURIComponent(asig.nombre)
+          });
         },
 
         abrirChatConAsignatura(nombre) {
           this.chatAsignatura = nombre;
           this.tab = 'tutor';
+          const tit = nombre ? `Tutor (${nombre})` : 'Tutor NOVA';
+          this.abrirOPestana({
+            id: 'tutor-' + (nombre || 'global'),
+            titulo: tit,
+            icono: 'fa-robot',
+            tipo: 'seccion',
+            seccion: 'tutor',
+            url: '/?tab=tutor' + (nombre ? '&asig=' + encodeURIComponent(nombre) : '')
+          });
         },
 
         async verContenidoArchivo(ruta) {
           try {
             const res = await fetch('/api/contenido?ruta=' + encodeURIComponent(ruta));
             const data = await res.json();
-            this.modalTitulo = data.nombre.replace(/_/g, ' ').replace(/\\.md$/i, '');
+            const tituloLimpio = data.nombre.replace(/_/g, ' ').replace(/\\.md$/i, '');
+            this.modalTitulo = tituloLimpio;
             this.modalContenido = data.contenido;
+            this.modalRutaActiva = ruta;
             this.modalVisor = true;
+            this.abrirOPestana({
+              id: 'doc-' + ruta,
+              titulo: tituloLimpio,
+              icono: 'fa-file-lines',
+              tipo: 'guia',
+              data: { ruta, contenido: data.contenido },
+              url: '/?guia=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '')
+            });
           } catch(e) { alert('No se pudo abrir el archivo'); }
         },
 
@@ -3037,6 +3375,15 @@ def dashboard_html():
             this.testMostrarPista = false;
             this.testModo = 'notebook';
             this.modalTest = true;
+            const tit = testNombre.replace('_test', '').replaceAll('_', ' ');
+            this.abrirOPestana({
+              id: 'test-' + asignatura + '-' + testNombre,
+              titulo: 'Test: ' + tit,
+              icono: 'fa-spell-check',
+              tipo: 'test',
+              data: { asignatura, testNombre },
+              url: '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura)
+            });
           } catch(e) { alert('No se pudo cargar el test'); }
         },
 
@@ -3278,6 +3625,14 @@ def dashboard_html():
           this.modalRutaPdf = ruta;
           this.modalTitulo = titulo;
           this.modalVisorPdf = true;
+          this.abrirOPestana({
+            id: 'pdf-' + ruta,
+            titulo: titulo.replace(/\\.pdf$/i, ''),
+            icono: 'fa-file-pdf',
+            tipo: 'pdf',
+            data: { ruta, titulo },
+            url: '/?pdf=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '')
+          });
         },
 
         consultarNovaPdf() {
