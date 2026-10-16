@@ -311,8 +311,6 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
 
     return nombre_sucio.strip()
 
-    return nombre_sucio.strip()
-
 
 def sincronizar_estudios_externos():
     """
@@ -375,7 +373,14 @@ def sincronizar_estudios_externos():
                 for f in dir_src.glob("**/*"):
                     if f.is_file() and f.suffix.lower() in [".pdf", ".docx", ".zip", ".psc"]:
                         dest_link = dir_dest / f.name
-                        if not dest_link.exists():
+                        # Evitar re-crear enlaces genéricos si ya existe un archivo con título descriptivo (ej: "Tema 1. *.pdf")
+                        stem_prefix = f.stem.lower() + "."
+                        ya_existe = any(
+                            dest_item.name.lower() == f.name.lower() or 
+                            dest_item.name.lower().startswith(stem_prefix)
+                            for dest_item in dir_dest.iterdir()
+                        )
+                        if not ya_existe:
                             try:
                                 os.symlink(f.resolve(), dest_link)
                             except Exception:
@@ -435,8 +440,16 @@ def reorganizar_biblioteca_completa():
                         elif "di_" in n_low or "interfaces" in n_low: destino_asig = "Desarrollo de Interfaces"
                         elif "ad_" in n_low or "mongo" in n_low: destino_asig = "Acceso a Datos"
                         elif "sge" in n_low or "odoo" in n_low: destino_asig = "Sistemas de Gestión Empresarial"
-                        elif "ipe" in n_low: destino_asig = "Itinerario para la Empleabilidad II"
-                        elif "unit" in n_low or "english" in n_low: destino_asig = "Inglés Profesional"
+                        elif "ipe" in n_low or "empleabilidad" in n_low:
+                            if any(k in n_low for k in ["ii", "2", "inserción", "insercion", "emprendedor", "negocio"]):
+                                destino_asig = "Itinerario para la Empleabilidad II"
+                            else:
+                                destino_asig = "1º DAM - Itinerario para la Empleabilidad I"
+                        elif "unit" in n_low or "english" in n_low or "inglés" in n_low or "ingles" in n_low:
+                            if any(k in n_low for k in ["profesional", "gs", "effective", "connecting"]):
+                                destino_asig = "Inglés Profesional"
+                            else:
+                                destino_asig = "1º DAM - Inglés Técnico I"
 
                 dir_dest = MATERIALES_DIR / destino_asig
                 dir_dest.mkdir(parents=True, exist_ok=True)
