@@ -1122,9 +1122,12 @@ def api_chat_stream(msg: ChatMessage):
             pass
 
         if not emitido:
-            prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
-            res = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
-            texto_final = res or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
+            try:
+                prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
+                res = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
+                texto_final = res or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
+            except Exception:
+                texto_final = "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
             yield f"data: {json.dumps({'chunk': texto_final}, ensure_ascii=False)}\n\n"
 
         yield f"data: {json.dumps({'done': True})}\n\n"
@@ -4305,13 +4308,16 @@ def dashboard_html():
                     acumulado += payload.chunk;
                     actualizarMensajeEnOrigen(acumulado, false);
                   }
-                  if (payload.done) {
-                    actualizarMensajeEnOrigen(acumulado || 'Sin respuesta de NOVA.', true);
+                  if (payload.done && acumulado.trim()) {
+                    actualizarMensajeEnOrigen(acumulado, true);
                   }
                 } catch (parseErr) {}
               }
             }
-            actualizarMensajeEnOrigen(acumulado || 'Sin respuesta de NOVA.', true);
+            if (!acumulado.trim()) {
+              throw new Error('Stream vacío');
+            }
+            actualizarMensajeEnOrigen(acumulado, true);
           } catch(e) {
             try {
               const resFallback = await fetch('/api/chat', {

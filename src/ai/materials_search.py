@@ -3,6 +3,7 @@ Motor de Búsqueda RAG en Materiales Oficiales (PDFs, DOCX, Guías) de UNIR Stud
 Permite a NOVA consultar temarios oficiales, enunciados de actividades y pautas docentes.
 """
 
+import logging
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import pypdf
+
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 from src.core.config import MATERIALES_DIR
 

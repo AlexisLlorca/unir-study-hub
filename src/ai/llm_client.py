@@ -49,9 +49,45 @@ DIRECTRICES DE MÁXIMA ROBUSTEZ Y RIGOR TÉCNICO:
 class LLMClient:
     """Gestiona la comunicación con la API de Google Gemini."""
 
+    _modelos_agotados: set = set()
+
     def __init__(self, model_name: Optional[str] = None):
         self.model_name = model_name or DEFAULT_GEMINI_MODEL
         self._client: Optional[genai.Client] = None
+
+    @staticmethod
+    def _log_seguro(mensaje: str) -> None:
+        """Imprime en consola ignorando BrokenPipeError cuando el servidor corre en segundo plano."""
+        try:
+            console.print(mensaje)
+        except Exception:
+            pass
+
+    def _obtener_lista_modelos(self) -> List[str]:
+        """Devuelve la lista de modelos priorizando los que tienen cuota activa en esta sesión."""
+        candidatos = [
+            self.model_name,
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.7-flash",
+        ]
+        activos = []
+        agotados = []
+        for m in candidatos:
+            if not m or m in activos or m in agotados:
+                continue
+            if m in self._modelos_agotados:
+                agotados.append(m)
+            else:
+                activos.append(m)
+        return activos + agotados
+
+    def _registrar_error_modelo(self, mod: str, err: Exception) -> None:
+        err_str = str(err)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "404" in err_str or "NOT_FOUND" in err_str:
+            self._modelos_agotados.add(mod)
 
     def _obtener_cliente(self) -> Optional[genai.Client]:
         """Inicializa de forma perezosa el cliente de Gemini."""
@@ -66,7 +102,7 @@ class LLMClient:
             self._client = genai.Client(api_key=api_key)
             return self._client
         except Exception as e:
-            console.print(f"[red]Error inicializando cliente de Gemini:[/red] {e}")
+            self._log_seguro(f"[red]Error inicializando cliente de Gemini:[/red] {e}")
             return None
 
     def esta_configurado(self) -> bool:
@@ -75,20 +111,15 @@ class LLMClient:
 
     def solicitar_api_key_interactiva(self) -> bool:
         """Pide al usuario su clave de Gemini si aún no la ha configurado."""
-        console.print(
-            Panel.fit(
-                "[bold cyan]🔑 CONFIGURACIÓN DE INTELIGENCIA ARTIFICIAL (Google Gemini)[/bold cyan]\n\n"
-                "Para activar el Tutor de IA, resúmenes automáticos y simulacros de examen,\n"
-                "necesitas una clave gratuita de Google Gemini.\n\n"
-                "👉 Consíguela gratis en: [bold underline white]https://aistudio.google.com/app/apikey[/bold underline white]\n",
-                border_style="cyan",
-            )
+        self._log_seguro(
+            "[bold cyan]🔑 CONFIGURACIÓN DE INTELIGENCIA ARTIFICIAL (Google Gemini)[/bold cyan]\n"
+            "Consíguela gratis en: https://aistudio.google.com/app/apikey"
         )
         clave = console.input("👉 Pega tu Gemini API Key (o pulsa Enter para omitir): ").strip()
         if clave:
             save_gemini_api_key(clave)
             self._client = None
-            console.print("[bold green]✔ Clave de Gemini guardada correctamente en .env.[/bold green]\n")
+            self._log_seguro("[bold green]✔ Clave de Gemini guardada correctamente en .env.[/bold green]\n")
             return True
         return False
 
@@ -117,21 +148,9 @@ class LLMClient:
             config_args["response_mime_type"] = response_mime_type
 
         config = types.GenerateContentConfig(**config_args)
+        modelos = self._obtener_lista_modelos()
 
-        modelos_candidatos = [
-            self.model_name,
-            "gemini-3.5-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite",
-            "gemini-3.7-flash",
-        ]
-        modelos = []
-        for m in modelos_candidatos:
-            if m and m not in modelos:
-                modelos.append(m)
-
-        for intento, mod in enumerate(modelos):
+        for mod in modelos:
             try:
                 response = client.models.generate_content(
                     model=mod,
@@ -139,16 +158,14 @@ class LLMClient:
                     config=config,
                 )
                 if response and response.text:
+                    self._modelos_agotados.discard(mod)
                     return response.text
             except Exception as e:
-                err_str = str(e)
-                console.print(f"[dim]Reintentando con modelo de respaldo tras error en {mod}: {e}[/dim]")
-                if "429" not in err_str and "RESOURCE_EXHAUSTED" not in err_str:
-                    import time
-                    time.sleep(1)
+                self._registrar_error_modelo(mod, e)
+                self._log_seguro(f"[dim]Reintentando con modelo de respaldo tras error en {mod}: {e}[/dim]")
                 continue
 
-        console.print("[bold red]❌ Error de comunicación con Gemini en todos los modelos disponibles.[/bold red]")
+        self._log_seguro("[bold red]❌ Error de comunicación con Gemini en todos los modelos disponibles.[/bold red]")
         return None
 
     def generar_chat(
@@ -195,20 +212,9 @@ class LLMClient:
             else:
                 contents_limpio.append(c)
 
-        modelos_candidatos = [
-            self.model_name,
-            "gemini-3.5-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite",
-            "gemini-3.7-flash",
-        ]
-        modelos = []
-        for m in modelos_candidatos:
-            if m and m not in modelos:
-                modelos.append(m)
+        modelos = self._obtener_lista_modelos()
 
-        for intento, mod in enumerate(modelos):
+        for mod in modelos:
             try:
                 response = client.models.generate_content(
                     model=mod,
@@ -216,16 +222,14 @@ class LLMClient:
                     config=config,
                 )
                 if response and response.text:
+                    self._modelos_agotados.discard(mod)
                     return response.text
             except Exception as e:
-                err_str = str(e)
-                console.print(f"[dim]Reintentando chat con modelo de respaldo tras error en {mod}: {e}[/dim]")
-                if "429" not in err_str and "RESOURCE_EXHAUSTED" not in err_str:
-                    import time
-                    time.sleep(1)
+                self._registrar_error_modelo(mod, e)
+                self._log_seguro(f"[dim]Reintentando chat con modelo de respaldo tras error en {mod}: {e}[/dim]")
                 continue
 
-        console.print("[bold red]❌ Error de comunicación con Gemini en chat multi-turno.[/bold red]")
+        self._log_seguro("[bold red]❌ Error de comunicación con Gemini en chat multi-turno.[/bold red]")
         return None
 
     def generar_chat_stream(
@@ -270,18 +274,7 @@ class LLMClient:
             else:
                 contents_limpio.append(c)
 
-        modelos_candidatos = [
-            self.model_name,
-            "gemini-3.5-flash",
-            "gemini-3.5-flash-lite",
-            "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite",
-            "gemini-3.7-flash",
-        ]
-        modelos = []
-        for m in modelos_candidatos:
-            if m and m not in modelos:
-                modelos.append(m)
+        modelos = self._obtener_lista_modelos()
 
         for mod in modelos:
             emitido = False
@@ -296,9 +289,11 @@ class LLMClient:
                         emitido = True
                         yield chunk.text
                 if emitido:
+                    self._modelos_agotados.discard(mod)
                     return
             except Exception as e:
-                console.print(f"[dim]Reintentando chat stream con modelo de respaldo tras error en {mod}: {e}[/dim]")
+                self._registrar_error_modelo(mod, e)
+                self._log_seguro(f"[dim]Reintentando chat stream con modelo de respaldo tras error en {mod}: {e}[/dim]")
                 if emitido:
                     return
                 continue
