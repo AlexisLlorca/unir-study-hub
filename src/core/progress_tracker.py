@@ -34,6 +34,7 @@ class GestorProgreso:
                 datos_iniciales = {
                     "historial_tests": [],
                     "ultimas_calificaciones": {},
+                    "preguntas_falladas": [],
                     "fecha_actualizacion": datetime.now().isoformat(),
                 }
                 escribir_json_atomico(self.archivo_progreso, datos_iniciales)
@@ -41,9 +42,11 @@ class GestorProgreso:
     def _cargar(self) -> Dict[str, Any]:
         try:
             with open(self.archivo_progreso, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                data.setdefault("preguntas_falladas", [])
+                return data
         except Exception:
-            return {"historial_tests": [], "ultimas_calificaciones": {}}
+            return {"historial_tests": [], "ultimas_calificaciones": {}, "preguntas_falladas": []}
 
     def _guardar(self, datos: Dict[str, Any]):
         datos["fecha_actualizacion"] = datetime.now().isoformat()
@@ -56,8 +59,10 @@ class GestorProgreso:
         nota: float,
         aciertos: int,
         total: int,
+        preguntas_falladas: Optional[List[Dict[str, Any]]] = None,
+        enunciados_acertados: Optional[List[str]] = None,
     ):
-        """Registra el resultado de un examen tipo test realizado en el sistema."""
+        """Registra el resultado de un examen tipo test y actualiza el banco de preguntas falladas."""
         with _PROGRESO_LOCK:
             datos = self._cargar()
             fecha_str = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -82,7 +87,57 @@ class GestorProgreso:
                 "fecha": fecha_str,
             }
 
+            banco_fallos: List[Dict[str, Any]] = datos.setdefault("preguntas_falladas", [])
+
+            # 1. Si el alumno acertó preguntas que estaban en el banco de fallos, eliminarlas (¡superadas!)
+            if enunciados_acertados:
+                acertadas_norm = {e.strip().lower() for e in enunciados_acertados if e}
+                banco_fallos = [
+                    f for f in banco_fallos
+                    if not (
+                        f.get("asignatura") == asignatura
+                        and str(f.get("enunciado", "")).strip().lower() in acertadas_norm
+                    )
+                ]
+
+            # 2. Añadir o actualizar preguntas falladas en este intento
+            if preguntas_falladas:
+                index_por_clave = {
+                    (f.get("asignatura", ""), str(f.get("enunciado", "")).strip().lower()): idx
+                    for idx, f in enumerate(banco_fallos)
+                }
+                for pf in preguntas_falladas:
+                    enun = str(pf.get("enunciado", "")).strip()
+                    if not enun or not pf.get("opciones") or not pf.get("correcta"):
+                        continue
+                    k = (asignatura, enun.lower())
+                    item_fallo = {
+                        "asignatura": asignatura,
+                        "tema": pf.get("tema") or tema,
+                        "enunciado": enun,
+                        "opciones": pf["opciones"],
+                        "correcta": pf["correcta"],
+                        "pista": pf.get("pista", ""),
+                        "justificacion": pf.get("justificacion", ""),
+                        "respuesta_erronea": pf.get("respuesta_erronea", ""),
+                        "fecha": fecha_str,
+                    }
+                    if k in index_por_clave:
+                        banco_fallos[index_por_clave[k]] = item_fallo
+                    else:
+                        index_por_clave[k] = len(banco_fallos)
+                        banco_fallos.append(item_fallo)
+
+            datos["preguntas_falladas"] = banco_fallos
             self._guardar(datos)
+
+    def obtener_preguntas_falladas(self, asignatura: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Devuelve las preguntas pendientes en el banco de fallos, opcionalmente filtradas por asignatura."""
+        datos = self._cargar()
+        fallos = datos.get("preguntas_falladas", [])
+        if asignatura:
+            return [f for f in fallos if f.get("asignatura") == asignatura]
+        return fallos
 
     def obtener_resumen_asignatura(self, asignatura: str) -> Dict[str, Any]:
         """Calcula estadísticas para una asignatura específica."""

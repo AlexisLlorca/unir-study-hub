@@ -228,6 +228,81 @@ class LLMClient:
         console.print("[bold red]❌ Error de comunicación con Gemini en chat multi-turno.[/bold red]")
         return None
 
+    def generar_chat_stream(
+        self,
+        mensajes: List[Dict[str, str]],
+        system_instruction: Optional[str] = None,
+        temperatura: float = 0.4,
+    ) -> Generator[str, None, None]:
+        """Genera una respuesta en streaming en un diálogo multi-turno con respaldo automático de modelos."""
+        client = self._obtener_cliente()
+        if not client:
+            return
+
+        sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
+        config = types.GenerateContentConfig(
+            system_instruction=sys_inst,
+            temperature=temperatura,
+        )
+
+        contents = []
+        for m in mensajes:
+            rol = m.get("role") or m.get("rol", "user")
+            texto = m.get("text") or m.get("texto", "")
+            if not texto:
+                continue
+            if rol not in ["user", "model"]:
+                rol = "user" if str(rol).lower() in ["alumno", "human", "usuario", "user"] else "model"
+            contents.append(
+                types.Content(
+                    role=rol,
+                    parts=[types.Part.from_text(text=texto)],
+                )
+            )
+
+        if not contents:
+            return
+
+        contents_limpio = []
+        for c in contents:
+            if contents_limpio and contents_limpio[-1].role == c.role:
+                contents_limpio[-1].parts.extend(c.parts)
+            else:
+                contents_limpio.append(c)
+
+        modelos_candidatos = [
+            self.model_name,
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.7-flash",
+        ]
+        modelos = []
+        for m in modelos_candidatos:
+            if m and m not in modelos:
+                modelos.append(m)
+
+        for mod in modelos:
+            emitido = False
+            try:
+                response_stream = client.models.generate_content_stream(
+                    model=mod,
+                    contents=contents_limpio,
+                    config=config,
+                )
+                for chunk in response_stream:
+                    if chunk.text:
+                        emitido = True
+                        yield chunk.text
+                if emitido:
+                    return
+            except Exception as e:
+                console.print(f"[dim]Reintentando chat stream con modelo de respaldo tras error en {mod}: {e}[/dim]")
+                if emitido:
+                    return
+                continue
+
     def generar_stream(
         self,
         prompt: str,

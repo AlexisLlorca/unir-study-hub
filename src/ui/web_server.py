@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional, List
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -57,7 +57,7 @@ from src.ui.security import (
     ruta_segura_lectura,
 )
 
-app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.2.0")
+app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.3.0")
 
 # Sin CORS: el frontend se sirve desde este mismo servidor, así que ninguna web externa
 # necesita (ni debe poder) leer las respuestas de la API.
@@ -119,9 +119,10 @@ def api_catalogo(programa: Optional[str] = None, curso: Optional[str] = None):
 
 @app.get("/api/progreso")
 def api_progreso():
-    """Retorna el estado del expediente y estadísticas globales."""
+    """Retorna el estado del expediente, banco de fallos y estadísticas globales."""
     datos = tracker._cargar()
     historial = datos.get("historial_tests", [])
+    falladas = datos.get("preguntas_falladas", [])
     notas = [r["nota"] for r in historial]
     media = round(sum(notas) / len(notas), 2) if notas else 0.0
 
@@ -130,7 +131,16 @@ def api_progreso():
         "tests_realizados": len(historial),
         "ultimas_calificaciones": datos.get("ultimas_calificaciones", {}),
         "historial": historial[-15:],
+        "preguntas_falladas": falladas,
+        "total_fallos_pendientes": len(falladas),
     }
+
+
+@app.get("/api/preguntas-falladas")
+def api_preguntas_falladas(asig: Optional[str] = None):
+    """Devuelve las preguntas pendientes en el banco de fallos para el Modo Repaso de Fallos."""
+    asig_limpia = nombre_seguro(asig, "asignatura") if asig else None
+    return tracker.obtener_preguntas_falladas(asignatura=asig_limpia)
 
 
 @app.get("/api/acceso-movil")
@@ -184,17 +194,21 @@ class TestSubmission(BaseModel):
     nota: float
     aciertos: int
     total: int
+    preguntas_falladas: Optional[List[Dict[str, Any]]] = None
+    enunciados_acertados: Optional[List[str]] = None
 
 
 @app.post("/api/test/guardar")
 def api_guardar_test(sub: TestSubmission):
-    """Registra la calificación de un test realizado en la web."""
+    """Registra la calificación de un test realizado en la web y sincroniza el banco de fallos."""
     tracker.registrar_resultado_test(
         asignatura=nombre_seguro(sub.asignatura, "asignatura"),
         tema=sub.tema.strip()[:200],
         nota=sub.nota,
         aciertos=sub.aciertos,
         total=sub.total,
+        preguntas_falladas=sub.preguntas_falladas,
+        enunciados_acertados=sub.enunciados_acertados,
     )
     return {"status": "ok"}
 
@@ -979,9 +993,8 @@ class ChatMessage(BaseModel):
     historial: Optional[List[ChatHistorialItem]] = None
 
 
-@app.post("/api/chat")
-def api_chat(msg: ChatMessage):
-    """Responde preguntas mediante NOVA con rol especializado, memoria multi-turno e inyección RAG completa."""
+def _preparar_contexto_chat(msg: ChatMessage):
+    """Prepara las instrucciones de sistema especializadas y el historial con inyección RAG local."""
     from src.ai.transcription_search import formatear_contexto_para_tutor
     from src.ai.materials_search import buscar_en_materiales
 
@@ -1041,7 +1054,6 @@ def api_chat(msg: ChatMessage):
 
     system_instruction_completo = f"{contexto_rol}\n{instrucciones_base}\n{contexto_asig}".strip()
 
-    # Preparar el contexto local para este turno
     bloques_contexto = []
     if contexto_citas:
         bloques_contexto.append(contexto_citas)
@@ -1056,30 +1068,70 @@ def api_chat(msg: ChatMessage):
     else:
         mensaje_actual_con_contexto = msg.mensaje
 
-    # Construir historial multi-turno para Gemini
     mensajes_chat = []
     if msg.historial:
-        for item in msg.historial[-8:]:  # Últimos 8 turnos de memoria
+        for item in msg.historial[-8:]:
             rol = "user" if item.rol in ["user", "alumno", "usuario"] else "model"
             if item.texto and item.texto.strip():
                 mensajes_chat.append({"role": rol, "text": item.texto.strip()})
 
-    # Añadir el turno actual del alumno con el contexto enriquecido
     mensajes_chat.append({"role": "user", "text": mensaje_actual_con_contexto})
+    return system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto
 
-    # Generar respuesta multi-turno con Gemini 3.7 Flash
+
+@app.post("/api/chat")
+def api_chat(msg: ChatMessage):
+    """Responde preguntas mediante NOVA con rol especializado, memoria multi-turno e inyección RAG completa."""
+    system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg)
+
     respuesta = tutor_ia.client.generar_chat(
         mensajes=mensajes_chat,
         system_instruction=system_instruction_completo,
-        temperatura=0.4
+        temperatura=0.4,
     )
 
     if not respuesta:
-        # Fallback a generación estándar si fallara el chat estructurado
         prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
         respuesta = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
 
     return {"respuesta": respuesta or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."}
+
+
+@app.post("/api/chat-stream")
+def api_chat_stream(msg: ChatMessage):
+    """Emite la respuesta de NOVA en tiempo real mediante Server-Sent Events (SSE)."""
+    system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg)
+
+    def event_generator():
+        emitido = False
+        try:
+            for chunk in tutor_ia.client.generar_chat_stream(
+                mensajes=mensajes_chat,
+                system_instruction=system_instruction_completo,
+                temperatura=0.4,
+            ):
+                if chunk:
+                    emitido = True
+                    yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
+        except Exception:
+            pass
+
+        if not emitido:
+            prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
+            res = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
+            texto_final = res or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
+            yield f"data: {json.dumps({'chunk': texto_final}, ensure_ascii=False)}\n\n"
+
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # --- FRONTEND HTML SPA CON SIDEBAR DE SECCIONES ---
@@ -1794,6 +1846,24 @@ def dashboard_html():
                 <span class="text-[11px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.tests.length + ' tests'"></span>
               </div>
 
+              <!-- BANCO DE FALLOS DE ESTA ASIGNATURA -->
+              <div x-show="fallosDeAsignatura(asigSeleccionada?.nombre).length > 0"
+                   class="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-500/40 flex items-center justify-between gap-3 shadow-lg">
+                <div class="flex items-center space-x-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-fire-flame-curved text-sm"></i>
+                  </div>
+                  <div>
+                    <h5 class="text-xs font-bold text-rose-200" x-text="fallosDeAsignatura(asigSeleccionada?.nombre).length + ' preguntas falladas pendientes'"></h5>
+                    <p class="text-[10px] text-rose-300/80">Aciértalas en modo repaso para limpiarlas de tu expediente</p>
+                  </div>
+                </div>
+                <button @click="iniciarRepasoFallos(asigSeleccionada.nombre)"
+                        class="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-bold rounded-xl text-xs transition shrink-0 shadow-md shadow-rose-500/20">
+                  Repasar Fallos
+                </button>
+              </div>
+
               <div class="space-y-3">
                 <template x-for="test in asigSeleccionada?.tests" :key="test">
                   <div class="glass-card p-4 rounded-2xl border-l-4 border-emerald-400 hover:bg-gray-800/50 transition">
@@ -1803,7 +1873,7 @@ def dashboard_html():
                         <i class="fa-solid fa-trash-can"></i>
                       </button>
                     </div>
-                    <p class="text-[11px] text-gray-400 mt-1">10 preguntas tipo test con formato oficial</p>
+                    <p class="text-[11px] text-gray-400 mt-1">Simulacro interactivo con baremo oficial UNIR</p>
                     <div class="mt-3 flex items-center space-x-2">
                       <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
                         Comenzar Simulacro
@@ -1855,13 +1925,23 @@ def dashboard_html():
       <!-- ==================== 3. VISTA EXPEDIENTE Y CALIFICACIONES ==================== -->
       <div x-show="tab === 'progreso'" x-transition class="space-y-6">
         <div class="glass p-6 rounded-3xl border border-gray-800">
-          <h2 class="text-xl font-bold text-white flex items-center space-x-2">
-            <i class="fa-solid fa-trophy text-amber-400"></i>
-            <span>Expediente Académico y Calificaciones</span>
-          </h2>
-          <p class="text-xs text-gray-400 mt-1">Registro de todos los simulacros de examen realizados</p>
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+                <i class="fa-solid fa-trophy text-amber-400"></i>
+                <span>Expediente Académico y Calificaciones</span>
+              </h2>
+              <p class="text-xs text-gray-400 mt-1">Registro de todos los simulacros de examen realizados y banco inteligente de errores</p>
+            </div>
+            <button x-show="(progreso.total_fallos_pendientes || 0) > 0"
+                    @click="iniciarRepasoFallos('')"
+                    class="px-4 py-2.5 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-gray-950 font-black rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20">
+              <i class="fa-solid fa-fire-flame-curved"></i>
+              <span x-text="'Repasar mis ' + (progreso.total_fallos_pendientes || 0) + ' Preguntas Falladas'"></span>
+            </button>
+          </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
             <div class="glass-card p-5 rounded-2xl">
               <p class="text-xs text-gray-400 font-semibold">Nota Media General</p>
               <h3 class="text-3xl font-extrabold text-emerald-400 mt-1" x-text="(progreso.media_global || 0) + ' / 10'"></h3>
@@ -1869,6 +1949,12 @@ def dashboard_html():
             <div class="glass-card p-5 rounded-2xl">
               <p class="text-xs text-gray-400 font-semibold">Tests Completados</p>
               <h3 class="text-3xl font-extrabold text-white mt-1" x-text="progreso.tests_realizados || 0"></h3>
+            </div>
+            <div class="glass-card p-5 rounded-2xl">
+              <p class="text-xs text-gray-400 font-semibold">Fallos por Superar</p>
+              <h3 class="text-3xl font-extrabold mt-1"
+                  :class="(progreso.total_fallos_pendientes || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'"
+                  x-text="progreso.total_fallos_pendientes || 0"></h3>
             </div>
             <div class="glass-card p-5 rounded-2xl">
               <p class="text-xs text-gray-400 font-semibold">Semáforo General</p>
@@ -1883,7 +1969,7 @@ def dashboard_html():
                 <div class="glass-card p-4 rounded-xl flex items-center justify-between">
                   <div>
                     <h5 class="text-sm font-bold text-white" x-text="item.asignatura + ' — ' + item.tema"></h5>
-                    <p class="text-xs text-gray-400" x-text="item.fecha + ' • ' + item.aciertos + ' de ' + item.total + ' aciertos'"></p>
+                    <p class="text-xs text-gray-400" x-text="item.fecha + ' • ' + item.aciertos + ' de ' + (item.total_preguntas || item.total) + ' aciertos'"></p>
                   </div>
                   <span class="text-base font-black px-3 py-1 rounded-xl"
                         :class="item.nota >= 5 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'"
@@ -2336,6 +2422,21 @@ def dashboard_html():
         </div>
       </div>
 
+      <!-- PROGRESO PASO A PASO DURANTE LA GENERACIÓN -->
+      <div x-show="generandoIa" x-transition class="p-3.5 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold text-emerald-300 flex items-center space-x-2">
+            <i class="fa-solid fa-spinner fa-spin text-emerald-400"></i>
+            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y vinculando videoclase del tema...' : (generandoIaPaso === 2 ? 'Paso 2/3: Redactando Guía de Estudio (' + generadorProfundidad.toUpperCase() + ') con NOVA...' : 'Paso 3/3: Diseñando Simulacro Tipo Test (' + generadorNumPreguntas + ' preguntas UNIR)...')"></span>
+          </span>
+          <span class="text-[11px] font-mono text-emerald-400" x-text="generandoIaPaso + ' / 3'"></span>
+        </div>
+        <div class="w-full bg-gray-900 rounded-full h-1.5 overflow-hidden">
+          <div class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full transition-all duration-500"
+               :style="'width: ' + (generandoIaPaso === 1 ? '33%' : (generandoIaPaso === 2 ? '68%' : '95%'))"></div>
+        </div>
+      </div>
+
       <div class="pt-2 flex justify-end space-x-3">
         <button @click="modalGenerador = false" class="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl text-xs font-semibold">Cancelar</button>
         <button @click="ejecutarGeneracionIa()" :disabled="generandoIa || !generadorTemaNombre.trim()" class="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-xl text-xs transition flex items-center space-x-2 disabled:opacity-50">
@@ -2562,9 +2663,17 @@ def dashboard_html():
           <span class="text-gray-400" x-text="testBlancos + ' Blanco'"></span>
         </div>
         <p class="text-[11px] text-gray-500">Baremo oficial UNIR: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
-        <button @click="modalTest = false" class="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
-          Cerrar y Guardar Nota
-        </button>
+        <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <button x-show="(testFallos + testBlancos) > 0"
+                  @click="reintentarFallosIntentoActual()"
+                  class="px-5 py-2.5 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-gray-950 font-black rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20">
+            <i class="fa-solid fa-fire-flame-curved"></i>
+            <span x-text="'Repasar Ahora mis ' + (testFallos + testBlancos) + ' Errores / Blancos'"></span>
+          </button>
+          <button @click="modalTest = false" class="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
+            Cerrar y Guardar Nota
+          </button>
+        </div>
       </div>
 
       <!-- FOOTER NAVEGACIÓN -->
@@ -2635,7 +2744,12 @@ def dashboard_html():
           <div class="p-3.5 rounded-2xl bg-gray-900/60 border border-gray-800 hover:border-amber-500/30 transition flex flex-col md:flex-row md:items-start justify-between gap-3 group">
             <div class="flex-1 space-y-1">
               <div class="flex items-center space-x-2 text-xs">
-                <span class="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 text-[11px]" x-text="'⏱️ ' + cue.start_str"></span>
+                <button @click="abrirGrabacionEnMinuto(minuteroClase, cue.start)"
+                        class="font-mono font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/25 px-2 py-0.5 rounded-lg border border-amber-500/30 text-[11px] transition flex items-center space-x-1"
+                        title="Abrir grabación en este minuto">
+                  <i class="fa-solid fa-play text-[9px]"></i>
+                  <span x-text="cue.start_str"></span>
+                </button>
                 <span class="font-bold text-gray-200" x-text="cue.speaker"></span>
               </div>
               <p class="text-xs text-gray-300 leading-relaxed pl-1" x-text="cue.text"></p>
@@ -2836,6 +2950,7 @@ def dashboard_html():
         generadorProfundidad: 'media',
         generadorNumPreguntas: 10,
         generandoIa: false,
+        generandoIaPaso: 1,
         
         // Modal Visor
         modalVisor: false,
@@ -3383,6 +3498,9 @@ def dashboard_html():
         async ejecutarGeneracionIa() {
           if (!this.asigSeleccionada || !this.generadorTemaNombre.trim()) return;
           this.generandoIa = true;
+          this.generandoIaPaso = 1;
+          const timerPaso2 = setTimeout(() => { if (this.generandoIa) this.generandoIaPaso = 2; }, 3500);
+          const timerPaso3 = setTimeout(() => { if (this.generandoIa) this.generandoIaPaso = 3; }, 11000);
           try {
             const res = await fetch('/api/generar-guia', {
               method: 'POST',
@@ -3400,6 +3518,7 @@ def dashboard_html():
               alert(data.detail || 'Error al generar material con IA');
               return;
             }
+            this.generandoIaPaso = 3;
             await this.cargarCatalogo();
             await this.cargarProgreso();
             // Refrescar asignatura seleccionada
@@ -3418,8 +3537,63 @@ def dashboard_html():
             console.error(e);
             alert('Error de conexión al generar con IA.');
           } finally {
+            clearTimeout(timerPaso2);
+            clearTimeout(timerPaso3);
             this.generandoIa = false;
+            this.generandoIaPaso = 1;
           }
+        },
+
+        fallosDeAsignatura(nombreAsig) {
+          const lista = this.progreso?.preguntas_falladas || [];
+          if (!nombreAsig) return lista;
+          return lista.filter(f => f.asignatura === nombreAsig);
+        },
+
+        async iniciarRepasoFallos(nombreAsig) {
+          try {
+            const url = nombreAsig
+              ? '/api/preguntas-falladas?asignatura=' + encodeURIComponent(nombreAsig)
+              : '/api/preguntas-falladas';
+            const res = await fetch(url);
+            const fallos = await res.json();
+            if (!Array.isArray(fallos) || fallos.length === 0) {
+              alert('¡Enhorabuena! No tienes preguntas pendientes de repaso' + (nombreAsig ? ` en ${nombreAsig}` : '') + '.');
+              return;
+            }
+            this.testPreguntas = fallos;
+            this.testActivoAsig = nombreAsig || (fallos[0]?.asignatura || 'Repaso Global');
+            this.testActivoNombre = nombreAsig ? `Repaso_de_Fallos_${nombreAsig}` : 'Repaso_Global_de_Fallos';
+            this.testIndice = 0;
+            this.testRespuestasUsuario = {};
+            this.testRespuestaSeleccionada = null;
+            this.testFinalizado = false;
+            this.testMostrarPista = false;
+            this.testModo = 'notebook';
+            this.modalTest = true;
+          } catch(e) {
+            console.error(e);
+            alert('No se pudo cargar el banco de preguntas falladas.');
+          }
+        },
+
+        reintentarFallosIntentoActual() {
+          const falladas = [];
+          this.testPreguntas.forEach((p, idx) => {
+            const resp = this.testRespuestasUsuario[idx];
+            if (resp && resp !== p.correcta) {
+              falladas.push(p);
+            }
+          });
+          if (falladas.length === 0) return;
+          this.testPreguntas = falladas;
+          this.testActivoNombre = 'Repaso_de_Fallos_' + (this.testActivoAsig || '');
+          this.testIndice = 0;
+          this.testRespuestasUsuario = {};
+          this.testRespuestaSeleccionada = null;
+          this.testFinalizado = false;
+          this.testMostrarPista = false;
+          this.testModo = 'notebook';
         },
 
         obtenerClaveChat(asig) {
@@ -3742,6 +3916,22 @@ def dashboard_html():
             this.testNota = evalData.nota;
             this.testFinalizado = true;
 
+            const preguntasFalladas = [];
+            const enunciadosAcertados = [];
+            this.testPreguntas.forEach((p, idx) => {
+              const resp = this.testRespuestasUsuario[idx];
+              if (resp && resp === p.correcta) {
+                if (p.enunciado) enunciadosAcertados.push(p.enunciado);
+              } else if (resp && resp !== p.correcta) {
+                preguntasFalladas.push({
+                  ...p,
+                  asignatura: p.asignatura || this.testActivoAsig,
+                  tema: p.tema || this.testActivoNombre.replace('_test', '').replaceAll('_', ' '),
+                  respuesta_erronea: resp
+                });
+              }
+            });
+
             await fetch('/api/test/guardar', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -3750,7 +3940,9 @@ def dashboard_html():
                 tema: this.testActivoNombre.replace('_test', '').replaceAll('_', ' '),
                 nota: this.testNota,
                 aciertos: this.testAciertos,
-                total: this.testPreguntas.length
+                total: this.testPreguntas.length,
+                preguntas_falladas: preguntasFalladas,
+                enunciados_acertados: enunciadosAcertados
               })
             });
             await this.cargarProgreso();
@@ -3886,6 +4078,19 @@ def dashboard_html():
           } catch(e) { console.error(e); }
         },
 
+        abrirGrabacionEnMinuto(clase, startSeconds) {
+          if (!clase || !clase.recording_url) {
+            alert('Esta sesión no tiene un enlace directo a la grabación de vídeo disponible.');
+            return;
+          }
+          const segs = Math.max(0, Math.floor(Number(startSeconds) || 0));
+          let url = clase.recording_url;
+          if (!url.includes('#t=') && !url.includes('t=')) {
+            url += (url.includes('#') ? `&t=${segs}` : `#t=${segs}`);
+          }
+          window.open(url, '_blank', 'noopener');
+        },
+
         preguntarMinuto(cue, clase) {
           this.modalMinutero = false;
           this.chatAsignatura = clase.asignatura;
@@ -4015,22 +4220,39 @@ def dashboard_html():
             if (el) el.scrollTop = el.scrollHeight;
           });
 
-          const anexarRespuestaEnOrigen = (textoRespuesta) => {
+          const listaInicial = Array.isArray(this.chatHistorialesPorAsignatura[claveOrigen])
+            ? [...this.chatHistorialesPorAsignatura[claveOrigen]]
+            : [...this.chatHistorial];
+          const indiceMensajeModelo = listaInicial.length;
+          listaInicial.push({ rol: 'model', texto: '' });
+          this.chatHistorialesPorAsignatura[claveOrigen] = listaInicial;
+
+          const actualizarMensajeEnOrigen = (textoParcial, persistir = false) => {
             const listaOrigen = Array.isArray(this.chatHistorialesPorAsignatura[claveOrigen])
               ? [...this.chatHistorialesPorAsignatura[claveOrigen]]
               : [...this.chatHistorial];
-            listaOrigen.push({ rol: 'model', texto: textoRespuesta });
+            if (listaOrigen[indiceMensajeModelo]) {
+              listaOrigen[indiceMensajeModelo] = { rol: 'model', texto: textoParcial };
+            } else {
+              listaOrigen.push({ rol: 'model', texto: textoParcial });
+            }
             this.chatHistorialesPorAsignatura[claveOrigen] = listaOrigen;
-            try {
-              localStorage.setItem('unir_chat_' + claveOrigen, JSON.stringify(listaOrigen.slice(-40)));
-            } catch (err) {}
+            if (persistir) {
+              try {
+                localStorage.setItem('unir_chat_' + claveOrigen, JSON.stringify(listaOrigen.slice(-40)));
+              } catch (err) {}
+            }
             if (this.obtenerClaveChat(this.chatAsignatura) === claveOrigen) {
               this.chatHistorial = [...listaOrigen];
+              this.$nextTick(() => {
+                const el = document.getElementById('chatBox');
+                if (el) el.scrollTop = el.scrollHeight;
+              });
             }
           };
 
           try {
-            const res = await fetch('/api/chat', {
+            const res = await fetch('/api/chat-stream', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -4040,10 +4262,63 @@ def dashboard_html():
                 historial: historialPrevio
               })
             });
-            const data = await res.json();
-            anexarRespuestaEnOrigen(data.respuesta || 'Sin respuesta de NOVA.');
+
+            if (!res.ok || !res.body) {
+              throw new Error('Streaming no disponible');
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            let acumulado = '';
+            let primerChunkRecibido = false;
+
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const eventos = buffer.split('\\n\\n');
+              buffer = eventos.pop() || '';
+
+              for (const ev of eventos) {
+                const linea = ev.trim();
+                if (!linea.startsWith('data:')) continue;
+                const jsonStr = linea.slice(5).trim();
+                if (!jsonStr) continue;
+                try {
+                  const payload = JSON.parse(jsonStr);
+                  if (payload.chunk) {
+                    if (!primerChunkRecibido) {
+                      primerChunkRecibido = true;
+                      this.chatCargando = false;
+                    }
+                    acumulado += payload.chunk;
+                    actualizarMensajeEnOrigen(acumulado, false);
+                  }
+                  if (payload.done) {
+                    actualizarMensajeEnOrigen(acumulado || 'Sin respuesta de NOVA.', true);
+                  }
+                } catch (parseErr) {}
+              }
+            }
+            actualizarMensajeEnOrigen(acumulado || 'Sin respuesta de NOVA.', true);
           } catch(e) {
-            anexarRespuestaEnOrigen('Error al contactar con NOVA.');
+            try {
+              const resFallback = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mensaje: texto,
+                  asignatura: asigOrigen,
+                  programa: programaOrigen,
+                  historial: historialPrevio
+                })
+              });
+              const data = await resFallback.json();
+              actualizarMensajeEnOrigen(data.respuesta || 'Sin respuesta de NOVA.', true);
+            } catch (errFallback) {
+              actualizarMensajeEnOrigen('Error al contactar con NOVA.', true);
+            }
           } finally {
             this.chatCargando = false;
             this.$nextTick(() => {
