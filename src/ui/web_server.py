@@ -158,18 +158,23 @@ def api_acceso_movil(request: Request):
 
 @app.get("/api/contenido")
 def api_contenido(ruta: str):
-    """Devuelve el contenido en texto de cualquier guía o transcripción dentro de data/."""
-    archivo = ruta_segura_lectura(ruta, extensiones={".md", ".txt", ".json"})
+    """Devuelve el contenido en texto de cualquier guía, transcripción o documento .docx dentro de data/."""
+    archivo = ruta_segura_lectura(ruta, extensiones={".md", ".txt", ".json", ".docx"})
+    if archivo.suffix.lower() == ".docx":
+        from src.ai.materials_search import extraer_texto_docx
+        parrafos = [p.strip() for p in extraer_texto_docx(archivo).splitlines() if p.strip()]
+        contenido = f"# 📄 {archivo.name}\n\n" + "\n\n".join(parrafos) if parrafos else "*(Documento Word sin texto extraíble)*"
+        return {"contenido": contenido, "nombre": archivo.name}
     with open(archivo, "r", encoding="utf-8") as f:
         return {"contenido": f.read(), "nombre": archivo.name}
 
 
 @app.get("/api/archivo-raw")
 def api_archivo_raw(ruta: str):
-    """Sirve archivos directamente (como PDFs o imágenes) para visores integrados, validando la ruta."""
+    """Sirve archivos directamente (como PDFs, DOCX o imágenes) para visores integrados, validando la ruta."""
     archivo = ruta_segura_lectura(
         ruta,
-        extensiones={".pdf", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".md", ".txt", ".mp3", ".mp4", ".wav", ".m4a"},
+        extensiones={".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".md", ".txt", ".mp3", ".mp4", ".wav", ".m4a"},
     )
     media_type = "application/pdf" if archivo.suffix.lower() == ".pdf" else None
     return FileResponse(archivo, media_type=media_type)
@@ -2764,6 +2769,7 @@ def dashboard_html():
           <p>No se encontraron fragmentos para este filtro.</p>
         </div>
       </div>
+    </div>
   </div>
 
   <!-- ==================== MODAL: INFORME Y RESUMEN EJECUTIVO IA DE LA CLASE ==================== -->
@@ -4100,6 +4106,10 @@ def dashboard_html():
         },
 
         abrirPdf(ruta, titulo) {
+          if (/\\.(docx|md|txt)$/i.test(ruta || '')) {
+            this.verContenidoArchivo(ruta);
+            return;
+          }
           this.modalRutaPdf = ruta;
           this.modalTitulo = titulo;
           this.modalVisorPdf = true;
