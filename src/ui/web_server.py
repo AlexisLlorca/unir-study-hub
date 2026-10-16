@@ -996,6 +996,33 @@ class ChatMessage(BaseModel):
     asignatura: Optional[str] = None
     programa: Optional[str] = "dam"
     historial: Optional[List[ChatHistorialItem]] = None
+    modelo: Optional[str] = "auto"
+
+
+class ConfigurarProveedoresReq(BaseModel):
+    openrouter_key: Optional[str] = None
+    groq_key: Optional[str] = None
+    gemini_key: Optional[str] = None
+
+
+@app.get("/api/modelos-ia")
+def api_modelos_ia():
+    """Devuelve el catálogo de modelos gratuitos (Google AI Studio, Gemma 4, OpenRouter Free y Groq Free)."""
+    return tutor_ia.client.obtener_estado_modelos()
+
+
+@app.post("/api/proveedores-ia")
+def api_configurar_proveedores_ia(req: ConfigurarProveedoresReq):
+    """Guarda claves gratuitas adicionales (OpenRouter / Groq / Gemini) en .env."""
+    from src.core.config import save_openrouter_api_key, save_groq_api_key, save_gemini_api_key
+    if req.openrouter_key is not None and req.openrouter_key.strip():
+        save_openrouter_api_key(req.openrouter_key.strip())
+    if req.groq_key is not None and req.groq_key.strip():
+        save_groq_api_key(req.groq_key.strip())
+    if req.gemini_key is not None and req.gemini_key.strip():
+        save_gemini_api_key(req.gemini_key.strip())
+        tutor_ia.client._client = None
+    return tutor_ia.client.obtener_estado_modelos()
 
 
 def _preparar_contexto_chat(msg: ChatMessage):
@@ -1093,13 +1120,21 @@ def api_chat(msg: ChatMessage):
         mensajes=mensajes_chat,
         system_instruction=system_instruction_completo,
         temperatura=0.4,
+        modelo_preferido=msg.modelo,
     )
 
     if not respuesta:
         prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
-        respuesta = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
+        respuesta = tutor_ia.client.generar_contenido(
+            prompt_fallback, temperatura=0.4, modelo_preferido=msg.modelo
+        )
 
-    return {"respuesta": respuesta or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."}
+    mod_usado = tutor_ia.client.ultimo_modelo_usado
+    return {
+        "respuesta": respuesta or "No se pudo generar respuesta en este momento. Inténtalo de nuevo.",
+        "modelo_usado": mod_usado,
+        "modelo_nombre": tutor_ia.client.obtener_nombre_legible(mod_usado),
+    }
 
 
 @app.post("/api/chat-stream")
@@ -1114,23 +1149,29 @@ def api_chat_stream(msg: ChatMessage):
                 mensajes=mensajes_chat,
                 system_instruction=system_instruction_completo,
                 temperatura=0.4,
+                modelo_preferido=msg.modelo,
             ):
                 if chunk:
                     emitido = True
-                    yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
+                    mod_usado = tutor_ia.client.ultimo_modelo_usado
+                    yield f"data: {json.dumps({'chunk': chunk, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado)}, ensure_ascii=False)}\n\n"
         except Exception:
             pass
 
         if not emitido:
             try:
                 prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
-                res = tutor_ia.client.generar_contenido(prompt_fallback, temperatura=0.4)
+                res = tutor_ia.client.generar_contenido(
+                    prompt_fallback, temperatura=0.4, modelo_preferido=msg.modelo
+                )
                 texto_final = res or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
             except Exception:
                 texto_final = "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
-            yield f"data: {json.dumps({'chunk': texto_final}, ensure_ascii=False)}\n\n"
+            mod_usado = tutor_ia.client.ultimo_modelo_usado
+            yield f"data: {json.dumps({'chunk': texto_final, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado)}, ensure_ascii=False)}\n\n"
 
-        yield f"data: {json.dumps({'done': True})}\n\n"
+        mod_usado = tutor_ia.client.ultimo_modelo_usado
+        yield f"data: {json.dumps({'done': True, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -2126,7 +2167,7 @@ def dashboard_html():
       <!-- ==================== 4. VISTA TUTOR NOVA EN DIRECTO ==================== -->
       <div x-show="tab === 'tutor'" x-transition class="glass rounded-3xl flex flex-col h-[750px] overflow-hidden border border-gray-800">
         <!-- HEADER CHAT -->
-        <div class="p-4 bg-gray-900/90 border-b border-gray-800 flex items-center justify-between">
+        <div class="p-4 bg-gray-900/90 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center space-x-3">
             <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg"
                  :style="'background: ' + obtenerColorHex(programaActual?.color)">
@@ -2141,17 +2182,35 @@ def dashboard_html():
               </div>
               <p class="text-xs text-emerald-400 flex items-center">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-                Gemini 3.7 Flash · Memoria Conversacional Activa
+                <span x-text="(chatModeloActualNombre || 'Gemini 3 Flash Preview') + ' · Memoria Conversacional Activa'"></span>
               </p>
             </div>
           </div>
 
-          <div class="flex items-center space-x-2">
+          <div class="flex flex-wrap items-center gap-2">
             <span class="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-xl flex items-center space-x-1.5"
                   x-show="clasesDeAsignaturaActual.length > 0">
               <i class="fa-solid fa-video"></i>
               <span x-text="clasesDeAsignaturaActual.length + ' videoclases vinculadas'"></span>
             </span>
+
+            <!-- SELECTOR DE MODELOS GRATUITOS ESTILO OPENCODE -->
+            <div class="flex items-center space-x-1">
+              <select x-model="chatModeloSeleccionado" @change="cambiarModeloIa($event.target.value)"
+                      class="bg-gray-950 text-cyan-300 text-xs font-semibold px-3 py-1.5 rounded-xl border border-cyan-500/30 outline-none hover:border-cyan-400 transition"
+                      title="Seleccionar modelo de IA gratuito">
+                <template x-for="m in modelosIaDisponibles" :key="m.id">
+                  <option :value="m.id"
+                          x-text="(m.agotado_temporalmente ? '⏳ ' : (m.configurado ? '🟢 ' : '🔑 ')) + m.nombre"></option>
+                </template>
+              </select>
+              <button @click="configurarClavesIaGratis()"
+                      class="text-xs text-cyan-400 hover:text-white px-2.5 py-1.5 rounded-xl bg-gray-800 border border-gray-700 hover:border-cyan-500/40 transition"
+                      title="Añadir claves gratuitas opcionales de OpenRouter o Groq (DeepSeek V3, Qwen 3 235B, Llama 3.3 70B)">
+                <i class="fa-solid fa-key text-[11px]"></i>
+              </button>
+            </div>
+
             <select x-model="chatAsignatura" @change="cambiarAsignaturaChat($event.target.value)" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
               <option value="">General (Todo el programa)</option>
               <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
@@ -2972,6 +3031,9 @@ def dashboard_html():
         chatCargando: false,
         chatHistorial: [],
         chatHistorialesPorAsignatura: {},
+        chatModeloSeleccionado: localStorage.getItem('unir_modelo_ia') || 'auto',
+        chatModeloActualNombre: 'Gemini 3 Flash Preview',
+        modelosIaDisponibles: [],
 
         // Test Web
         modalTest: false,
@@ -3106,8 +3168,62 @@ def dashboard_html():
           await this.cargarVideoclases();
           await this.cargarAgenda();
           await this.cargarFlashcards();
+          await this.cargarModelosIa();
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
+        },
+
+        async cargarModelosIa() {
+          try {
+            const res = await fetch('/api/modelos-ia');
+            const data = await res.json();
+            this.modelosIaDisponibles = data.modelos || [];
+            if (data.ultimo_modelo_nombre) {
+              this.chatModeloActualNombre = data.ultimo_modelo_nombre;
+            }
+          } catch(e) { console.error(e); }
+        },
+
+        cambiarModeloIa(nuevoModelo) {
+          this.chatModeloSeleccionado = nuevoModelo || 'auto';
+          try {
+            localStorage.setItem('unir_modelo_ia', this.chatModeloSeleccionado);
+          } catch(e) {}
+          const modObj = this.modelosIaDisponibles.find(m => m.id === this.chatModeloSeleccionado);
+          if (modObj && this.chatModeloSeleccionado !== 'auto') {
+            this.chatModeloActualNombre = modObj.nombre;
+          }
+        },
+
+        async configurarClavesIaGratis() {
+          const openrouterKey = prompt(
+            '🌐 Clave Gratuita de OpenRouter (opcional):\\n\\n' +
+            'Consíguela gratis en https://openrouter.ai/keys para usar DeepSeek V3 Free, Qwen 3 235B Free, Llama 3.3 70B Free y Mistral Small Free.\\n\\n' +
+            'Pégala aquí (o déjalo vacío para pasar a Groq):'
+          );
+          const groqKey = prompt(
+            '⚡ Clave Gratuita de Groq Cloud (opcional):\\n\\n' +
+            'Consíguela gratis en https://console.groq.com/keys para usar Llama 3.3 70B LPU y DeepSeek R1 70B a velocidad instantánea.\\n\\n' +
+            'Pégala aquí (o déjalo vacío):'
+          );
+          if ((!openrouterKey || !openrouterKey.trim()) && (!groqKey || !groqKey.trim())) {
+            return;
+          }
+          try {
+            const res = await fetch('/api/proveedores-ia', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                openrouter_key: openrouterKey ? openrouterKey.trim() : null,
+                groq_key: groqKey ? groqKey.trim() : null
+              })
+            });
+            const data = await res.json();
+            this.modelosIaDisponibles = data.modelos || [];
+            alert('¡Proveedores gratuitos guardados en .env y activados!');
+          } catch(e) {
+            alert('No se pudieron guardar las claves.');
+          }
         },
 
         abrirOPestana(p) {
@@ -4272,7 +4388,8 @@ def dashboard_html():
                 mensaje: texto,
                 asignatura: asigOrigen,
                 programa: programaOrigen,
-                historial: historialPrevio
+                historial: historialPrevio,
+                modelo: this.chatModeloSeleccionado || 'auto'
               })
             });
 
@@ -4300,6 +4417,9 @@ def dashboard_html():
                 if (!jsonStr) continue;
                 try {
                   const payload = JSON.parse(jsonStr);
+                  if (payload.modelo_nombre) {
+                    this.chatModeloActualNombre = payload.modelo_nombre;
+                  }
                   if (payload.chunk) {
                     if (!primerChunkRecibido) {
                       primerChunkRecibido = true;
@@ -4327,16 +4447,21 @@ def dashboard_html():
                   mensaje: texto,
                   asignatura: asigOrigen,
                   programa: programaOrigen,
-                  historial: historialPrevio
+                  historial: historialPrevio,
+                  modelo: this.chatModeloSeleccionado || 'auto'
                 })
               });
               const data = await resFallback.json();
+              if (data.modelo_nombre) {
+                this.chatModeloActualNombre = data.modelo_nombre;
+              }
               actualizarMensajeEnOrigen(data.respuesta || 'Sin respuesta de NOVA.', true);
             } catch (errFallback) {
               actualizarMensajeEnOrigen('Error al contactar con NOVA.', true);
             }
           } finally {
             this.chatCargando = false;
+            this.cargarModelosIa();
             this.$nextTick(() => {
               const el = document.getElementById('chatBox');
               if (el) el.scrollTop = el.scrollHeight;

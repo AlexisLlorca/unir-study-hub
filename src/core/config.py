@@ -93,6 +93,26 @@ def save_gemini_api_key(api_key: str):
     _guardar_variable_env("GEMINI_API_KEY", api_key.strip())
 
 
+def get_openrouter_api_key() -> str:
+    """Obtiene la clave gratuita de OpenRouter desde las variables de entorno."""
+    return os.getenv("OPENROUTER_API_KEY", "").strip()
+
+
+def save_openrouter_api_key(api_key: str):
+    """Guarda o actualiza OPENROUTER_API_KEY en .env."""
+    _guardar_variable_env("OPENROUTER_API_KEY", api_key.strip())
+
+
+def get_groq_api_key() -> str:
+    """Obtiene la clave gratuita de Groq desde las variables de entorno."""
+    return os.getenv("GROQ_API_KEY", "").strip()
+
+
+def save_groq_api_key(api_key: str):
+    """Guarda o actualiza GROQ_API_KEY en .env."""
+    _guardar_variable_env("GROQ_API_KEY", api_key.strip())
+
+
 def get_hub_access_token() -> str:
     """
     Devuelve el token de acceso a la web para dispositivos de la red (móvil, tablet...).

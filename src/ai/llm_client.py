@@ -3,10 +3,12 @@ Cliente de Inteligencia Artificial para UNIR Study Hub basado en Google Gemini.
 Maneja la autenticación, generación de texto, streaming y análisis multimodal de audio.
 """
 
+import json
 import os
 import sys
+import urllib.request
 from pathlib import Path
-from typing import Optional, Generator, List, Dict
+from typing import Optional, Generator, List, Dict, Any
 
 # Asegura importación modular
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -21,8 +23,127 @@ from src.core.config import (
     console,
     get_gemini_api_key,
     save_gemini_api_key,
+    get_openrouter_api_key,
+    get_groq_api_key,
     DEFAULT_GEMINI_MODEL,
 )
+
+CATALOGO_MODELOS_GRATUITOS: List[Dict[str, Any]] = [
+    {
+        "id": "auto",
+        "nombre": "⚡ Auto (Rotación Inteligente Gratuita)",
+        "proveedor": "auto",
+        "gratis": True,
+        "descripcion": "Salta automáticamente al mejor modelo gratuito con cuota libre",
+    },
+    {
+        "id": "gemini-3-flash-preview",
+        "nombre": "Gemini 3 Flash Preview",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · Rápido y alta capacidad (Cuota independiente)",
+    },
+    {
+        "id": "gemini-3.5-flash-lite",
+        "nombre": "Gemini 3.5 Flash Lite",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · Ultra rápido y cuota diaria amplia",
+    },
+    {
+        "id": "gemini-flash-lite-latest",
+        "nombre": "Gemini Flash Lite Latest",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · Estable con bolsa de cuota propia",
+    },
+    {
+        "id": "gemma-4-31b-it",
+        "nombre": "Gemma 4 31B Instruct",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google Open Models · 31B parámetros (Gratis con tu API Key)",
+    },
+    {
+        "id": "gemma-4-26b-a4b-it",
+        "nombre": "Gemma 4 26B MoE",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google Open Models · Mixture-of-Experts rápido (Gratis)",
+    },
+    {
+        "id": "gemini-3.5-flash",
+        "nombre": "Gemini 3.5 Flash",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · 20 peticiones/día en capa gratuita",
+    },
+    {
+        "id": "gemini-3.7-flash",
+        "nombre": "Gemini 3.7 Flash",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · Última generación Flash",
+    },
+    {
+        "id": "gemini-3.8-flash",
+        "nombre": "Gemini 3.8 Flash",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · Experimental de alta velocidad",
+    },
+    {
+        "id": "gemini-3.1-flash-lite",
+        "nombre": "Gemini 3.1 Flash Lite",
+        "proveedor": "google",
+        "gratis": True,
+        "descripcion": "Google AI Studio · Ligero de respaldo",
+    },
+    {
+        "id": "openrouter:deepseek/deepseek-chat-v3-0324:free",
+        "nombre": "DeepSeek V3 0324 (Free)",
+        "proveedor": "openrouter",
+        "gratis": True,
+        "descripcion": "OpenRouter Gratis · Excelente en código y arquitectura",
+    },
+    {
+        "id": "openrouter:qwen/qwen3-235b-a22b:free",
+        "nombre": "Qwen 3 235B MoE (Free)",
+        "proveedor": "openrouter",
+        "gratis": True,
+        "descripcion": "OpenRouter Gratis · Gran capacidad de razonamiento",
+    },
+    {
+        "id": "openrouter:meta-llama/llama-3.3-70b-instruct:free",
+        "nombre": "Llama 3.3 70B Instruct (Free)",
+        "proveedor": "openrouter",
+        "gratis": True,
+        "descripcion": "OpenRouter Gratis · Meta Llama 3.3 70B",
+    },
+    {
+        "id": "openrouter:mistralai/mistral-small-3.1-24b-instruct:free",
+        "nombre": "Mistral Small 3.1 24B (Free)",
+        "proveedor": "openrouter",
+        "gratis": True,
+        "descripcion": "OpenRouter Gratis · Rápido y preciso en español",
+    },
+    {
+        "id": "groq:llama-3.3-70b-versatile",
+        "nombre": "Llama 3.3 70B LPU (Groq Free)",
+        "proveedor": "groq",
+        "gratis": True,
+        "descripcion": "Groq Cloud Gratis · Velocidad instantánea en LPU",
+    },
+    {
+        "id": "groq:deepseek-r1-distill-llama-70b",
+        "nombre": "DeepSeek R1 Distill 70B (Groq Free)",
+        "proveedor": "groq",
+        "gratis": True,
+        "descripcion": "Groq Cloud Gratis · Razonamiento profundo paso a paso",
+    },
+]
+
+NOMBRES_MODELOS_MAP: Dict[str, str] = {m["id"]: m["nombre"] for m in CATALOGO_MODELOS_GRATUITOS}
 
 SYSTEM_PROMPT_TUTOR = """
 Eres NOVA, la mentora de élite, copiloto de Inteligencia Artificial y consultora senior de software para el alumno Alex en UNIR Study Hub.
@@ -47,13 +168,14 @@ DIRECTRICES DE MÁXIMA ROBUSTEZ Y RIGOR TÉCNICO:
 
 
 class LLMClient:
-    """Gestiona la comunicación con la API de Google Gemini."""
+    """Gestiona la comunicación multi-modelo con Google Gemini, Gemma, OpenRouter Free y Groq Free."""
 
     _modelos_agotados: set = set()
 
     def __init__(self, model_name: Optional[str] = None):
         self.model_name = model_name or DEFAULT_GEMINI_MODEL
         self._client: Optional[genai.Client] = None
+        self.ultimo_modelo_usado: str = "gemini-3-flash-preview"
 
     @staticmethod
     def _log_seguro(mensaje: str) -> None:
@@ -63,31 +185,145 @@ class LLMClient:
         except Exception:
             pass
 
-    def _obtener_lista_modelos(self) -> List[str]:
-        """Devuelve la lista de modelos priorizando los que tienen cuota activa en esta sesión."""
-        candidatos = [
-            self.model_name,
+    @classmethod
+    def obtener_nombre_legible(cls, mod_id: str) -> str:
+        return NOMBRES_MODELOS_MAP.get(mod_id, mod_id)
+
+    def obtener_estado_modelos(self) -> Dict[str, Any]:
+        """Devuelve el catálogo completo de modelos gratuitos y el estado de cada proveedor."""
+        tiene_gemini = bool(get_gemini_api_key())
+        tiene_openrouter = bool(get_openrouter_api_key())
+        tiene_groq = bool(get_groq_api_key())
+
+        modelos_info = []
+        for m in CATALOGO_MODELOS_GRATUITOS:
+            prov = m["proveedor"]
+            disponible = True
+            if prov == "google":
+                disponible = tiene_gemini
+            elif prov == "openrouter":
+                disponible = tiene_openrouter
+            elif prov == "groq":
+                disponible = tiene_groq
+
+            agotado = m["id"] in self._modelos_agotados
+            modelos_info.append({
+                **m,
+                "configurado": disponible,
+                "agotado_temporalmente": agotado,
+            })
+
+        return {
+            "modelos": modelos_info,
+            "ultimo_modelo_usado": self.ultimo_modelo_usado,
+            "ultimo_modelo_nombre": self.obtener_nombre_legible(self.ultimo_modelo_usado),
+            "proveedores": {
+                "google": tiene_gemini,
+                "openrouter": tiene_openrouter,
+                "groq": tiene_groq,
+            },
+        }
+
+    def _obtener_lista_modelos(self, modelo_preferido: Optional[str] = None) -> List[str]:
+        """Devuelve la cadena de modelos gratuitos priorizando el elegido y los que tienen cuota activa."""
+        candidatos_base = [
+            "gemini-3-flash-preview",
             "gemini-3.5-flash-lite",
             "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite",
+            "gemma-4-26b-a4b-it",
+            "gemma-4-31b-it",
+            self.model_name,
             "gemini-3.5-flash",
             "gemini-3.7-flash",
+            "gemini-3.8-flash",
+            "gemini-3.1-flash-lite",
         ]
+        if get_groq_api_key():
+            candidatos_base.extend([
+                "groq:llama-3.3-70b-versatile",
+                "groq:deepseek-r1-distill-llama-70b",
+            ])
+        if get_openrouter_api_key():
+            candidatos_base.extend([
+                "openrouter:deepseek/deepseek-chat-v3-0324:free",
+                "openrouter:qwen/qwen3-235b-a22b:free",
+                "openrouter:meta-llama/llama-3.3-70b-instruct:free",
+                "openrouter:mistralai/mistral-small-3.1-24b-instruct:free",
+            ])
+
         activos = []
         agotados = []
-        for m in candidatos:
+        for m in candidatos_base:
             if not m or m in activos or m in agotados:
                 continue
             if m in self._modelos_agotados:
                 agotados.append(m)
             else:
                 activos.append(m)
-        return activos + agotados
+
+        orden = activos + agotados
+        if modelo_preferido and modelo_preferido != "auto":
+            orden = [modelo_preferido] + [m for m in orden if m != modelo_preferido]
+        return orden
 
     def _registrar_error_modelo(self, mod: str, err: Exception) -> None:
         err_str = str(err)
-        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "404" in err_str or "NOT_FOUND" in err_str:
+        if any(k in err_str for k in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "503", "UNAVAILABLE"]):
             self._modelos_agotados.add(mod)
+
+    def _llamar_openai_compatible(
+        self,
+        mod: str,
+        mensajes_norm: List[Dict[str, str]],
+        sys_inst: str,
+        temperatura: float,
+    ) -> Optional[str]:
+        """Invoca proveedores gratuitos compatibles con OpenAI (OpenRouter Free / Groq Free)."""
+        if mod.startswith("openrouter:"):
+            api_key = get_openrouter_api_key()
+            if not api_key:
+                return None
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            model_real = mod.split("openrouter:", 1)[1]
+            extra_headers = {"HTTP-Referer": "http://localhost:8080", "X-Title": "UNIR Study Hub"}
+        elif mod.startswith("groq:"):
+            api_key = get_groq_api_key()
+            if not api_key:
+                return None
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            model_real = mod.split("groq:", 1)[1]
+            extra_headers = {}
+        else:
+            return None
+
+        oa_msgs = [{"role": "system", "content": sys_inst}]
+        for m in mensajes_norm:
+            rol = "user" if m["role"] == "user" else "assistant"
+            oa_msgs.append({"role": rol, "content": m["text"]})
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps({
+                "model": model_real,
+                "messages": oa_msgs,
+                "temperature": temperatura,
+            }).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "User-Agent": "UNIR-Study-Hub/2.0",
+                **extra_headers,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            texto = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if texto:
+                self.ultimo_modelo_usado = mod
+                self._modelos_agotados.discard(mod)
+                return texto
+        return None
 
     def _obtener_cliente(self) -> Optional[genai.Client]:
         """Inicializa de forma perezosa el cliente de Gemini."""
@@ -107,7 +343,7 @@ class LLMClient:
 
     def esta_configurado(self) -> bool:
         """Comprueba si hay una clave de API guardada y utilizable."""
-        return bool(get_gemini_api_key())
+        return bool(get_gemini_api_key() or get_openrouter_api_key() or get_groq_api_key())
 
     def solicitar_api_key_interactiva(self) -> bool:
         """Pide al usuario su clave de Gemini si aún no la ha configurado."""
@@ -130,34 +366,45 @@ class LLMClient:
         temperatura: float = 0.5,
         max_output_tokens: Optional[int] = None,
         response_mime_type: Optional[str] = None,
+        modelo_preferido: Optional[str] = None,
     ) -> Optional[str]:
         """Genera una respuesta completa a partir del prompt proporcionado."""
         client = self._obtener_cliente()
-        if not client:
-            return None
-
         sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
-
-        config_args = {
-            "system_instruction": sys_inst,
-            "temperature": temperatura,
-        }
-        if max_output_tokens:
-            config_args["max_output_tokens"] = max_output_tokens
-        if response_mime_type:
-            config_args["response_mime_type"] = response_mime_type
-
-        config = types.GenerateContentConfig(**config_args)
-        modelos = self._obtener_lista_modelos()
+        modelos = self._obtener_lista_modelos(modelo_preferido)
 
         for mod in modelos:
             try:
+                if mod.startswith(("openrouter:", "groq:")):
+                    if response_mime_type == "application/json":
+                        continue
+                    res_oa = self._llamar_openai_compatible(
+                        mod, [{"role": "user", "text": prompt}], sys_inst, temperatura
+                    )
+                    if res_oa:
+                        return res_oa
+                    continue
+
+                if not client:
+                    continue
+
+                es_gemma = mod.startswith("gemma-")
+                config_args: Dict[str, Any] = {"temperature": temperatura}
+                if not es_gemma:
+                    config_args["system_instruction"] = sys_inst
+                if max_output_tokens:
+                    config_args["max_output_tokens"] = max_output_tokens
+                if response_mime_type and not es_gemma:
+                    config_args["response_mime_type"] = response_mime_type
+
+                prompt_final = f"{sys_inst}\n\n{prompt}" if es_gemma else prompt
                 response = client.models.generate_content(
                     model=mod,
-                    contents=prompt,
-                    config=config,
+                    contents=prompt_final,
+                    config=types.GenerateContentConfig(**config_args),
                 )
                 if response and response.text:
+                    self.ultimo_modelo_usado = mod
                     self._modelos_agotados.discard(mod)
                     return response.text
             except Exception as e:
@@ -165,28 +412,11 @@ class LLMClient:
                 self._log_seguro(f"[dim]Reintentando con modelo de respaldo tras error en {mod}: {e}[/dim]")
                 continue
 
-        self._log_seguro("[bold red]❌ Error de comunicación con Gemini en todos los modelos disponibles.[/bold red]")
+        self._log_seguro("[bold red]❌ Error de comunicación con los modelos de IA disponibles.[/bold red]")
         return None
 
-    def generar_chat(
-        self,
-        mensajes: List[Dict[str, str]],
-        system_instruction: Optional[str] = None,
-        temperatura: float = 0.4,
-    ) -> Optional[str]:
-        """Genera una respuesta en un diálogo multi-turno manteniendo la memoria contextual exacta."""
-        client = self._obtener_cliente()
-        if not client:
-            return None
-
-        sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
-
-        config = types.GenerateContentConfig(
-            system_instruction=sys_inst,
-            temperature=temperatura,
-        )
-
-        contents = []
+    def _normalizar_mensajes(self, mensajes: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        norm = []
         for m in mensajes:
             rol = m.get("role") or m.get("rol", "user")
             texto = m.get("text") or m.get("texto", "")
@@ -194,34 +424,69 @@ class LLMClient:
                 continue
             if rol not in ["user", "model"]:
                 rol = "user" if str(rol).lower() in ["alumno", "human", "usuario", "user"] else "model"
+            if norm and norm[-1]["role"] == rol:
+                norm[-1]["text"] += "\n\n" + texto
+            else:
+                norm.append({"role": rol, "text": texto})
+        return norm
+
+    def _construir_contents_gemini(
+        self, mensajes_norm: List[Dict[str, str]], sys_inst: str, es_gemma: bool
+    ) -> List[types.Content]:
+        contents = []
+        for idx, m in enumerate(mensajes_norm):
+            texto = m["text"]
+            if es_gemma and idx == len(mensajes_norm) - 1 and m["role"] == "user":
+                texto = f"[INSTRUCCIONES DE SISTEMA]:\n{sys_inst}\n\n[MENSAJE DEL ALUMNO]:\n{texto}"
             contents.append(
                 types.Content(
-                    role=rol,
+                    role=m["role"],
                     parts=[types.Part.from_text(text=texto)],
                 )
             )
+        return contents
 
-        if not contents:
+    def generar_chat(
+        self,
+        mensajes: List[Dict[str, str]],
+        system_instruction: Optional[str] = None,
+        temperatura: float = 0.4,
+        modelo_preferido: Optional[str] = None,
+    ) -> Optional[str]:
+        """Genera una respuesta en un diálogo multi-turno manteniendo la memoria contextual exacta."""
+        client = self._obtener_cliente()
+        sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
+        mensajes_norm = self._normalizar_mensajes(mensajes)
+        if not mensajes_norm:
             return None
 
-        # Asegurar alternancia limpia de roles para el protocolo de chat
-        contents_limpio = []
-        for c in contents:
-            if contents_limpio and contents_limpio[-1].role == c.role:
-                contents_limpio[-1].parts.extend(c.parts)
-            else:
-                contents_limpio.append(c)
-
-        modelos = self._obtener_lista_modelos()
+        modelos = self._obtener_lista_modelos(modelo_preferido)
 
         for mod in modelos:
             try:
+                if mod.startswith(("openrouter:", "groq:")):
+                    res_oa = self._llamar_openai_compatible(mod, mensajes_norm, sys_inst, temperatura)
+                    if res_oa:
+                        return res_oa
+                    continue
+
+                if not client:
+                    continue
+
+                es_gemma = mod.startswith("gemma-")
+                config = (
+                    types.GenerateContentConfig(temperature=temperatura)
+                    if es_gemma
+                    else types.GenerateContentConfig(system_instruction=sys_inst, temperature=temperatura)
+                )
+                contents = self._construir_contents_gemini(mensajes_norm, sys_inst, es_gemma)
                 response = client.models.generate_content(
                     model=mod,
-                    contents=contents_limpio,
+                    contents=contents,
                     config=config,
                 )
                 if response and response.text:
+                    self.ultimo_modelo_usado = mod
                     self._modelos_agotados.discard(mod)
                     return response.text
             except Exception as e:
@@ -229,7 +494,7 @@ class LLMClient:
                 self._log_seguro(f"[dim]Reintentando chat con modelo de respaldo tras error en {mod}: {e}[/dim]")
                 continue
 
-        self._log_seguro("[bold red]❌ Error de comunicación con Gemini en chat multi-turno.[/bold red]")
+        self._log_seguro("[bold red]❌ Error de comunicación en chat multi-turno.[/bold red]")
         return None
 
     def generar_chat_stream(
@@ -237,59 +502,51 @@ class LLMClient:
         mensajes: List[Dict[str, str]],
         system_instruction: Optional[str] = None,
         temperatura: float = 0.4,
+        modelo_preferido: Optional[str] = None,
     ) -> Generator[str, None, None]:
         """Genera una respuesta en streaming en un diálogo multi-turno con respaldo automático de modelos."""
         client = self._obtener_cliente()
-        if not client:
-            return
-
         sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
-        config = types.GenerateContentConfig(
-            system_instruction=sys_inst,
-            temperature=temperatura,
-        )
-
-        contents = []
-        for m in mensajes:
-            rol = m.get("role") or m.get("rol", "user")
-            texto = m.get("text") or m.get("texto", "")
-            if not texto:
-                continue
-            if rol not in ["user", "model"]:
-                rol = "user" if str(rol).lower() in ["alumno", "human", "usuario", "user"] else "model"
-            contents.append(
-                types.Content(
-                    role=rol,
-                    parts=[types.Part.from_text(text=texto)],
-                )
-            )
-
-        if not contents:
+        mensajes_norm = self._normalizar_mensajes(mensajes)
+        if not mensajes_norm:
             return
 
-        contents_limpio = []
-        for c in contents:
-            if contents_limpio and contents_limpio[-1].role == c.role:
-                contents_limpio[-1].parts.extend(c.parts)
-            else:
-                contents_limpio.append(c)
-
-        modelos = self._obtener_lista_modelos()
+        modelos = self._obtener_lista_modelos(modelo_preferido)
 
         for mod in modelos:
             emitido = False
             try:
+                if mod.startswith(("openrouter:", "groq:")):
+                    res_oa = self._llamar_openai_compatible(mod, mensajes_norm, sys_inst, temperatura)
+                    if res_oa:
+                        self.ultimo_modelo_usado = mod
+                        yield res_oa
+                        return
+                    continue
+
+                if not client:
+                    continue
+
+                es_gemma = mod.startswith("gemma-")
+                config = (
+                    types.GenerateContentConfig(temperature=temperatura)
+                    if es_gemma
+                    else types.GenerateContentConfig(system_instruction=sys_inst, temperature=temperatura)
+                )
+                contents = self._construir_contents_gemini(mensajes_norm, sys_inst, es_gemma)
                 response_stream = client.models.generate_content_stream(
                     model=mod,
-                    contents=contents_limpio,
+                    contents=contents,
                     config=config,
                 )
                 for chunk in response_stream:
                     if chunk.text:
-                        emitido = True
+                        if not emitido:
+                            emitido = True
+                            self.ultimo_modelo_usado = mod
+                            self._modelos_agotados.discard(mod)
                         yield chunk.text
                 if emitido:
-                    self._modelos_agotados.discard(mod)
                     return
             except Exception as e:
                 self._registrar_error_modelo(mod, e)
