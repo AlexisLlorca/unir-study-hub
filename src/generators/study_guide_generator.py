@@ -39,20 +39,43 @@ class GeneradorGuiaEstudio:
         nombre_tema: str,
         ruta_pdf: Optional[Path] = None,
         ruta_transcripcion: Optional[Path] = None,
+        profundidad: str = "media",
+        num_preguntas: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Genera:
-        1. Guía de estudio y apuntes estructurados (.md)
-        2. Test interactivo (.json) y simulacro (.md)
-        3. Ejercicios prácticos con soluciones (.md)
+        1. Guía de estudio y apuntes estructurados (.md) con profundidad configurable ('corta', 'media', 'robusta')
+        2. Test interactivo (.json) y simulacro (.md) con número de preguntas configurable
+        3. Ejercicios prácticos con soluciones y trampas de examen
         """
         slug_tema = re.sub(r'[\\/*?:"<>|]', "", nombre_tema).replace(" ", "_")
+        profundidad = (profundidad or "media").lower().strip()
+        if profundidad not in ("corta", "media", "robusta"):
+            profundidad = "media"
+
+        if not num_preguntas or num_preguntas <= 0:
+            if profundidad == "corta":
+                num_preguntas = 5
+            elif profundidad == "robusta":
+                num_preguntas = 15
+            else:
+                num_preguntas = 10
+        else:
+            num_preguntas = min(max(int(num_preguntas), 3), 25)
+
+        etiquetas_profundidad = {
+            "corta": "🟢 CORTA (Repaso Exprés)",
+            "media": "🔵 MEDIA (Equilibrada)",
+            "robusta": "🟣 ROBUSTA (Alto Rendimiento / Nivel Pro)",
+        }
 
         console.print(
             Panel.fit(
                 f"[bold cyan]📘 GENERANDO GUÍA DE ESTUDIO Y EXAMEN CON IA[/bold cyan]\n"
                 f"[white]Asignatura:[/white] [bold green]{asignatura}[/bold green]\n"
-                f"[white]Tema:[/white] [bold yellow]{nombre_tema}[/bold yellow]",
+                f"[white]Tema:[/white] [bold yellow]{nombre_tema}[/bold yellow]\n"
+                f"[white]Profundidad:[/white] [bold magenta]{etiquetas_profundidad.get(profundidad, profundidad)}[/bold magenta]\n"
+                f"[white]Preguntas Test:[/white] [bold cyan]{num_preguntas}[/bold cyan]",
                 border_style="cyan",
             )
         )
@@ -90,23 +113,60 @@ class GeneradorGuiaEstudio:
             console.print("[red]❌ No se encontró texto de temario ni de transcripción para este tema.[/red]")
             return {}
 
-        resultados = {}
+        resultados = {
+            "profundidad": profundidad,
+            "num_preguntas": num_preguntas,
+        }
 
-        # 3. Generar Guía de Estudio de Alto Rendimiento
-        console.print("\n[cyan]3/4. Redactando Guía de Estudio de Alto Rendimiento...[/cyan]")
-        prompt_guia = (
-            f"Eres NOVA, tutor de IA especializado en FP DAM (Desarrollo de Aplicaciones Multiplataforma) de UNIR.\n"
-            f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
-            f"{contexto_combinado}\n\n"
-            "Redacta una GUÍA DE ESTUDIO COMPLETA Y EXHAUSTIVA en Markdown con esta estructura exacta:\n"
-            "# 📘 GUÍA DE ESTUDIO OFICIAL: " + nombre_tema.upper() + " — " + asignatura.upper() + "\n"
-            "> Material de alto rendimiento sintetizado con temario oficial y clases magistrales de UNIR.\n\n"
-            "## 📌 1. Resumen Ejecutivo (Lo imprescindible que debes saber sin paja)\n"
-            "## 📢 2. Avisos y Trampas del Profesor en Clase (Qué dijo el profesor en clase que caería en examen, avisos y errores comunes)\n"
-            "## 🧠 3. Conceptos Clave y Definiciones de Examen (Tabla Markdown con Término, Definición Técnica y Relevancia en Examen)\n"
-            "## 💻 4. Código y Patrones de Implementación (Código completo, limpio, moderno y comentado paso a paso)\n"
-            "## ⚠️ 5. Puntos Críticos y Preguntas Capciosas de Examen (Preguntas con trampa típicas de UNIR y cómo responderlas)\n"
-        )
+        # 3. Generar Guía de Estudio según la profundidad seleccionada
+        console.print(f"\n[cyan]3/4. Redactando Guía de Estudio ({profundidad.upper()})...[/cyan]")
+
+        if profundidad == "corta":
+            prompt_guia = (
+                f"Eres NOVA, mentora de alto rendimiento y tutora de FP DAM en UNIR.\n"
+                f"Basándote en el siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
+                f"{contexto_combinado}\n\n"
+                "Genera un REPASO EXPRÉS de alta densidad conceptual (~1.200 palabras) en Markdown estructurado exactamente así:\n"
+                f"# ⚡ REPASO EXPRÉS: {nombre_tema.upper()} — {asignatura.upper()}\n"
+                "> Guía rápida y condensada para repaso intensivo antes de exámenes y asimilación ágil de conceptos clave.\n\n"
+                "## 🚀 1. Resumen de Alto Impacto (Ideas fuerza y conceptos imprescindibles sin relleno)\n"
+                "## 📑 2. Chuleta Rápida de Examen y Sintaxis (Cheatsheet Markdown con comandos, métodos clave y firmas)\n"
+                "## 💡 3. Conceptos Mínimos Viables de Aprobado (Tabla Markdown con Término, Definición concisa y Clave en Test)\n"
+                "## 💻 4. Micro-ejemplo de Código Práctico (Snippet conciso, limpio, moderno y comentado)\n"
+                "## ⚠️ 5. Los 3 Errores Fatales en Examen (Trampas habituales de UNIR y cómo evitarlas)\n"
+            )
+        elif profundidad == "robusta":
+            prompt_guia = (
+                f"Eres NOVA, mentora de élite, consultora senior de software y tutora de FP DAM en UNIR.\n"
+                f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
+                f"{contexto_combinado}\n\n"
+                "Redacta una GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO / MATRÍCULA DE HONOR) exhaustiva, profunda y de máxima ingeniería (~4.500+ palabras) en Markdown estructurado exactamente así:\n"
+                f"# 🏆 GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO): {nombre_tema.upper()} — {asignatura.upper()}\n"
+                "> Dossier técnico exhaustivo de ingeniería de software para dominio absoluto de la materia y preparación de examen con Matrícula de Honor en UNIR.\n\n"
+                "## 🏛️ 1. Fundamentos Teóricos Profundos y Arquitectura Interna (Bajo el capó: funcionamiento en JVM, memoria, SO, red o motor de BD)\n"
+                "## 🎙️ 2. Transcripción y Énfasis del Profesor en Videoclase (Puntos críticos señalados por el docente, minutajes, aclaraciones y avisos de examen)\n"
+                "## 🧠 3. Glosario Técnico Exhaustivo y Diccionario de Examen (Tabla Markdown completa: Término, Definición Rigurosa, Caso de Uso y Trampa Asociada)\n"
+                "## 💻 4. Laboratorio de Código de Producción (Implementación completa, compilable, robusta, buenas prácticas y gestión avanzada de excepciones)\n"
+                "## 🔄 5. Comparativas Técnicas y Patrones de Diseño (Tablas comparativas entre tecnologías, alternativas, pros/contras y cuándo elegir cada una)\n"
+                "## 🏢 6. Casos de Uso Reales en la Industria y Escenarios de Fallo (Resolución de problemas de concurrencia, latencia, cuellos de botella y resiliencia)\n"
+                "## ⚠️ 7. Desglose de Preguntas Trampa y Puntos Capciosos de Exámenes UNIR (Análisis de distractores típicos en exámenes test y argumentación técnica)\n"
+                "## 🚀 8. Checklist de Dominio del Tema (Lista de comprobación interactiva [ ] para autoevaluación final previa al examen)\n"
+            )
+        else:  # media
+            prompt_guia = (
+                f"Eres NOVA, tutor de IA especializado en FP DAM (Desarrollo de Aplicaciones Multiplataforma) de UNIR.\n"
+                f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
+                f"{contexto_combinado}\n\n"
+                "Redacta una GUÍA DE ESTUDIO OFICIAL COMPLETA Y EQUILIBRADA (~2.500 - 3.500 palabras) en Markdown con esta estructura exacta:\n"
+                f"# 📘 GUÍA DE ESTUDIO OFICIAL: {nombre_tema.upper()} — {asignatura.upper()}\n"
+                "> Material equilibrado de alto rendimiento sintetizado con temario oficial y clases magistrales de UNIR.\n\n"
+                "## 📌 1. Resumen Ejecutivo y Marco Teórico (Fundamentos y arquitectura general del tema)\n"
+                "## 📢 2. Avisos y Trampas del Profesor en Clase (Qué enfatizó el docente en videoclase, avisos y errores comunes)\n"
+                "## 🧠 3. Conceptos Clave y Definiciones de Examen (Tabla Markdown con Término, Definición Técnica Rigurosa y Relevancia en Examen)\n"
+                "## 💻 4. Código y Patrones de Implementación (Código completo, moderno, tipado y comentado paso a paso)\n"
+                "## 🔬 5. Arquitectura y Flujo de Ejecución (Cómo interactúan los componentes en tiempo de ejecución)\n"
+                "## ⚠️ 6. Puntos Críticos y Preguntas Capciosas de Examen (Preguntas con trampa típicas de UNIR y cómo responderlas)\n"
+            )
 
         guia_md = self.tutor.client.generar_contenido(prompt_guia, temperatura=0.3)
         if not guia_md:
@@ -116,7 +176,7 @@ class GeneradorGuiaEstudio:
                 f"A partir del siguiente material oficial de '{asignatura}' ({nombre_tema}):\n\n"
                 f"{contexto_combinado[:15000]}\n\n"
                 "Redacta una GUÍA DE ESTUDIO COMPLETA en Markdown con:\n"
-                "# 📘 GUÍA DE ESTUDIO: " + nombre_tema.upper() + "\n"
+                f"# 📘 GUÍA DE ESTUDIO: {nombre_tema.upper()}\n"
                 "## 📌 1. Resumen Ejecutivo\n"
                 "## 📢 2. Avisos de Examen y Trampas\n"
                 "## 🧠 3. Conceptos Clave (Tabla)\n"
@@ -137,11 +197,18 @@ class GeneradorGuiaEstudio:
             console.print(f"[bold red]❌ No se pudo redactar la guía de estudio para '{nombre_tema}'[/bold red]")
 
         # 4. Generar Banco de Preguntas Tipo Test (JSON + MD)
-        console.print("\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial de UNIR (10 preguntas)...[/cyan]")
+        console.print(f"\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial de UNIR ({num_preguntas} preguntas, nivel {profundidad.upper()})...[/cyan]")
         prompt_test = (
-            f"Genera un examen tipo test de 10 preguntas basado en este tema de '{asignatura}' ({nombre_tema}):\n\n"
+            f"Genera un examen tipo test oficial de {num_preguntas} preguntas con rigor pedagógico y técnico, "
+            f"basado en el tema '{nombre_tema}' de '{asignatura}'. Nivel de profundidad: {profundidad.upper()}.\n\n"
             f"{contexto_combinado[:25000]}\n\n"
-            "IMPORTANTE: Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
+            f"REGLAS OBLIGATORIAS:\n"
+            f"1. Genera exactamente {num_preguntas} preguntas.\n"
+            "2. Incluye preguntas conceptuales rigurosas, análisis de fragmentos de código y trampas de examen de UNIR.\n"
+            "3. Cada pregunta debe tener 4 opciones (A, B, C, D) con distractores verosímiles y técnicos.\n"
+            "4. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la letra de la respuesta.\n"
+            "5. 'justificacion': Justificación exhaustiva: por qué la opción correcta lo es Y por qué cada uno de los 3 distractores es incorrecto.\n"
+            "6. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
             "[\n"
             "  {\n"
             '    "enunciado": "Texto de la pregunta...",\n'

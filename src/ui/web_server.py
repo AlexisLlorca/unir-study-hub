@@ -232,6 +232,8 @@ class GenerarGuiaRequest(BaseModel):
     asignatura: str
     nombre_tema: str
     archivo_pdf: Optional[str] = None
+    profundidad: Optional[str] = "media"
+    num_preguntas: Optional[int] = 10
 
 
 @app.post("/api/generar-guia")
@@ -288,6 +290,8 @@ def api_generar_guia(req: GenerarGuiaRequest):
         nombre_tema=req.nombre_tema,
         ruta_pdf=ruta_pdf,
         ruta_transcripcion=ruta_trans,
+        profundidad=req.profundidad or "media",
+        num_preguntas=req.num_preguntas,
     )
 
     tiene_guia = bool(res.get("guia"))
@@ -930,14 +934,15 @@ def api_chat(msg: ChatMessage):
     contexto_asig = f"\n[Asignatura / Módulo activo: {msg.asignatura}]" if msg.asignatura else ""
 
     instrucciones_base = (
-        "\nINSTRUCCIONES CLAVE DE NOVA:\n"
-        "1. Eres NOVA, la mentora y copiloto académica personal del alumno Alex en UNIR Study Hub.\n"
-        "2. Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios y actividades.\n"
-        "3. NUNCA digas que no tienes acceso al campus virtual ni que los datos están protegidos por login. Toda la información ya ha sido indexada localmente en el Hub.\n"
-        "4. Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, responde con la máxima exactitud: "
-        "MENCIONA SIEMPRE EL MINUTO EXACTO [MM:SS] o [HH:MM:SS], el profesor que habló y citas textuales.\n"
-        "5. MEMORIA: Mantén siempre en cuenta lo hablado en los mensajes anteriores de la conversación. Si el alumno pregunta '¿y qué más?', '¿puedes explicarlo mejor?' o '¿qué código se hizo?', continúa sobre el tema previo sin desorientarte.\n"
-        "6. ESTRUCTURA: Usa Markdown limpio, explicaciones pedagógicas paso a paso, código listo para compilar con comentarios, y advertencias claras para los exámenes de UNIR.\n"
+        "\nINSTRUCCIONES CLAVE DE MÁXIMA ROBUSTEZ PARA NOVA:\n"
+        "1. Eres NOVA, la mentora de élite y copiloto académica personal del alumno Alex en UNIR Study Hub.\n"
+        "2. ROBUSTEZ Y RIGOR TÉCNICO: Desarrolla respuestas profundas, completas y fundamentadas en ingeniería de software y arquitectura. Explica el porqué de cada concepto bajo el capó (JVM, memoria, hilos, SO, red, base de datos). Prohibidas las respuestas telegráficas o superficiales.\n"
+        "3. CÓDIGO DE PRODUCCIÓN: Cuando aportes ejemplos de código, proporciona implementaciones completas, tipadas, compilables y modernas (Java 17/21, Kotlin actual, SQL estándar), con manejo riguroso de excepciones y comentarios técnicos en puntos críticos.\n"
+        "4. TRAMPAS DE EXAMEN UNIR: Advierte proactivamente sobre preguntas capciosas de examen tipo test, errores conceptuales habituales, casos límite y excepciones típicas del temario.\n"
+        "5. ACCESO LOCAL COMPLETO: Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios y actividades. NUNCA digas que no tienes acceso al campus o a los materiales.\n"
+        "6. CITAS EXACTAS: Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, menciona siempre el minuto exacto [MM:SS] o [HH:MM:SS], el profesor que habló y citas textuales relevantes.\n"
+        "7. MEMORIA CONVERSACIONAL: Mantén siempre en cuenta los turnos anteriores para dar continuidad fluida a dudas complejas o refactorizaciones de código.\n"
+        "8. FORMATO: Emplea Markdown enriquecido con títulos jerárquicos, negritas para conceptos clave, listas didácticas y tablas comparativas para conceptos confusos.\n"
     )
 
     system_instruction_completo = f"{contexto_rol}\n{instrucciones_base}\n{contexto_asig}".strip()
@@ -2119,7 +2124,7 @@ def dashboard_html():
 
   <!-- ==================== MODAL: GENERADOR DE GUÍA IA ==================== -->
   <div x-show="modalGenerador" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-    <div class="glass w-full max-w-lg rounded-3xl p-6 border border-emerald-500/30 shadow-2xl space-y-4">
+    <div class="glass w-full max-w-xl rounded-3xl p-6 border border-emerald-500/30 shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <h4 class="font-bold text-white text-base flex items-center space-x-2">
           <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i>
@@ -2130,7 +2135,7 @@ def dashboard_html():
         </button>
       </div>
 
-      <p class="text-xs text-gray-400">NOVA procesará el temario oficial en PDF y la transcripción para sintetizar apuntes clave y 10 preguntas tipo test.</p>
+      <p class="text-xs text-gray-400">NOVA sintetiza el temario oficial en PDF y las lecciones del profesor para crear apuntes de alto nivel y simulacros tipo test con justificación detallada.</p>
 
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-1">Materia Seleccionada:</label>
@@ -2152,6 +2157,75 @@ def dashboard_html():
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-1">Nombre o Título del Tema:</label>
         <input type="text" x-model="generadorTemaNombre" placeholder="Ej: Tema 1 - Fundamentos y Arquitectura" class="w-full bg-gray-900 text-white text-xs p-3 rounded-xl border border-gray-700 focus:outline-none focus:border-emerald-500">
+      </div>
+
+      <!-- Selector de Profundidad de la Guía -->
+      <div>
+        <label class="block text-xs font-bold text-gray-300 mb-2">Profundidad y Rigor de la Guía:</label>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <!-- Opción Corta -->
+          <div @click="generadorProfundidad = 'corta'; generadorNumPreguntas = 5"
+               :class="generadorProfundidad === 'corta' ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+                <i class="fa-solid fa-bolt"></i>
+                <span>Corta</span>
+              </span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Exprés</span>
+            </div>
+            <p class="text-[11px] text-gray-300 font-medium">Repaso Rápido</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~1.200 palabras, chuleta de sintaxis y test de 5 preguntas.</p>
+          </div>
+
+          <!-- Opción Media -->
+          <div @click="generadorProfundidad = 'media'; generadorNumPreguntas = 10"
+               :class="generadorProfundidad === 'media' ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-blue-400 flex items-center space-x-1.5">
+                <i class="fa-solid fa-book-open"></i>
+                <span>Media</span>
+              </span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Estándar</span>
+            </div>
+            <p class="text-[11px] text-gray-300 font-medium">Equilibrada</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~3.000 palabras, temario completo y test de 10 preguntas.</p>
+          </div>
+
+          <!-- Opción Robusta -->
+          <div @click="generadorProfundidad = 'robusta'; generadorNumPreguntas = 15"
+               :class="generadorProfundidad === 'robusta' ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-purple-400 flex items-center space-x-1.5">
+                <i class="fa-solid fa-brain"></i>
+                <span>Robusta</span>
+              </span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">Pro / 10</span>
+            </div>
+            <p class="text-[11px] text-gray-300 font-medium">Alto Rendimiento</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, código de producción, trampas UNIR y test de 15 preguntas.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de Preguntas para el Test -->
+      <div class="flex items-center justify-between bg-gray-900/80 p-2.5 rounded-xl border border-gray-800">
+        <label class="text-xs text-gray-300 font-semibold flex items-center space-x-2">
+          <i class="fa-solid fa-list-check text-emerald-400"></i>
+          <span>Preguntas en el simulacro tipo test:</span>
+        </label>
+        <div class="flex items-center space-x-1.5">
+          <template x-for="n in [5, 10, 15, 20]" :key="n">
+            <button type="button"
+                    @click="generadorNumPreguntas = n"
+                    :class="generadorNumPreguntas == n ? 'bg-emerald-500 text-gray-900 font-bold shadow-md shadow-emerald-500/20' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+                    class="px-2.5 py-1 rounded-lg text-xs font-medium transition"
+                    x-text="n">
+            </button>
+          </template>
+        </div>
       </div>
 
       <div class="pt-2 flex justify-end space-x-3">
@@ -2651,6 +2725,8 @@ def dashboard_html():
         modalGenerador: false,
         generadorTemaNombre: '',
         generadorPdfSeleccionado: '',
+        generadorProfundidad: 'media',
+        generadorNumPreguntas: 10,
         generandoIa: false,
         
         // Modal Visor
@@ -3175,6 +3251,8 @@ def dashboard_html():
         generarGuiaDesdePdf(pdfNombre) {
           this.generadorPdfSeleccionado = pdfNombre;
           this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
+          this.generadorProfundidad = 'media';
+          this.generadorNumPreguntas = 10;
           this.modalGenerador = true;
         },
 
@@ -3188,7 +3266,9 @@ def dashboard_html():
               body: JSON.stringify({
                 asignatura: this.asigSeleccionada.nombre,
                 nombre_tema: this.generadorTemaNombre.trim(),
-                archivo_pdf: this.generadorPdfSeleccionado || null
+                archivo_pdf: this.generadorPdfSeleccionado || null,
+                profundidad: this.generadorProfundidad || 'media',
+                num_preguntas: parseInt(this.generadorNumPreguntas) || 10
               })
             });
             const data = await res.json();
