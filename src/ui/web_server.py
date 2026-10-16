@@ -315,6 +315,42 @@ def api_generar_guia(req: GenerarGuiaRequest):
     }
 
 
+class GuardarGuiaChatRequest(BaseModel):
+    asignatura: str
+    titulo: str
+    contenido: str
+
+
+@app.post("/api/guardar-guia-chat")
+def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
+    """Guarda una respuesta o guía generada en el chat de NOVA directamente como guía de estudio oficial."""
+    if not req.asignatura or not req.contenido.strip():
+        raise HTTPException(status_code=400, detail="Faltan datos de asignatura o contenido")
+
+    slug_asig = req.asignatura.strip()
+    slug_titulo = re.sub(r'[\\/*?:"<>|]', "", req.titulo).strip().replace(" ", "_")
+    if not slug_titulo:
+        slug_titulo = "Guia_Clases_NOVA"
+    if not slug_titulo.lower().endswith("_guia"):
+        slug_titulo = f"{slug_titulo}_guia"
+
+    dir_guia = GUIAS_DIR / slug_asig
+    dir_guia.mkdir(parents=True, exist_ok=True)
+    ruta_archivo = dir_guia / f"{slug_titulo}.md"
+
+    try:
+        with open(ruta_archivo, "w", encoding="utf-8") as f:
+            f.write(req.contenido)
+        return {
+            "status": "ok",
+            "mensaje": f"Guía guardada correctamente en {slug_asig}",
+            "ruta": str(ruta_archivo),
+            "nombre": ruta_archivo.name,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error guardando la guía: {str(e)}")
+
+
 @app.post("/api/sincronizar")
 def api_sincronizar():
     """Resincroniza carpetas externas de estudio."""
@@ -1963,13 +1999,13 @@ def dashboard_html():
               <i class="fa-solid fa-video"></i>
               <span x-text="clasesDeAsignaturaActual.length + ' videoclases vinculadas'"></span>
             </span>
-            <select x-model="chatAsignatura" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
+            <select x-model="chatAsignatura" @change="cambiarAsignaturaChat($event.target.value)" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
               <option value="">General (Todo el programa)</option>
               <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
                 <option :value="asig.nombre" x-text="asig.nombre"></option>
               </template>
             </select>
-            <button @click="limpiarChat()" class="text-xs text-gray-400 hover:text-rose-400 px-2.5 py-1.5 rounded-xl bg-gray-800 border border-gray-700 hover:border-rose-500/30 transition flex items-center space-x-1" title="Reiniciar memoria del chat">
+            <button @click="limpiarChat()" class="text-xs text-gray-400 hover:text-rose-400 px-2.5 py-1.5 rounded-xl bg-gray-800 border border-gray-700 hover:border-rose-500/30 transition flex items-center space-x-1" :title="'Reiniciar conversación de ' + (chatAsignatura || 'NOVA')">
               <i class="fa-solid fa-rotate-right text-[11px]"></i>
               <span class="hidden sm:inline">Reiniciar</span>
             </button>
@@ -1980,8 +2016,21 @@ def dashboard_html():
         <div class="flex-1 p-6 overflow-y-auto space-y-4" id="chatBox">
           <template x-for="(msg, idx) in chatHistorial" :key="idx">
             <div :class="msg.rol === 'user' ? 'flex justify-end' : 'flex justify-start'">
-              <div :class="msg.rol === 'user' ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none' : 'bg-gray-800/90 text-gray-200 rounded-2xl rounded-tl-none border border-gray-700'" class="max-w-3xl lg:max-w-4xl p-4 shadow-md break-words">
-                <p class="text-xs font-bold mb-1 opacity-75" x-text="msg.rol === 'user' ? 'Tú' : 'NOVA'"></p>
+              <div :class="msg.rol === 'user' ? 'bg-cyan-600 text-white rounded-2xl rounded-tr-none' : 'bg-gray-800/90 text-gray-200 rounded-2xl rounded-tl-none border border-gray-700'" class="max-w-3xl lg:max-w-4xl p-4 shadow-md break-words relative group/msg">
+                <div class="flex items-center justify-between mb-1 gap-2">
+                  <p class="text-xs font-bold opacity-75" x-text="msg.rol === 'user' ? 'Tú' : 'NOVA'"></p>
+                  <!-- Botones de acción para respuestas de NOVA -->
+                  <div x-show="msg.rol !== 'user'" class="flex items-center space-x-1.5 opacity-60 group-hover/msg:opacity-100 transition text-[11px]">
+                    <button @click="copiarTexto(msg.texto)" class="px-2 py-0.5 rounded-lg bg-gray-700/60 hover:bg-gray-700 text-gray-300 transition flex items-center space-x-1" title="Copiar texto">
+                      <i class="fa-regular fa-copy text-[10px]"></i>
+                      <span class="text-[10px]">Copiar</span>
+                    </button>
+                    <button x-show="msg.texto && msg.texto.length > 200" @click="guardarRespuestaComoGuia(msg.texto)" class="px-2 py-0.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 transition flex items-center space-x-1" title="Guardar esta explicación como archivo de Guía Oficial">
+                      <i class="fa-solid fa-floppy-disk text-[10px]"></i>
+                      <span class="text-[10px]">Guardar como Guía</span>
+                    </button>
+                  </div>
+                </div>
                 <div class="markdown-content text-sm leading-relaxed" x-html="marked.parse(msg.texto)"></div>
               </div>
             </div>
@@ -2739,6 +2788,7 @@ def dashboard_html():
         chatAsignatura: '',
         chatCargando: false,
         chatHistorial: [],
+        chatHistorialesPorAsignatura: {},
 
         // Test Web
         modalTest: false,
@@ -2896,12 +2946,27 @@ def dashboard_html():
             window.history.replaceState(null, '', p.url);
           }
 
-          if (p.tipo === 'seccion') {
+          if (p.tipo === 'tutor' || p.id.startsWith('tutor-')) {
+            this.tab = 'tutor';
+            this.asigSeleccionada = null;
+            this.modalVisor = false;
+            this.modalTest = false;
+            this.modalVisorPdf = false;
+            const targetAsig = p.data?.asignatura !== undefined ? p.data.asignatura : (p.id.replace('tutor-', '') === 'global' ? '' : (p.data?.asignatura || this.chatAsignatura));
+            if (this.chatAsignatura !== targetAsig) {
+              this.guardarHistorialActual();
+              this.chatAsignatura = targetAsig;
+              this.cargarHistorialParaAsignatura(targetAsig);
+            }
+          } else if (p.tipo === 'seccion') {
             this.tab = p.seccion;
             this.asigSeleccionada = null;
             this.modalVisor = false;
             this.modalTest = false;
             this.modalVisorPdf = false;
+            if (p.seccion === 'tutor') {
+              this.cargarHistorialParaAsignatura(this.chatAsignatura || '');
+            }
           } else if (p.tipo === 'asignatura') {
             this.tab = 'asignaturas';
             const asigObj = this.catalogoTotal.find(a => a.nombre.toLowerCase() === (p.data?.nombre || p.data || '').toLowerCase());
@@ -3298,25 +3363,90 @@ def dashboard_html():
           }
         },
 
-        actualizarMensajeBienvenidaChat() {
-          const p = this.programaActual;
-          let saludo = '';
-          if (p?.id === 'ciber') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Malware o Hacking Ético) repasamos hoy?';
-          } else if (p?.id === 'pfu' || p?.id === 'grado') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño formal.';
-          } else if (p?.id === 'bootcamp') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu mentora en **Gestión Ágil y Habilidades Digitales**. ¿Repasamos Scrum, Kanban o transformación digital?';
-          } else if (p?.id === 'python') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio de ESIT ponemos a prueba hoy?';
-          } else if (p?.id === 'aws') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **AWS Cloud Practitioner (CLF-C02)**. ¿Hacemos un test rápido o repasamos servicios de AWS?';
-          } else if (p?.id === 'azure') {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **Microsoft Azure Fundamentals (AZ-900)**. ¿Repasamos modelos cloud, seguridad o preguntas de examen?';
-          } else {
-            saludo = '¡Hola Alex! Soy **NOVA**, tu copiloto para **FP DAM**. ¿Qué duda de examen o de código quieres que resolvamos hoy?';
+        obtenerClaveChat(asig) {
+          const asigNorm = (asig || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const progId = this.programaActivoId || 'dam';
+          return asigNorm ? `${progId}_${asigNorm}` : `${progId}__global_`;
+        },
+
+        obtenerMensajeBienvenida(asig) {
+          if (asig && asig.trim()) {
+            return `¡Hola Alex! Soy **NOVA**, tu mentora y copiloto académica en **${asig}**. ¿Qué tema, videoclase o duda técnica quieres que trabajemos hoy?`;
           }
-          this.chatHistorial = [{ rol: 'model', texto: saludo }];
+          const p = this.programaActual;
+          if (p?.id === 'ciber') {
+            return '¡Hola Alex! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Malware o Hacking Ético) repasamos hoy?';
+          } else if (p?.id === 'pfu' || p?.id === 'grado') {
+            return '¡Hola Alex! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño formal.';
+          } else if (p?.id === 'bootcamp') {
+            return '¡Hola Alex! Soy **NOVA**, tu mentora en **Gestión Ágil y Habilidades Digitales**. ¿Repasamos Scrum, Kanban o transformación digital?';
+          } else if (p?.id === 'python') {
+            return '¡Hola Alex! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio de ESIT ponemos a prueba hoy?';
+          } else if (p?.id === 'aws') {
+            return '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **AWS Cloud Practitioner (CLF-C02)**. ¿Hacemos un test rápido o repasamos servicios de AWS?';
+          } else if (p?.id === 'azure') {
+            return '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **Microsoft Azure Fundamentals (AZ-900)**. ¿Repasamos modelos cloud, seguridad o preguntas de examen?';
+          }
+          return '¡Hola Alex! Soy **NOVA**, tu copiloto para **FP DAM**. ¿Qué duda de examen o de código quieres que resolvamos hoy?';
+        },
+
+        cargarHistorialParaAsignatura(asig) {
+          const clave = this.obtenerClaveChat(asig);
+          if (this.chatHistorialesPorAsignatura[clave] && this.chatHistorialesPorAsignatura[clave].length > 0) {
+            this.chatHistorial = this.chatHistorialesPorAsignatura[clave];
+            return;
+          }
+          try {
+            const guardado = localStorage.getItem('unir_chat_' + clave);
+            if (guardado) {
+              const parsed = JSON.parse(guardado);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                this.chatHistorialesPorAsignatura[clave] = parsed;
+                this.chatHistorial = parsed;
+                return;
+              }
+            }
+          } catch(e) {
+            console.error('Error cargando chat desde localStorage:', e);
+          }
+          const bienvenida = [{ rol: 'model', texto: this.obtenerMensajeBienvenida(asig) }];
+          this.chatHistorialesPorAsignatura[clave] = bienvenida;
+          this.chatHistorial = bienvenida;
+          this.guardarHistorialActual();
+        },
+
+        guardarHistorialActual() {
+          const clave = this.obtenerClaveChat(this.chatAsignatura);
+          this.chatHistorialesPorAsignatura[clave] = this.chatHistorial;
+          try {
+            localStorage.setItem('unir_chat_' + clave, JSON.stringify(this.chatHistorial));
+          } catch(e) {
+            console.error('Error guardando chat en localStorage:', e);
+          }
+        },
+
+        cambiarAsignaturaChat(nuevaAsig) {
+          this.guardarHistorialActual();
+          this.chatAsignatura = nuevaAsig || '';
+          this.cargarHistorialParaAsignatura(this.chatAsignatura);
+
+          const activa = this.pestanasAbiertas.find(x => x.id === this.pestanaActivaId);
+          if (activa && (activa.tipo === 'tutor' || activa.seccion === 'tutor' || activa.id.startsWith('tutor-'))) {
+            const clave = this.obtenerClaveChat(this.chatAsignatura);
+            activa.id = 'tutor-' + clave;
+            activa.titulo = this.chatAsignatura ? `Tutor (${this.chatAsignatura})` : 'Tutor NOVA';
+            activa.tipo = 'tutor';
+            activa.data = { asignatura: this.chatAsignatura };
+            activa.url = '/?tab=tutor' + (this.chatAsignatura ? '&asig=' + encodeURIComponent(this.chatAsignatura) : '');
+            this.pestanaActivaId = activa.id;
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState(null, '', activa.url);
+            }
+          }
+        },
+
+        actualizarMensajeBienvenidaChat() {
+          this.cargarHistorialParaAsignatura(this.chatAsignatura);
         },
 
         obtenerColorHex(color) {
@@ -3359,15 +3489,19 @@ def dashboard_html():
         },
 
         abrirChatConAsignatura(nombre) {
-          this.chatAsignatura = nombre;
+          this.guardarHistorialActual();
+          this.chatAsignatura = nombre || '';
           this.tab = 'tutor';
+          this.cargarHistorialParaAsignatura(this.chatAsignatura);
+          const clave = this.obtenerClaveChat(this.chatAsignatura);
           const tit = nombre ? `Tutor (${nombre})` : 'Tutor NOVA';
           this.abrirOPestana({
-            id: 'tutor-' + (nombre || 'global'),
+            id: 'tutor-' + clave,
             titulo: tit,
             icono: 'fa-robot',
-            tipo: 'seccion',
+            tipo: 'tutor',
             seccion: 'tutor',
+            data: { asignatura: this.chatAsignatura },
             url: '/?tab=tutor' + (nombre ? '&asig=' + encodeURIComponent(nombre) : '')
           });
         },
@@ -3724,11 +3858,75 @@ def dashboard_html():
         },
 
         limpiarChat() {
-          const asig = this.chatAsignatura || this.programaActual?.titulo || 'tu programa';
-          this.chatHistorial = [{
+          const asig = this.chatAsignatura;
+          const etiqueta = asig ? `la asignatura "${asig}"` : 'el chat global de NOVA';
+          if (!confirm(`¿Deseas reiniciar la conversación de ${etiqueta}?\n\nEsta acción solo reiniciará el chat de esta materia. Las guías y chats de las demás asignaturas no se borrarán.`)) {
+            return;
+          }
+          const clave = this.obtenerClaveChat(asig);
+          try {
+            localStorage.removeItem('unir_chat_' + clave);
+          } catch(e) {}
+          delete this.chatHistorialesPorAsignatura[clave];
+
+          const bienvenida = [{
             rol: 'model',
-            texto: `¡Memoria reiniciada! Hola Alex, soy NOVA. ¿En qué duda técnica de **${asig}** nos enfocamos ahora?`
+            texto: `¡Memoria reiniciada para ${asig || 'NOVA'}! Hola Alex, ¿en qué nos enfocamos ahora?`
           }];
+          this.chatHistorialesPorAsignatura[clave] = bienvenida;
+          this.chatHistorial = bienvenida;
+          this.guardarHistorialActual();
+        },
+
+        copiarTexto(texto) {
+          if (!texto) return;
+          navigator.clipboard.writeText(texto).then(() => {
+            alert('¡Contenido copiado al portapapeles!');
+          }).catch(() => {
+            alert('No se pudo copiar automáticamente.');
+          });
+        },
+
+        async guardarRespuestaComoGuia(texto) {
+          if (!texto) return;
+          const asig = this.chatAsignatura || (this.asigSeleccionada ? this.asigSeleccionada.nombre : '');
+          if (!asig) {
+            alert('Selecciona primero una asignatura en el desplegable superior del chat para poder guardar esta guía en su biblioteca correspondiente.');
+            return;
+          }
+          let tituloSugerido = 'Guia_Clase_' + new Date().toISOString().slice(0, 10);
+          const primerH1 = texto.match(/#+\\s+(.+)/);
+          if (primerH1 && primerH1[1]) {
+            tituloSugerido = primerH1[1].slice(0, 50).trim();
+          }
+          const tituloFinal = prompt('Introduce el título para guardar esta Guía de Estudio:', tituloSugerido);
+          if (!tituloFinal || !tituloFinal.trim()) return;
+
+          try {
+            const res = await fetch('/api/guardar-guia-chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: asig,
+                titulo: tituloFinal.trim(),
+                contenido: texto
+              })
+            });
+            const data = await res.json();
+            if (res.ok) {
+              await this.cargarCatalogo();
+              await this.cargarProgreso();
+              if (this.asigSeleccionada && this.asigSeleccionada.nombre === asig) {
+                this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig) || this.asigSeleccionada;
+              }
+              alert(`¡Guía guardada con éxito en ${asig}!\nArchivo: ${data.nombre}`);
+            } else {
+              alert(data.detail || 'Error al guardar la guía.');
+            }
+          } catch(e) {
+            console.error(e);
+            alert('Error de conexión al guardar la guía.');
+          }
         },
 
         async enviarMensajeChat() {
@@ -3742,8 +3940,13 @@ def dashboard_html():
           })).slice(-8);
 
           this.chatHistorial.push({ rol: 'user', texto });
+          this.guardarHistorialActual();
           this.chatInput = '';
           this.chatCargando = true;
+          this.$nextTick(() => {
+            const el = document.getElementById('chatBox');
+            if (el) el.scrollTop = el.scrollHeight;
+          });
 
           try {
             const res = await fetch('/api/chat', {
@@ -3758,8 +3961,10 @@ def dashboard_html():
             });
             const data = await res.json();
             this.chatHistorial.push({ rol: 'model', texto: data.respuesta });
+            this.guardarHistorialActual();
           } catch(e) {
             this.chatHistorial.push({ rol: 'model', texto: 'Error al contactar con NOVA.' });
+            this.guardarHistorialActual();
           } finally {
             this.chatCargando = false;
             this.$nextTick(() => {

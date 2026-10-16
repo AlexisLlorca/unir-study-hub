@@ -227,49 +227,69 @@ class GeneradorGuiaEstudio:
 
         test_json_str = self.tutor.client.generar_contenido(prompt_test, temperatura=0.2)
         if test_json_str:
-            # Extraer bloque JSON
-            match = re.search(r"\[\s*\{.*\}\s*\]", test_json_str, re.DOTALL)
+            preguntas_data = []
+            limpio = test_json_str.strip()
+            limpio = re.sub(r"^```(?:json)?", "", limpio).strip()
+            limpio = re.sub(r"```$", "", limpio).strip()
+            match = re.search(r"\[\s*\{.*\}\s*\]", limpio, re.DOTALL)
             if match:
-                test_json_str = match.group(0)
+                limpio = match.group(0)
 
+            limpio_sin_comas = re.sub(r",\s*([\]}])", r"\1", limpio)
             try:
-                preguntas_data = json.loads(test_json_str)
-                preguntas_obj = [
-                    PreguntaExamen(
-                        enunciado=p["enunciado"],
-                        opciones=p["opciones"],
-                        correcta=p["correcta"],
-                        justificacion=p["justificacion"],
-                        pista=p.get("pista", ""),
-                    )
-                    for p in preguntas_data
-                ]
-
-                dir_examenes = EXAMENES_DIR / asignatura
-                dir_examenes.mkdir(parents=True, exist_ok=True)
-
-                # Guardar JSON para el test interactivo
-                ruta_test_json = dir_examenes / f"{slug_tema}_test.json"
-                with open(ruta_test_json, "w", encoding="utf-8") as f:
-                    json.dump(preguntas_data, f, indent=2, ensure_ascii=False)
-                resultados["test_json"] = ruta_test_json
-
-                # Guardar Markdown con respuestas ocultas
-                md_examen = generar_markdown_examen(
-                    asignatura=asignatura,
-                    tema=nombre_tema,
-                    titulo=f"Test Oficial UNIR — {nombre_tema}",
-                    preguntas=preguntas_obj,
-                )
-                ruta_test_md = dir_examenes / f"{slug_tema}_test.md"
-                with open(ruta_test_md, "w", encoding="utf-8") as f:
-                    f.write(md_examen)
-                resultados["test_md"] = ruta_test_md
-
-                console.print(f"[bold green]✔ Test interactivo y examen guardados en:[/bold green] {ruta_test_json}")
-
+                preguntas_data = json.loads(limpio_sin_comas)
             except Exception as e:
-                console.print(f"[yellow]⚠ Error procesando JSON de test: {e}[/yellow]")
+                console.print(f"[yellow]⚠ JSON en bloque presentó error de sintaxis ({e}). Reparando con extractor tolerante...[/yellow]")
+                # Extracción tolerante pregunta a pregunta
+                candidatos = re.finditer(r"\{\s*\"enunciado\"\s*:\s*\".*?\}\s*(?=,\s*\{|\s*\])", test_json_str, re.DOTALL)
+                for cand in candidatos:
+                    try:
+                        cand_limpio = re.sub(r",\s*([\]}])", r"\1", cand.group(0))
+                        p_obj = json.loads(cand_limpio)
+                        if "enunciado" in p_obj and "opciones" in p_obj and "correcta" in p_obj:
+                            preguntas_data.append(p_obj)
+                    except Exception:
+                        continue
+
+            if preguntas_data:
+                try:
+                    preguntas_obj = [
+                        PreguntaExamen(
+                            enunciado=p["enunciado"],
+                            opciones=p["opciones"],
+                            correcta=p["correcta"],
+                            justificacion=p.get("justificacion", ""),
+                            pista=p.get("pista", ""),
+                        )
+                        for p in preguntas_data
+                        if "enunciado" in p and "opciones" in p and "correcta" in p
+                    ]
+
+                    dir_examenes = EXAMENES_DIR / asignatura
+                    dir_examenes.mkdir(parents=True, exist_ok=True)
+
+                    # Guardar JSON para el test interactivo
+                    ruta_test_json = dir_examenes / f"{slug_tema}_test.json"
+                    with open(ruta_test_json, "w", encoding="utf-8") as f:
+                        json.dump(preguntas_data, f, indent=2, ensure_ascii=False)
+                    resultados["test_json"] = ruta_test_json
+
+                    # Guardar Markdown con respuestas ocultas
+                    md_examen = generar_markdown_examen(
+                        asignatura=asignatura,
+                        tema=nombre_tema,
+                        titulo=f"Test Oficial UNIR — {nombre_tema}",
+                        preguntas=preguntas_obj,
+                    )
+                    ruta_test_md = dir_examenes / f"{slug_tema}_test.md"
+                    with open(ruta_test_md, "w", encoding="utf-8") as f:
+                        f.write(md_examen)
+                    resultados["test_md"] = ruta_test_md
+
+                    console.print(f"[bold green]✔ Test interactivo y examen guardados en:[/bold green] {ruta_test_json}")
+
+                except Exception as e:
+                    console.print(f"[yellow]⚠ Error procesando JSON de test: {e}[/yellow]")
 
         console.print(f"\n[bold green]✨ ¡Guía de estudio y examen de '{nombre_tema}' completados con éxito![/bold green]\n")
         return resultados
