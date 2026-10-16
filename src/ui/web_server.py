@@ -46,18 +46,24 @@ from src.core.academic_structure import (
     obtener_info_asignatura,
 )
 from src.core.progress_tracker import GestorProgreso
+from src.core.config import RESPALDO_DIR, get_hub_access_token
 from src.ai.tutor import TutorIA
 from src.generators.study_guide_generator import GeneradorGuiaEstudio
-
-app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.1.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+from src.ui.security import (
+    AccesoSeguroMiddleware,
+    nombre_seguro,
+    obtener_ip_red_local,
+    ruta_dentro_de,
+    ruta_segura_lectura,
 )
+
+app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.2.0")
+
+# Sin CORS: el frontend se sirve desde este mismo servidor, así que ninguna web externa
+# necesita (ni debe poder) leer las respuestas de la API.
+HUB_ACCESS_TOKEN = get_hub_access_token()
+IP_LOCAL = obtener_ip_red_local()
+app.add_middleware(AccesoSeguroMiddleware, token=HUB_ACCESS_TOKEN, ip_local=IP_LOCAL)
 
 tracker = GestorProgreso()
 tutor_ia = TutorIA()
@@ -127,25 +133,34 @@ def api_progreso():
     }
 
 
+@app.get("/api/acceso-movil")
+def api_acceso_movil(request: Request):
+    """Devuelve el enlace directo con token para abrir el Hub en el móvil dentro de la misma red Wi-Fi."""
+    puerto = request.url.port or 8080
+    url_movil = f"http://{IP_LOCAL}:{puerto}/?token={HUB_ACCESS_TOKEN}"
+    return {
+        "ip_local": IP_LOCAL,
+        "puerto": puerto,
+        "token": HUB_ACCESS_TOKEN,
+        "url_movil": url_movil,
+    }
+
+
 @app.get("/api/contenido")
 def api_contenido(ruta: str):
-    """Devuelve el contenido en texto de cualquier guía o transcripción."""
-    archivo = BASE_DIR / ruta
-    if not archivo.exists() or not archivo.is_file():
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    
+    """Devuelve el contenido en texto de cualquier guía o transcripción dentro de data/."""
+    archivo = ruta_segura_lectura(ruta, extensiones={".md", ".txt", ".json"})
     with open(archivo, "r", encoding="utf-8") as f:
         return {"contenido": f.read(), "nombre": archivo.name}
 
 
 @app.get("/api/archivo-raw")
 def api_archivo_raw(ruta: str):
-    """Sirve archivos directamente (como PDFs o imágenes) para visores integrados."""
-    archivo = (BASE_DIR / ruta).resolve()
-    if not str(archivo).startswith(str(BASE_DIR)) and not str(archivo).startswith("/home/alexllorca/Respaldo_Estudios"):
-        raise HTTPException(status_code=403, detail="Acceso denegado")
-    if not archivo.exists() or not archivo.is_file():
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    """Sirve archivos directamente (como PDFs o imágenes) para visores integrados, validando la ruta."""
+    archivo = ruta_segura_lectura(
+        ruta,
+        extensiones={".pdf", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".md", ".txt", ".mp3", ".mp4", ".wav", ".m4a"},
+    )
     media_type = "application/pdf" if archivo.suffix.lower() == ".pdf" else None
     return FileResponse(archivo, media_type=media_type)
 
@@ -153,10 +168,12 @@ def api_archivo_raw(ruta: str):
 @app.get("/api/test/{asignatura}/{test_name}")
 def api_obtener_test(asignatura: str, test_name: str):
     """Devuelve las preguntas de un test en JSON."""
-    archivo = EXAMENES_DIR / asignatura / f"{test_name}.json"
-    if not archivo.exists():
+    asig_limpia = nombre_seguro(asignatura, "asignatura")
+    stem = nombre_seguro(test_name.replace(".json", ""), "test")
+    archivo = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
+    if not archivo.exists() or not archivo.is_file():
         raise HTTPException(status_code=404, detail="Test no encontrado")
-    
+
     with open(archivo, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -173,8 +190,8 @@ class TestSubmission(BaseModel):
 def api_guardar_test(sub: TestSubmission):
     """Registra la calificación de un test realizado en la web."""
     tracker.registrar_resultado_test(
-        asignatura=sub.asignatura,
-        tema=sub.tema,
+        asignatura=nombre_seguro(sub.asignatura, "asignatura"),
+        tema=sub.tema.strip()[:200],
         nota=sub.nota,
         aciertos=sub.aciertos,
         total=sub.total,
@@ -185,16 +202,15 @@ def api_guardar_test(sub: TestSubmission):
 @app.delete("/api/guia/{asignatura}/{guia_name}")
 def api_eliminar_guia(asignatura: str, guia_name: str):
     """Elimina una guía de estudio generada."""
-    guia_path = (GUIAS_DIR / asignatura / guia_name).resolve()
-    guias_root = GUIAS_DIR.resolve()
-    if not str(guia_path).startswith(str(guias_root)):
-        raise HTTPException(status_code=403, detail="Acceso denegado")
+    asig_limpia = nombre_seguro(asignatura, "asignatura")
+    guia_limpia = nombre_seguro(guia_name, "guía")
+    guia_path = ruta_dentro_de(GUIAS_DIR, asig_limpia, guia_limpia)
     if not guia_path.exists() or not guia_path.is_file():
         raise HTTPException(status_code=404, detail="Guía no encontrada")
 
     try:
         guia_path.unlink()
-        return {"ok": True, "mensaje": f"Guía {guia_name} eliminada correctamente"}
+        return {"ok": True, "mensaje": f"Guía {guia_limpia} eliminada correctamente"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar la guía: {str(e)}")
 
@@ -202,21 +218,17 @@ def api_eliminar_guia(asignatura: str, guia_name: str):
 @app.delete("/api/test/{asignatura}/{test_name}")
 def api_eliminar_test(asignatura: str, test_name: str):
     """Elimina un simulacro de test (JSON y Markdown acompañante si existe)."""
-    stem = test_name.replace(".json", "").replace(".md", "")
-    base_dir = (EXAMENES_DIR / asignatura).resolve()
-    examenes_root = EXAMENES_DIR.resolve()
-    if not str(base_dir).startswith(str(examenes_root)):
-        raise HTTPException(status_code=403, detail="Acceso denegado")
-
-    f_json = (base_dir / f"{stem}.json").resolve()
-    f_md = (base_dir / f"{stem}.md").resolve()
+    asig_limpia = nombre_seguro(asignatura, "asignatura")
+    stem = nombre_seguro(test_name.replace(".json", "").replace(".md", ""), "test")
+    f_json = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
+    f_md = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.md")
 
     eliminado = False
     try:
-        if f_json.exists() and f_json.is_file() and str(f_json).startswith(str(examenes_root)):
+        if f_json.exists() and f_json.is_file():
             f_json.unlink()
             eliminado = True
-        if f_md.exists() and f_md.is_file() and str(f_md).startswith(str(examenes_root)):
+        if f_md.exists() and f_md.is_file():
             f_md.unlink()
             eliminado = True
     except Exception as e:
@@ -236,57 +248,94 @@ class GenerarGuiaRequest(BaseModel):
     num_preguntas: Optional[int] = 10
 
 
+def _buscar_pdf_relevante(dir_mats: Path, nombre_tema: str) -> Optional[Path]:
+    """
+    Busca el PDF más relevante para un tema sin caer en falsos positivos de fechas (ej. 2026-10-01)
+    ni devolver un PDF arbitrario cuando no hay coincidencia.
+    """
+    if not dir_mats.exists():
+        return None
+    pdfs = sorted(dir_mats.glob("*.pdf"))
+    if not pdfs:
+        return None
+
+    # 1. Coincidencia por título normalizado
+    q_norm = re.sub(r"[^\w]", "", nombre_tema.lower())
+    for f in pdfs:
+        f_norm = re.sub(r"[^\w]", "", f.stem.lower())
+        if q_norm and len(q_norm) >= 4 and (q_norm in f_norm or f_norm in q_norm):
+            return f
+
+    # 2. Coincidencia explícita por número de tema/unidad (ej. Tema 1, UD 2, Unidad 3, 01_...)
+    num_match = re.search(r"(?:tema|ud|unidad|bloque|modulo|módulo)\s*0*(\d+)\b|\b0*(\d+)\b", nombre_tema.lower())
+    if num_match:
+        num = num_match.group(1) or num_match.group(2)
+        patron_tema = re.compile(
+            rf"(?:^|[_\s\-.])(?:tema|ud|unidad|bloque|t)[\s_\-.]*0*{num}(?:\b|[_\s\-.])|^0*{num}[_\s\-.]",
+            re.IGNORECASE,
+        )
+        for f in pdfs:
+            if patron_tema.search(f.stem):
+                return f
+
+    # 3. Solo si la asignatura tiene un único PDF en total lo usamos por defecto
+    if len(pdfs) == 1:
+        return pdfs[0]
+    return None
+
+
+def _buscar_transcripcion_relevante(dir_trans: Path, nombre_tema: str) -> Optional[Path]:
+    """
+    Busca únicamente una transcripción que corresponda al tema pedido.
+    Si ninguna coincide, devuelve None (nunca una clase arbitraria de otro tema).
+    """
+    if not dir_trans.exists():
+        return None
+    trans = sorted(dir_trans.glob("*.md"))
+    if not trans:
+        return None
+
+    q_norm = re.sub(r"[^\w]", "", nombre_tema.lower())
+    for t in trans:
+        t_norm = re.sub(r"[^\w]", "", t.stem.lower())
+        if q_norm and len(q_norm) >= 5 and (q_norm in t_norm or t_norm in q_norm):
+            return t
+
+    num_match = re.search(r"(?:tema|ud|unidad|sesi[oó]n|clase)\s*0*(\d+)\b", nombre_tema.lower())
+    if num_match:
+        num = num_match.group(1)
+        patron = re.compile(rf"(?:tema|ud|unidad|sesi[oó]n|clase)[\s_\-.]*0*{num}\b", re.IGNORECASE)
+        for t in trans:
+            if patron.search(t.stem):
+                return t
+
+    return None
+
+
 @app.post("/api/generar-guia")
 def api_generar_guia(req: GenerarGuiaRequest):
     """Genera una guía de estudio y test interactivo con IA desde la web."""
+    asig_limpia = nombre_seguro(req.asignatura, "asignatura")
     ruta_pdf = None
     if req.archivo_pdf:
-        p = MATERIALES_DIR / req.asignatura / req.archivo_pdf
-        if p.exists():
+        pdf_limpio = nombre_seguro(req.archivo_pdf, "archivo_pdf")
+        p = ruta_dentro_de(MATERIALES_DIR, asig_limpia, pdf_limpio)
+        if p.exists() and p.is_file():
             ruta_pdf = p
 
-    # Si no se especificó PDF o no existe, buscar el más relevante según el tema
     if not ruta_pdf:
-        dir_mats = MATERIALES_DIR / req.asignatura
-        if dir_mats.exists():
-            pdfs = [f for f in dir_mats.glob("*.pdf")]
-            # 1. Búsqueda por texto normalizado
-            q_norm = re.sub(r"[^\w]", "", req.nombre_tema.lower())
-            for f in pdfs:
-                f_norm = re.sub(r"[^\w]", "", f.stem.lower())
-                if q_norm and (q_norm in f_norm or f_norm in q_norm):
-                    ruta_pdf = f
-                    break
+        ruta_pdf = _buscar_pdf_relevante(MATERIALES_DIR / asig_limpia, req.nombre_tema)
 
-            # 2. Búsqueda por número de tema (ej: Tema 1 -> buscar si tiene "1" o "tema_1")
-            if not ruta_pdf:
-                num_match = re.search(r"\b(\d+)\b", req.nombre_tema)
-                if num_match:
-                    num = num_match.group(1)
-                    for f in pdfs:
-                        f_stem_lower = f.stem.lower()
-                        if f"tema_{num}" in f_stem_lower or f"tema {num}" in f_stem_lower or f"tema{num}" in f_stem_lower or re.search(rf"\b0*{num}\b", f.stem):
-                            ruta_pdf = f
-                            break
+    ruta_trans = _buscar_transcripcion_relevante(TRANSCRIPCIONES_DIR / asig_limpia, req.nombre_tema)
 
-            # 3. Fallback al primer PDF si ninguno coincide
-            if not ruta_pdf and pdfs:
-                ruta_pdf = pdfs[0]
-
-    ruta_trans = None
-    dir_trans = TRANSCRIPCIONES_DIR / req.asignatura
-    if dir_trans.exists():
-        trans = [f for f in dir_trans.glob("*.md")]
-        q_norm = re.sub(r"[^\w]", "", req.nombre_tema.lower())
-        for t in trans:
-            if q_norm and q_norm in re.sub(r"[^\w]", "", t.stem.lower()):
-                ruta_trans = t
-                break
-        if not ruta_trans and trans:
-            ruta_trans = trans[-1]
+    if not ruta_pdf and not ruta_trans:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontró un PDF ni videoclase que coincida con ese nombre de tema. Selecciona el documento PDF en el desplegable.",
+        )
 
     res = generador.generar_paquete_tema(
-        asignatura=req.asignatura,
+        asignatura=asig_limpia,
         nombre_tema=req.nombre_tema,
         ruta_pdf=ruta_pdf,
         ruta_transcripcion=ruta_trans,
@@ -327,16 +376,17 @@ def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
     if not req.asignatura or not req.contenido.strip():
         raise HTTPException(status_code=400, detail="Faltan datos de asignatura o contenido")
 
-    slug_asig = req.asignatura.strip()
-    slug_titulo = re.sub(r'[\\/*?:"<>|]', "", req.titulo).strip().replace(" ", "_")
+    slug_asig = nombre_seguro(req.asignatura, "asignatura")
+    slug_titulo = re.sub(r'[\\/*?:"<>|.]', "", req.titulo).strip().replace(" ", "_")
     if not slug_titulo:
         slug_titulo = "Guia_Clases_NOVA"
     if not slug_titulo.lower().endswith("_guia"):
         slug_titulo = f"{slug_titulo}_guia"
+    slug_titulo = nombre_seguro(slug_titulo, "título")
 
-    dir_guia = GUIAS_DIR / slug_asig
+    dir_guia = ruta_dentro_de(GUIAS_DIR, slug_asig)
     dir_guia.mkdir(parents=True, exist_ok=True)
-    ruta_archivo = dir_guia / f"{slug_titulo}.md"
+    ruta_archivo = ruta_dentro_de(dir_guia, f"{slug_titulo}.md")
 
     try:
         with open(ruta_archivo, "w", encoding="utf-8") as f:
@@ -344,7 +394,7 @@ def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
         return {
             "status": "ok",
             "mensaje": f"Guía guardada correctamente en {slug_asig}",
-            "ruta": str(ruta_archivo),
+            "ruta": str(ruta_archivo.relative_to(BASE_DIR)),
             "nombre": ruta_archivo.name,
         }
     except Exception as e:
@@ -361,7 +411,7 @@ def api_sincronizar():
 @app.post("/api/sincronizar-respaldo")
 @app.post("/api/escanear-primer-ano")
 def api_sincronizar_respaldo():
-    """Escanea el respaldo local (/home/alexllorca/Respaldo_Estudios) e importa temarios de DAM y Ciberseguridad."""
+    """Escanea el respaldo local configurado en RESPALDO_DIR e importa temarios de DAM y Ciberseguridad."""
     from src.crawler.campus_scraper import CampusScraper
     scraper = CampusScraper()
     importados_dam = scraper.sincronizar_desde_respaldo_local()
@@ -732,14 +782,15 @@ def api_buscar_en_clases(q: str, asig: Optional[str] = None):
 @app.get("/api/clase-cues")
 def api_clase_cues(asig: str, nombre_archivo: str):
     """Devuelve los cues estructurados de una clase para el visor interactivo."""
-    stem = Path(nombre_archivo).stem.replace("_cues", "")
-    f_cues = TRANSCRIPCIONES_DIR / asig / f"{stem}_cues.json"
+    asig_limpia = nombre_seguro(asig, "asignatura")
+    stem = nombre_seguro(Path(nombre_archivo).stem.replace("_cues", ""), "nombre_archivo")
+    f_cues = ruta_dentro_de(TRANSCRIPCIONES_DIR, asig_limpia, f"{stem}_cues.json")
     if f_cues.exists():
         try:
             return json.loads(f_cues.read_text(encoding="utf-8"))
         except Exception:
             pass
-    f_md = TRANSCRIPCIONES_DIR / asig / f"{stem}.md"
+    f_md = ruta_dentro_de(TRANSCRIPCIONES_DIR, asig_limpia, f"{stem}.md")
     if f_md.exists():
         return [{"start_str": "00:00", "speaker": "Clase", "text": f_md.read_text(encoding="utf-8")[:4000]}]
     return []
@@ -755,11 +806,15 @@ class ResumenClaseRequest(BaseModel):
 def api_resumen_clase(req: ResumenClaseRequest):
     """Genera o recupera de caché un informe exhaustivo de una videoclase oficial."""
     from src.core.config import RESUMENES_CLASES_DIR
-    stem = Path(req.nombre_archivo).stem.replace("_cues", "").replace("_info", "").replace("_resumen", "")
+    asig_limpia = nombre_seguro(req.asignatura, "asignatura")
+    stem = nombre_seguro(
+        Path(req.nombre_archivo).stem.replace("_cues", "").replace("_info", "").replace("_resumen", ""),
+        "nombre_archivo",
+    )
 
-    asig_dir_cache = RESUMENES_CLASES_DIR / req.asignatura
+    asig_dir_cache = ruta_dentro_de(RESUMENES_CLASES_DIR, asig_limpia)
     asig_dir_cache.mkdir(parents=True, exist_ok=True)
-    cache_file = asig_dir_cache / f"{stem}_resumen.md"
+    cache_file = ruta_dentro_de(asig_dir_cache, f"{stem}_resumen.md")
 
     if cache_file.exists() and not req.forzar:
         try:
@@ -771,9 +826,12 @@ def api_resumen_clase(req: ResumenClaseRequest):
         except Exception:
             pass
 
-    f_md = TRANSCRIPCIONES_DIR / req.asignatura / f"{stem}.md"
+    f_md = ruta_dentro_de(TRANSCRIPCIONES_DIR, asig_limpia, f"{stem}.md")
     if not f_md.exists():
-        encontrados = list(TRANSCRIPCIONES_DIR.glob(f"**/{stem}.md"))
+        encontrados = [
+            p for p in TRANSCRIPCIONES_DIR.glob(f"*/{stem}.md")
+            if p.resolve().is_relative_to(TRANSCRIPCIONES_DIR.resolve())
+        ]
         if encontrados:
             f_md = encontrados[0]
         else:
@@ -1037,6 +1095,7 @@ def dashboard_html():
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -1931,7 +1990,7 @@ def dashboard_html():
                 <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-300" x-text="tarjetaActual?.nivel"></span>
               </div>
               <h3 class="text-lg md:text-xl font-bold text-white leading-relaxed" x-show="!flashcardVolteada" x-text="tarjetaActual?.anverso"></h3>
-              <div class="markdown-content text-sm md:text-base leading-relaxed text-gray-200" x-show="flashcardVolteada" x-html="marked.parse(tarjetaActual?.reverso || '')"></div>
+              <div class="markdown-content text-sm md:text-base leading-relaxed text-gray-200" x-show="flashcardVolteada" x-html="renderMarkdown(tarjetaActual?.reverso || '')"></div>
             </div>
 
             <div class="pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-400">
@@ -2031,7 +2090,7 @@ def dashboard_html():
                     </button>
                   </div>
                 </div>
-                <div class="markdown-content text-sm leading-relaxed" x-html="marked.parse(msg.texto)"></div>
+                <div class="markdown-content text-sm leading-relaxed" x-html="renderMarkdown(msg.texto)"></div>
               </div>
             </div>
           </template>
@@ -2305,7 +2364,7 @@ def dashboard_html():
           </button>
         </div>
       </div>
-      <div class="flex-1 p-6 overflow-y-auto markdown-content text-sm leading-relaxed" x-html="marked.parse(modalContenido)"></div>
+      <div class="flex-1 p-6 overflow-y-auto markdown-content text-sm leading-relaxed" x-html="renderMarkdown(modalContenido)"></div>
     </div>
   </div>
 
@@ -2645,7 +2704,7 @@ def dashboard_html():
         </div>
 
         <!-- REPORTE MARKDOWN RENDERIZADO -->
-        <div x-show="!cargandoResumenClase && resumenClaseTexto" class="markdown-content text-sm leading-relaxed text-gray-200 space-y-4" x-html="marked.parse(resumenClaseTexto)">
+        <div x-show="!cargandoResumenClase && resumenClaseTexto" class="markdown-content text-sm leading-relaxed text-gray-200 space-y-4" x-html="renderMarkdown(resumenClaseTexto)">
         </div>
 
         <div x-show="!cargandoResumenClase && !resumenClaseTexto" class="text-center py-16 text-gray-500 text-xs">
@@ -3929,9 +3988,17 @@ def dashboard_html():
           }
         },
 
+        renderMarkdown(texto) {
+          const rawHtml = marked.parse(texto || '');
+          return window.DOMPurify ? window.DOMPurify.sanitize(rawHtml) : rawHtml;
+        },
+
         async enviarMensajeChat() {
           if (!this.chatInput.trim() || this.chatCargando) return;
           const texto = this.chatInput.trim();
+          const asigOrigen = this.chatAsignatura;
+          const programaOrigen = this.programaActivoId;
+          const claveOrigen = this.obtenerClaveChat(asigOrigen);
 
           // Capturar historial previo antes de registrar el nuevo mensaje en pantalla
           const historialPrevio = this.chatHistorial.map(m => ({
@@ -3948,23 +4015,35 @@ def dashboard_html():
             if (el) el.scrollTop = el.scrollHeight;
           });
 
+          const anexarRespuestaEnOrigen = (textoRespuesta) => {
+            const listaOrigen = Array.isArray(this.chatHistorialesPorAsignatura[claveOrigen])
+              ? [...this.chatHistorialesPorAsignatura[claveOrigen]]
+              : [...this.chatHistorial];
+            listaOrigen.push({ rol: 'model', texto: textoRespuesta });
+            this.chatHistorialesPorAsignatura[claveOrigen] = listaOrigen;
+            try {
+              localStorage.setItem('unir_chat_' + claveOrigen, JSON.stringify(listaOrigen.slice(-40)));
+            } catch (err) {}
+            if (this.obtenerClaveChat(this.chatAsignatura) === claveOrigen) {
+              this.chatHistorial = [...listaOrigen];
+            }
+          };
+
           try {
             const res = await fetch('/api/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 mensaje: texto,
-                asignatura: this.chatAsignatura,
-                programa: this.programaActivoId,
+                asignatura: asigOrigen,
+                programa: programaOrigen,
                 historial: historialPrevio
               })
             });
             const data = await res.json();
-            this.chatHistorial.push({ rol: 'model', texto: data.respuesta });
-            this.guardarHistorialActual();
+            anexarRespuestaEnOrigen(data.respuesta || 'Sin respuesta de NOVA.');
           } catch(e) {
-            this.chatHistorial.push({ rol: 'model', texto: 'Error al contactar con NOVA.' });
-            this.guardarHistorialActual();
+            anexarRespuestaEnOrigen('Error al contactar con NOVA.');
           } finally {
             this.chatCargando = false;
             this.$nextTick(() => {
@@ -3980,24 +4059,12 @@ def dashboard_html():
 </html>"""
 
 
-def obtener_ip_red_local() -> str:
-    """Obtiene la dirección IP del equipo en la red local (Wi-Fi o LAN)."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
-
-
 def iniciar_servidor_web(host: str = "0.0.0.0", port: int = 8080):
-    """Lanza el servidor web de FastAPI accesible en local y desde cualquier dispositivo de la red local."""
+    """Lanza el servidor web de FastAPI accesible en local y con token seguro en la red local."""
     ip_local = obtener_ip_red_local()
     console.print(f"\n[bold green]🚀 Iniciando Interfaz Gráfica Web de UNIR Study Hub (Multi-Titulación)...[/bold green]")
-    console.print(f"[bold cyan]💻 En tu ordenador:[/bold cyan]                       [bold white underline]http://localhost:{port}[/bold white underline]")
-    console.print(f"[bold yellow]📱 En tu móvil (misma red Wi-Fi):[/bold yellow]          [bold white underline]http://{ip_local}:{port}[/bold white underline]\n")
+    console.print(f"[bold cyan]💻 En tu ordenador (acceso directo):[/bold cyan]      [bold white underline]http://localhost:{port}[/bold white underline]")
+    console.print(f"[bold yellow]📱 En tu móvil (Wi-Fi con token seguro):[/bold yellow]  [bold white underline]http://{ip_local}:{port}/?token={HUB_ACCESS_TOKEN}[/bold white underline]\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

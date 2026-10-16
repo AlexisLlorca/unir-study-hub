@@ -87,21 +87,34 @@ class GeneradorGuiaEstudio:
             datos_pdf = extraer_texto_pdf(ruta_pdf)
             texto_pdf = datos_pdf.get("texto_completo", "")
 
-        # 2. Extraer texto de clase grabada si existe
+        # 2. Extraer texto de clase grabada si existe y corresponde realmente al tema
         texto_clase = ""
         if ruta_transcripcion and ruta_transcripcion.exists():
             console.print(f"[cyan]2/4. Vinculando lección magistral explicada por el profesor:[/cyan] {ruta_transcripcion.name}...")
             with open(ruta_transcripcion, "r", encoding="utf-8") as f:
                 texto_clase = f.read()
         else:
-            # Buscar automáticamente si hay transcripciones de esta asignatura
+            # Buscar únicamente si alguna transcripción coincide realmente con el tema solicitado
             dir_trans = TRANSCRIPCIONES_DIR / asignatura
             if dir_trans.exists():
-                trans_disponibles = list(dir_trans.glob("*.md"))
-                if trans_disponibles:
-                    # Usar la transcripción más relevante o reciente
-                    with open(trans_disponibles[-1], "r", encoding="utf-8") as f:
-                        texto_clase = f.read()
+                num_match = re.search(r"(?:tema|unidad|t|u|bloque|m[oó]dulo|parte|pr[aá]ctica)[\s_\-]*0*(\d+)\b", nombre_tema, re.IGNORECASE)
+                if not num_match:
+                    num_match = re.search(r"^\s*0*(\d+)\b", nombre_tema)
+                palabras = [p for p in re.findall(r"[a-záéíóúñ]{4,}", nombre_tema.lower()) if p not in {"tema", "unidad", "bloque", "modulo", "parte", "introduccion"}]
+                for t_path in sorted(dir_trans.glob("*.md")):
+                    if t_path.name.endswith("_resumen_ia.md"):
+                        continue
+                    stem_sin_fecha = re.sub(r"\b20\d{2}[-_]?\d{2}[-_]?\d{2}\b", "", t_path.stem.lower())
+                    if num_match:
+                        num = int(num_match.group(1))
+                        if re.search(rf"(?:tema|unidad|t|u|bloque|m[oó]dulo|parte|sesi[oó]n|clase)[\s_\-]*0*{num}\b", stem_sin_fecha):
+                            with open(t_path, "r", encoding="utf-8") as f:
+                                texto_clase = f.read()
+                            break
+                    if palabras and sum(1 for p in palabras if p in stem_sin_fecha) >= 2:
+                        with open(t_path, "r", encoding="utf-8") as f:
+                            texto_clase = f.read()
+                        break
 
         contexto_combinado = ""
         if texto_pdf:
@@ -188,7 +201,12 @@ class GeneradorGuiaEstudio:
         if guia_md:
             dir_asig_guia = GUIAS_DIR / asignatura
             dir_asig_guia.mkdir(parents=True, exist_ok=True)
-            ruta_guia = dir_asig_guia / f"{slug_tema}_guia.md"
+            ruta_guia_base = dir_asig_guia / f"{slug_tema}_guia.md"
+            # B4: Evitar que una guía corta machaque silenciosamente una guía robusta previa
+            if ruta_guia_base.exists() and profundidad != "media":
+                ruta_guia = dir_asig_guia / f"{slug_tema}_{profundidad}_guia.md"
+            else:
+                ruta_guia = ruta_guia_base
             with open(ruta_guia, "w", encoding="utf-8") as f:
                 f.write(guia_md)
             resultados["guia"] = ruta_guia
@@ -225,7 +243,11 @@ class GeneradorGuiaEstudio:
             "]\n"
         )
 
-        test_json_str = self.tutor.client.generar_contenido(prompt_test, temperatura=0.2)
+        test_json_str = self.tutor.client.generar_contenido(
+            prompt_test,
+            temperatura=0.2,
+            response_mime_type="application/json",
+        )
         if test_json_str:
             preguntas_data = []
             limpio = test_json_str.strip()

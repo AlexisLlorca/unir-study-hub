@@ -6,7 +6,7 @@ Maneja la autenticación, generación de texto, streaming y análisis multimodal
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Generator
+from typing import Optional, Generator, List, Dict
 
 # Asegura importación modular
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -98,6 +98,7 @@ class LLMClient:
         system_instruction: Optional[str] = None,
         temperatura: float = 0.5,
         max_output_tokens: Optional[int] = None,
+        response_mime_type: Optional[str] = None,
     ) -> Optional[str]:
         """Genera una respuesta completa a partir del prompt proporcionado."""
         client = self._obtener_cliente()
@@ -112,6 +113,8 @@ class LLMClient:
         }
         if max_output_tokens:
             config_args["max_output_tokens"] = max_output_tokens
+        if response_mime_type:
+            config_args["response_mime_type"] = response_mime_type
 
         config = types.GenerateContentConfig(**config_args)
 

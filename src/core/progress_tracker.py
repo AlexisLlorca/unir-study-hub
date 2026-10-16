@@ -5,6 +5,7 @@ calcula la nota media y genera el 'Semáforo de Examen' por tema y asignatura.
 """
 
 import json
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -12,10 +13,11 @@ from typing import Dict, List, Any, Optional
 from rich.panel import Panel
 from rich.table import Table
 
-from src.core.config import console, PROCESADO_DIR, ensure_directories
+from src.core.config import console, PROCESADO_DIR, ensure_directories, escribir_json_atomico
 from src.core.academic_structure import ASIGNATURAS_2DAM
 
 PROGRESO_FILE = PROCESADO_DIR / "progreso.json"
+_PROGRESO_LOCK = threading.Lock()
 
 
 class GestorProgreso:
@@ -27,14 +29,14 @@ class GestorProgreso:
         self._inicializar()
 
     def _inicializar(self):
-        if not self.archivo_progreso.exists():
-            datos_iniciales = {
-                "historial_tests": [],
-                "ultimas_calificaciones": {},
-                "fecha_actualizacion": datetime.now().isoformat(),
-            }
-            with open(self.archivo_progreso, "w", encoding="utf-8") as f:
-                json.dump(datos_iniciales, f, indent=2, ensure_ascii=False)
+        with _PROGRESO_LOCK:
+            if not self.archivo_progreso.exists():
+                datos_iniciales = {
+                    "historial_tests": [],
+                    "ultimas_calificaciones": {},
+                    "fecha_actualizacion": datetime.now().isoformat(),
+                }
+                escribir_json_atomico(self.archivo_progreso, datos_iniciales)
 
     def _cargar(self) -> Dict[str, Any]:
         try:
@@ -45,8 +47,7 @@ class GestorProgreso:
 
     def _guardar(self, datos: Dict[str, Any]):
         datos["fecha_actualizacion"] = datetime.now().isoformat()
-        with open(self.archivo_progreso, "w", encoding="utf-8") as f:
-            json.dump(datos, f, indent=2, ensure_ascii=False)
+        escribir_json_atomico(self.archivo_progreso, datos)
 
     def registrar_resultado_test(
         self,
@@ -57,30 +58,31 @@ class GestorProgreso:
         total: int,
     ):
         """Registra el resultado de un examen tipo test realizado en el sistema."""
-        datos = self._cargar()
-        fecha_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        with _PROGRESO_LOCK:
+            datos = self._cargar()
+            fecha_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        registro = {
-            "asignatura": asignatura,
-            "tema": tema,
-            "nota": round(nota, 2),
-            "aciertos": aciertos,
-            "total_preguntas": total,
-            "fecha": fecha_str,
-        }
+            registro = {
+                "asignatura": asignatura,
+                "tema": tema,
+                "nota": round(nota, 2),
+                "aciertos": aciertos,
+                "total_preguntas": total,
+                "fecha": fecha_str,
+            }
 
-        datos.setdefault("historial_tests", []).append(registro)
+            datos.setdefault("historial_tests", []).append(registro)
 
-        # Clave única para la última calificación por tema
-        clave = f"{asignatura}::{tema}"
-        datos.setdefault("ultimas_calificaciones", {})[clave] = {
-            "nota": round(nota, 2),
-            "aciertos": aciertos,
-            "total": total,
-            "fecha": fecha_str,
-        }
+            # Clave única para la última calificación por tema
+            clave = f"{asignatura}::{tema}"
+            datos.setdefault("ultimas_calificaciones", {})[clave] = {
+                "nota": round(nota, 2),
+                "aciertos": aciertos,
+                "total": total,
+                "fecha": fecha_str,
+            }
 
-        self._guardar(datos)
+            self._guardar(datos)
 
     def obtener_resumen_asignatura(self, asignatura: str) -> Dict[str, Any]:
         """Calcula estadísticas para una asignatura específica."""

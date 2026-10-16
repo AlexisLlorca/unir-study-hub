@@ -46,7 +46,10 @@ RESUMENES_CLASES_DIR.mkdir(parents=True, exist_ok=True)
 AUTH_DIR = BASE_DIR / "auth"
 SESSION_STATE_FILE = AUTH_DIR / "session_state.json"
 
-# 6. Variables del Campus y Servicios de IA
+# 6. Carpeta externa de respaldo de estudios (configurable con UNIR_RESPALDO_DIR en .env)
+RESPALDO_DIR = Path(os.getenv("UNIR_RESPALDO_DIR", str(Path.home() / "Respaldo_Estudios"))).expanduser()
+
+# 7. Variables del Campus y Servicios de IA
 UNIR_CAMPUS_URL = os.getenv("UNIR_CAMPUS_URL", "https://campusfp.unir.net/")
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
@@ -57,28 +60,73 @@ def get_gemini_api_key() -> str:
     return os.getenv("GEMINI_API_KEY", "").strip()
 
 
-def save_gemini_api_key(api_key: str):
-    """Guarda o actualiza la clave GEMINI_API_KEY en el archivo .env local."""
-    api_key = api_key.strip()
-    os.environ["GEMINI_API_KEY"] = api_key
-
+def _guardar_variable_env(nombre: str, valor: str):
+    """Guarda o actualiza una variable NOMBRE=valor en el archivo .env local."""
+    os.environ[nombre] = valor
     lineas = []
-    clave_encontrada = False
+    encontrada = False
 
     if ENV_FILE.exists():
         with open(ENV_FILE, "r", encoding="utf-8") as f:
             for line in f:
-                if line.startswith("GEMINI_API_KEY="):
-                    lineas.append(f"GEMINI_API_KEY={api_key}\n")
-                    clave_encontrada = True
+                if line.startswith(f"{nombre}="):
+                    lineas.append(f"{nombre}={valor}\n")
+                    encontrada = True
                 else:
                     lineas.append(line)
 
-    if not clave_encontrada:
-        lineas.append(f"GEMINI_API_KEY={api_key}\n")
+    if not encontrada:
+        if lineas and not lineas[-1].endswith("\n"):
+            lineas[-1] += "\n"
+        lineas.append(f"{nombre}={valor}\n")
 
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.writelines(lineas)
+    try:
+        os.chmod(ENV_FILE, 0o600)  # Solo legible por el usuario propietario
+    except OSError:
+        pass
+
+
+def save_gemini_api_key(api_key: str):
+    """Guarda o actualiza la clave GEMINI_API_KEY en el archivo .env local."""
+    _guardar_variable_env("GEMINI_API_KEY", api_key.strip())
+
+
+def get_hub_access_token() -> str:
+    """
+    Devuelve el token de acceso a la web para dispositivos de la red (móvil, tablet...).
+    Si no existe, genera uno aleatorio criptográficamente seguro y lo guarda en .env.
+    """
+    token = os.getenv("HUB_ACCESS_TOKEN", "").strip()
+    if not token:
+        import secrets
+        token = secrets.token_urlsafe(24)
+        _guardar_variable_env("HUB_ACCESS_TOKEN", token)
+    return token
+
+
+def escribir_json_atomico(ruta: Path, datos) -> None:
+    """
+    Escribe un JSON de forma atómica: primero en un archivo temporal y luego lo renombra.
+    Así, si el proceso se interrumpe o hay dos escrituras a la vez, nunca queda un archivo a medias.
+    """
+    import json
+    import tempfile
+
+    ruta = Path(ruta)
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=ruta.parent, prefix=f".{ruta.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(datos, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, ruta)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def ensure_directories():

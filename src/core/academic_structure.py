@@ -18,6 +18,7 @@ from typing import Dict, List, Any, Optional
 from src.core.config import (
     console,
     BASE_DIR,
+    RESPALDO_DIR,
     MATERIALES_DIR,
     CLASES_GRABADAS_DIR,
     TRANSCRIPCIONES_DIR,
@@ -314,14 +315,14 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
 
 def sincronizar_estudios_externos():
     """
-    Escanea carpetas externas en /home/alexllorca/Respaldo_Estudios/
+    Escanea carpetas externas en RESPALDO_DIR
     (Ciberseguridad y 1º DAM) y las vincula limpiamente en data/materiales/
     mediante enlaces simbólicos directos (sin duplicar espacio en disco).
     """
     MATERIALES_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. Vincular Máster en Ciberseguridad (M1 a M7)
-    ciber_root = Path("/home/alexllorca/Respaldo_Estudios/Temario Ciberseguridad")
+    ciber_root = RESPALDO_DIR / "Temario Ciberseguridad"
     if ciber_root.exists():
         mapeo_ciber = {
             "M1_Ciber": "M1 - Ciberinteligencia y Fraude",
@@ -352,7 +353,7 @@ def sincronizar_estudios_externos():
                                 pass
 
     # 2. Vincular todas las Asignaturas de 1º DAM desde el respaldo local
-    backup_dam_root = Path("/home/alexllorca/Respaldo_Estudios/Proyectos/FP DAM unir")
+    backup_dam_root = RESPALDO_DIR / "Proyectos" / "FP DAM unir"
     if backup_dam_root.exists():
         mapeo_1dam = {
             "Bases de datos": "1º DAM - Bases de Datos",
@@ -400,7 +401,7 @@ def reorganizar_biblioteca_completa():
     """
     sincronizar_estudios_externos()
 
-    backup_root = Path("/home/alexllorca/Respaldo_Estudios/Proyectos/FP DAM unir")
+    backup_root = RESPALDO_DIR / "Proyectos" / "FP DAM unir"
     backup_index = {}
     if backup_root.exists():
         for p in backup_root.glob("**/*"):

@@ -28,13 +28,14 @@ from src.core.config import (
     MATERIALES_DIR,
     BANDEJA_DAM_DIR,
     UNIR_CAMPUS_URL,
+    RESPALDO_DIR,
     ensure_directories,
 )
 from src.auth.session_manager import tiene_sesion_guardada, login_interactivo
 from src.core.academic_structure import normalizar_nombre_asignatura, reorganizar_biblioteca_completa
 
-# Ruta del respaldo local de estudios de Alex
-RESPALDO_LOCAL_DAM = Path("/home/alexllorca/Respaldo_Estudios/Proyectos/FP DAM unir")
+# Ruta del respaldo local de estudios configurable por entorno (UNIR_RESPALDO_DIR)
+RESPALDO_LOCAL_DAM = RESPALDO_DIR / "Proyectos" / "FP DAM unir"
 
 
 def limpiar_nombre_carpeta(nombre: str) -> str:

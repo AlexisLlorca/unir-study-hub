@@ -17,3 +17,8 @@ python-dotenv>=1.0.1
 
 # 6. Interfaz de consola elegante (mensajes, tablas y barras de progreso en terminal)
 rich>=13.9.0
+
+# 7. Servidor Web e Interfaz Gráfica (Dashboard API y validación de esquemas)
+fastapi>=0.115.0
+uvicorn>=0.32.0
+pydantic>=2.9.0

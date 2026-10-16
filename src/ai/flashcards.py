@@ -5,14 +5,16 @@ calificación de dificultad y generación automática mediante IA.
 """
 
 import json
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from src.core.config import PROCESADO_DIR, ensure_directories
+from src.core.config import PROCESADO_DIR, ensure_directories, escribir_json_atomico
 from src.ai.tutor import TutorIA
 
 FLASHCARDS_DIR = PROCESADO_DIR / "flashcards"
 FLASHCARDS_DATA_FILE = FLASHCARDS_DIR / "mazos.json"
+_FLASHCARDS_LOCK = threading.Lock()
 
 
 # Barajas iniciales con conceptos clave de alta frecuencia de examen
@@ -102,7 +104,8 @@ class GestorFlashcards:
     def __init__(self):
         ensure_directories()
         FLASHCARDS_DIR.mkdir(parents=True, exist_ok=True)
-        self.mazos = self._cargar_o_inicializar()
+        with _FLASHCARDS_LOCK:
+            self.mazos = self._cargar_o_inicializar()
 
     def _cargar_o_inicializar(self) -> Dict[str, List[Dict[str, Any]]]:
         if FLASHCARDS_DATA_FILE.exists():
@@ -114,7 +117,7 @@ class GestorFlashcards:
         return MAZOS_PREDETERMINADOS
 
     def _guardar(self, data: Dict[str, List[Dict[str, Any]]]):
-        FLASHCARDS_DATA_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        escribir_json_atomico(FLASHCARDS_DATA_FILE, data)
 
     def obtener_tarjetas(self, programa_id: str = "dam", asignatura: Optional[str] = None) -> List[Dict[str, Any]]:
         tarjetas = self.mazos.get(programa_id, [])
@@ -129,12 +132,13 @@ class GestorFlashcards:
         - medio: en repaso (+5 puntos)
         - dificil: requiere refuerzo (0 puntos, repetir hoy)
         """
-        for t in self.mazos.get(programa_id, []):
-            if t["id"] == tarjeta_id:
-                t["estado"] = dificultad
-                t["repasos"] = t.get("repasos", 0) + 1
-                self._guardar(self.mazos)
-                return t
+        with _FLASHCARDS_LOCK:
+            for t in self.mazos.get(programa_id, []):
+                if t["id"] == tarjeta_id:
+                    t["estado"] = dificultad
+                    t["repasos"] = t.get("repasos", 0) + 1
+                    self._guardar(self.mazos)
+                    return t
         return {}
 
     def generar_flashcards_con_ia(self, texto_tema: str, asignatura: str, programa_id: str = "dam", cantidad: int = 4) -> List[Dict[str, Any]]:
@@ -159,7 +163,11 @@ class GestorFlashcards:
             "]"
         )
         try:
-            resp = tutor.client.generar_contenido(prompt, temperatura=0.3)
+            resp = tutor.client.generar_contenido(
+                prompt,
+                temperatura=0.3,
+                response_mime_type="application/json",
+            )
             if resp:
                 limpio = resp.strip()
                 if limpio.startswith("```"):
@@ -181,10 +189,11 @@ class GestorFlashcards:
                             "repasos": 0
                         }
                         creadas.append(item)
-                    if programa_id not in self.mazos:
-                        self.mazos[programa_id] = []
-                    self.mazos[programa_id].extend(creadas)
-                    self._guardar(self.mazos)
+                    with _FLASHCARDS_LOCK:
+                        if programa_id not in self.mazos:
+                            self.mazos[programa_id] = []
+                        self.mazos[programa_id].extend(creadas)
+                        self._guardar(self.mazos)
                     return creadas
         except Exception:
             pass
