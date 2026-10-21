@@ -181,8 +181,8 @@ class UnirRecordingsCrawler:
                 if not captions_url:
                     nuevas += 1
 
+            archivo_md = dir_trans / f"{fecha}_{nombre_seguro}.md"
             if captions_url:
-                archivo_md = dir_trans / f"{fecha}_{nombre_seguro}.md"
                 if not archivo_md.exists():
                     try:
                         r_vtt = requests.get(captions_url, timeout=15)
@@ -194,6 +194,21 @@ class UnirRecordingsCrawler:
                             estado_trans = "✔ Descargada"
                     except Exception:
                         estado_trans = "Error"
+                else:
+                    estado_trans = "Ya existente"
+            else:
+                if not archivo_md.exists():
+                    dur_min = int((rec.get("duration") or 0) / 60000)
+                    md_lines = [
+                        f"# 🎥 SESIÓN GRABADA: {nombre_sesion}",
+                        f"> **Fecha de la sesión:** {fecha} | **Duración:** ~{dur_min} min | **ID Grabación:** `{rec_id}`\n",
+                        "---\n",
+                        "*Nota: Esta sesión grabada no incluye archivo de subtítulos (.vtt) en el servidor de UNIR, pero sus metadatos están registrados en el Hub.*\n",
+                    ]
+                    with open(archivo_md, "w", encoding="utf-8") as f_out:
+                        f_out.write("\n".join(md_lines))
+                    nuevas += 1
+                    estado_trans = "✔ Ficha creada"
                 else:
                     estado_trans = "Ya existente"
 

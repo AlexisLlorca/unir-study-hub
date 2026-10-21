@@ -365,26 +365,39 @@ class CampusScraper:
                             break
                         elif "cms.unir.net" in frame.url:
                             try:
-                                lti_links = frame.evaluate("""() => {
-                                    const list = [];
-                                    document.querySelectorAll('a[title*="Descargar PDF"], a[href*="/file/"]').forEach((a, idx) => {
-                                        if (a.href) list.push({idx: idx + 1, href: a.href, title: (a.innerText || a.title || '').trim()});
-                                    });
-                                    return list;
-                                }""")
-                                for it in (lti_links or []):
-                                    t_num = it.get("idx")
-                                    t_file = f"Tema {t_num:02d}.pdf"
-                                    t_dest = dir_asig / t_file
-                                    if not t_dest.exists() or t_dest.stat().st_size == 0:
-                                        r_pdf = req_session.get(it["href"], timeout=30)
-                                        if r_pdf.status_code == 200 and len(r_pdf.content) > 1000:
-                                            t_dest.write_bytes(r_pdf.content)
-                                            tam_mb = len(r_pdf.content) / (1024 * 1024)
-                                            table.add_row(portal_nombre, c_name_limpio, t_file, f"{tam_mb:.1f} MB (CMS)")
-                                            nuevos_archivos += 1
+                                html_cms = frame.evaluate("() => document.body ? document.body.innerHTML : ''")
+                                zip_matches = re.findall(r"/file/zip/[^'\"\s)]+", html_cms)
+                                if zip_matches:
+                                    zip_full_url = f"https://cms.unir.net{zip_matches[0]}"
+                                    nuevos_archivos += self._extraer_zip_cms(
+                                        zip_full_url, req_session, dir_asig, portal_nombre, c_name_limpio, table
+                                    )
+                                else:
+                                    lti_links = frame.evaluate("""() => {
+                                        const list = [];
+                                        document.querySelectorAll('a[title*="Descargar PDF"], a[href*="/file/"]').forEach((a, idx) => {
+                                            if (a.href) list.push({idx: idx + 1, href: a.href, title: (a.innerText || a.title || '').trim()});
+                                        });
+                                        return list;
+                                    }""")
+                                    for it in (lti_links or []):
+                                        t_num = it.get("idx")
+                                        t_file = f"Tema {t_num:02d}.pdf"
+                                        t_dest = dir_asig / t_file
+                                        if not t_dest.exists() or t_dest.stat().st_size == 0:
+                                            r_pdf = req_session.get(it["href"], timeout=30)
+                                            if r_pdf.status_code == 200 and len(r_pdf.content) > 1000:
+                                                t_dest.write_bytes(r_pdf.content)
+                                                tam_mb = len(r_pdf.content) / (1024 * 1024)
+                                                table.add_row(portal_nombre, c_name_limpio, t_file, f"{tam_mb:.1f} MB (CMS)")
+                                                nuevos_archivos += 1
                             except Exception:
                                 pass
+                            break
+                        elif "moodle-campusonline.s3.amazonaws.com" in frame.url:
+                            nuevos_archivos += self._descargar_modulos_s3_moodle(
+                                frame.url, req_session, dir_asig, portal_nombre, c_name_limpio, table
+                            )
                             break
                 except Exception as e_curso:
                     console.print(f"[dim]Error procesando curso Moodle {c_name_limpio}: {e_curso}[/dim]")
@@ -393,6 +406,66 @@ class CampusScraper:
             console.print(f"[dim]Nota conectando a {portal_nombre}: {e_moodle}[/dim]")
 
         return nuevos_archivos
+
+    def _extraer_zip_cms(self, zip_url: str, req_session, dir_asig: Path, portal_nombre: str, c_name_limpio: str, table: Table) -> int:
+        """Descarga un paquete ZIP de cms.unir.net y extrae todos los PDFs con nombres limpios."""
+        import zipfile
+        import io
+        nuevos = 0
+        try:
+            r_zip = req_session.get(zip_url, timeout=30)
+            if r_zip.status_code == 200 and len(r_zip.content) > 1000:
+                with zipfile.ZipFile(io.BytesIO(r_zip.content)) as zf:
+                    for zname in zf.namelist():
+                        if not zname.lower().endswith(".pdf"):
+                            continue
+                        clean_name = Path(zname).name
+                        clean_name = re.sub(r"^\d+_full_\d+_", "", clean_name)
+                        clean_name = re.sub(r"_[a-z]{3}-[A-Z]{2}\.pdf$", ".pdf", clean_name)
+                        clean_name = clean_name.replace("_", " ").strip()
+                        dest_pdf = dir_asig / clean_name
+                        if not dest_pdf.exists() or dest_pdf.stat().st_size == 0:
+                            pdf_bytes = zf.read(zname)
+                            dest_pdf.write_bytes(pdf_bytes)
+                            tam_mb = len(pdf_bytes) / (1024 * 1024)
+                            table.add_row(portal_nombre, c_name_limpio, clean_name, f"{tam_mb:.1f} MB (CMS ZIP)")
+                            nuevos += 1
+        except Exception as e:
+            console.print(f"[dim]Nota extrayendo ZIP CMS ({c_name_limpio}): {e}[/dim]")
+        return nuevos
+
+    def _descargar_modulos_s3_moodle(self, s3_url: str, req_session, dir_asig: Path, portal_nombre: str, c_name_limpio: str, table: Table) -> int:
+        """Descarga los módulos PDF alojados en moodle-campusonline.s3.amazonaws.com (AWS, AZ-900)."""
+        nuevos = 0
+        hdrs = {"Referer": "https://campusonline.unir.net/", "User-Agent": "Mozilla/5.0"}
+        try:
+            r_html = req_session.get(s3_url, headers=hdrs, timeout=15)
+            r_html.encoding = "utf-8"
+            titulos_modulos = {}
+            if r_html.status_code == 200:
+                for m in re.finditer(r"<h1[^>]*class=[\"']table-title[\"'][^>]*>\s*<span>([^<]+)</span>", r_html.text, re.I):
+                    t_str = re.sub(r"M([óo])dulo\s*(\d+)\.\s*", r"M\1dulo \2. ", m.group(1).strip(), flags=re.I)
+                    m_num = re.search(r"M[óo]dulo\s*(\d+)", t_str, re.I)
+                    if m_num:
+                        titulos_modulos[int(m_num.group(1))] = re.sub(r'[\\/*?:"<>|]', "", t_str).strip()
+
+            for idx in range(1, 10):
+                mod_url = urljoin(s3_url, f"pdf/modulo{idx}.pdf")
+                nombre_mod = titulos_modulos.get(idx, f"Módulo {idx}")
+                if not nombre_mod.lower().endswith(".pdf"):
+                    nombre_mod += ".pdf"
+                dest_pdf = dir_asig / nombre_mod
+                if dest_pdf.exists() and dest_pdf.stat().st_size > 0:
+                    continue
+                r_mod = req_session.get(mod_url, headers=hdrs, timeout=20)
+                if r_mod.status_code == 200 and len(r_mod.content) > 1000 and r_mod.content[:4] == b"%PDF":
+                    dest_pdf.write_bytes(r_mod.content)
+                    tam_mb = len(r_mod.content) / (1024 * 1024)
+                    table.add_row(portal_nombre, c_name_limpio, nombre_mod, f"{tam_mb:.1f} MB (S3)")
+                    nuevos += 1
+        except Exception as e:
+            console.print(f"[dim]Nota descargando módulos S3 ({c_name_limpio}): {e}[/dim]")
+        return nuevos
 
     def _descargar_archivos_de_cursos(self, page, req_session, cursos, portal_nombre: str, portal_url: str, table: Table) -> int:
         """Descarga archivos y temarios externos de una lista de cursos de Canvas."""
@@ -499,10 +572,23 @@ class CampusScraper:
 
                     for frame in page.frames:
                         if "cms.unir.net" in frame.url:
+                            try:
+                                html_cms = frame.evaluate("() => document.body ? document.body.innerHTML : ''")
+                                zip_matches = re.findall(r"/file/zip/[^'\"\s)]+", html_cms)
+                                if zip_matches:
+                                    n_zip = self._extraer_zip_cms(
+                                        f"https://cms.unir.net{zip_matches[0]}",
+                                        req_session, dir_asig, portal_nombre, c_name_limpio, table
+                                    )
+                                    if n_zip > 0:
+                                        nuevos_archivos += n_zip
+                                        break
+                            except Exception:
+                                pass
                             lti_links = frame.evaluate("""() => {
                                 const list = [];
-                                document.querySelectorAll('a[title*="Descargar PDF"]').forEach((a, idx) => {
-                                    list.push({idx: idx + 1, href: a.href});
+                                document.querySelectorAll('a[title*="Descargar PDF"], a[href*="/file/"]').forEach((a, idx) => {
+                                    if (a.href && !a.href.includes('/zip/')) list.push({idx: idx + 1, href: a.href});
                                 });
                                 return list;
                             }""")
