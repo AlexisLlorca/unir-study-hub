@@ -270,7 +270,7 @@ class GenerarGuiaRequest(BaseModel):
 def _buscar_pdf_relevante(dir_mats: Path, nombre_tema: str) -> Optional[Path]:
     """
     Busca el PDF más relevante para un tema sin caer en falsos positivos de fechas (ej. 2026-10-01)
-    ni devolver un PDF arbitrario cuando no hay coincidencia.
+    ni confundir 'Tema 1' con 'Tema 10'.
     """
     if not dir_mats.exists():
         return None
@@ -278,24 +278,24 @@ def _buscar_pdf_relevante(dir_mats: Path, nombre_tema: str) -> Optional[Path]:
     if not pdfs:
         return None
 
-    # 1. Coincidencia por título normalizado
-    q_norm = re.sub(r"[^\w]", "", nombre_tema.lower())
-    for f in pdfs:
-        f_norm = re.sub(r"[^\w]", "", f.stem.lower())
-        if q_norm and len(q_norm) >= 4 and (q_norm in f_norm or f_norm in q_norm):
-            return f
-
-    # 2. Coincidencia explícita por número de tema/unidad (ej. Tema 1, UD 2, Unidad 3, 01_...)
+    # 1. Coincidencia explícita por número de tema/unidad con límite de palabra (evita Tema 1 -> Tema 10)
     num_match = re.search(r"(?:tema|ud|unidad|bloque|modulo|módulo)\s*0*(\d+)\b|\b0*(\d+)\b", nombre_tema.lower())
     if num_match:
         num = num_match.group(1) or num_match.group(2)
         patron_tema = re.compile(
-            rf"(?:^|[_\s\-.])(?:tema|ud|unidad|bloque|t)[\s_\-.]*0*{num}(?:\b|[_\s\-.])|^0*{num}[_\s\-.]",
+            rf"(?:^|[_\s\-.])(?:tema|ud|unidad|bloque|m[oó]dulo|t)[\s_\-.]*0*{num}(?!\d)(?:\b|[_\s\-.])|^0*{num}(?!\d)[_\s\-.]",
             re.IGNORECASE,
         )
         for f in pdfs:
             if patron_tema.search(f.stem):
                 return f
+
+    # 2. Coincidencia por título normalizado (cuando no lleva número o busca por palabras)
+    q_norm = re.sub(r"[^\w]", "", nombre_tema.lower())
+    for f in pdfs:
+        f_norm = re.sub(r"[^\w]", "", f.stem.lower())
+        if q_norm and len(q_norm) >= 4 and not re.search(r"\d+$", q_norm) and (q_norm in f_norm or f_norm in q_norm):
+            return f
 
     # 3. Solo si la asignatura tiene un único PDF en total lo usamos por defecto
     if len(pdfs) == 1:
@@ -314,19 +314,19 @@ def _buscar_transcripcion_relevante(dir_trans: Path, nombre_tema: str) -> Option
     if not trans:
         return None
 
-    q_norm = re.sub(r"[^\w]", "", nombre_tema.lower())
-    for t in trans:
-        t_norm = re.sub(r"[^\w]", "", t.stem.lower())
-        if q_norm and len(q_norm) >= 5 and (q_norm in t_norm or t_norm in q_norm):
-            return t
-
     num_match = re.search(r"(?:tema|ud|unidad|sesi[oó]n|clase)\s*0*(\d+)\b", nombre_tema.lower())
     if num_match:
         num = num_match.group(1)
-        patron = re.compile(rf"(?:tema|ud|unidad|sesi[oó]n|clase)[\s_\-.]*0*{num}\b", re.IGNORECASE)
+        patron = re.compile(rf"(?:tema|ud|unidad|sesi[oó]n|clase)[\s_\-.]*0*{num}(?!\d)\b", re.IGNORECASE)
         for t in trans:
             if patron.search(t.stem):
                 return t
+
+    q_norm = re.sub(r"[^\w]", "", nombre_tema.lower())
+    for t in trans:
+        t_norm = re.sub(r"[^\w]", "", t.stem.lower())
+        if q_norm and len(q_norm) >= 5 and not re.search(r"\d+$", q_norm) and (q_norm in t_norm or t_norm in q_norm):
+            return t
 
     return None
 
@@ -492,8 +492,8 @@ def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None
             if info_file.exists():
                 try:
                     data = json.loads(info_file.read_text(encoding='utf-8'))
-                    summary = data.get('summary', '')
-                    session_name = data.get('sessionName', f_md.stem)
+                    summary = data.get('summary') or ''
+                    session_name = data.get('sessionName') or f_md.stem
                 except Exception:
                     pass
 
@@ -694,8 +694,8 @@ def obtener_contexto_inteligente_clases(
                 try:
                     idata = json.loads(info_file.read_text(encoding="utf-8"))
                     session_name = idata.get("sessionName") or idata.get("name") or stem
-                    summary = idata.get("summary", "")
-                    rec_url = idata.get("recordingUrl", "")
+                    summary = idata.get("summary") or ""
+                    rec_url = idata.get("recordingUrl") or ""
                 except Exception:
                     pass
 
@@ -764,11 +764,11 @@ def api_videoclases(programa: Optional[str] = None):
             if info_file.exists():
                 try:
                     data = json.loads(info_file.read_text(encoding="utf-8"))
-                    summary = data.get("summary", "")
+                    summary = data.get("summary") or ""
                     if data.get("sessionName"):
                         titulo = data.get("sessionName")
-                    rec_url = data.get("recordingUrl", "")
-                    duration = data.get("duration", 0)
+                    rec_url = data.get("recordingUrl") or ""
+                    duration = data.get("duration") or 0
                 except Exception:
                     pass
 

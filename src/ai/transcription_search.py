@@ -70,8 +70,8 @@ def buscar_en_transcripciones(
 
             titulo_sesion = meta.get("sessionName") or meta.get("name") or stem_base
             fecha = stem_base[:10] if len(stem_base) >= 10 else "2026"
-            rec_url = meta.get("recordingUrl", "")
-            summary = meta.get("summary", "")
+            rec_url = meta.get("recordingUrl") or ""
+            summary = meta.get("summary") or ""
 
             try:
                 cues = json.loads(f_cues.read_text(encoding="utf-8"))
@@ -79,9 +79,9 @@ def buscar_en_transcripciones(
                 continue
 
             for idx, cue in enumerate(cues):
-                texto_cue = cue.get("text", "")
+                texto_cue = cue.get("text") or ""
                 texto_cue_lower = texto_cue.lower()
-                hablante = cue.get("speaker", "Profesor")
+                hablante = cue.get("speaker") or "Profesor"
 
                 puntos = 0
                 coincidencias_palabras = 0
