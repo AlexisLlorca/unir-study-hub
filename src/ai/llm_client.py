@@ -100,32 +100,46 @@ CATALOGO_MODELOS_GRATUITOS: List[Dict[str, Any]] = [
         "descripcion": "Google AI Studio · Ligero de respaldo",
     },
     {
-        "id": "openrouter:deepseek/deepseek-chat-v3-0324:free",
-        "nombre": "DeepSeek V3 0324 (Free)",
+        "id": "openrouter:openrouter/free",
+        "nombre": "OpenRouter Free Router (Auto)",
         "proveedor": "openrouter",
         "gratis": True,
-        "descripcion": "OpenRouter Gratis · Excelente en código y arquitectura",
+        "descripcion": "OpenRouter Gratis · Enrutador automático al mejor modelo libre activo",
     },
     {
-        "id": "openrouter:qwen/qwen3-235b-a22b:free",
-        "nombre": "Qwen 3 235B MoE (Free)",
+        "id": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nombre": "NVIDIA Nemotron 3 Ultra 550B (Free)",
         "proveedor": "openrouter",
         "gratis": True,
-        "descripcion": "OpenRouter Gratis · Gran capacidad de razonamiento",
+        "descripcion": "OpenRouter Gratis · 550B MoE de máxima capacidad técnica",
     },
     {
-        "id": "openrouter:meta-llama/llama-3.3-70b-instruct:free",
-        "nombre": "Llama 3.3 70B Instruct (Free)",
+        "id": "openrouter:minimax/minimax-m3.1-flash:free",
+        "nombre": "MiniMax M3.1 Flash (Free)",
         "proveedor": "openrouter",
         "gratis": True,
-        "descripcion": "OpenRouter Gratis · Meta Llama 3.3 70B",
+        "descripcion": "OpenRouter Gratis · Rápido, preciso en código y español",
     },
     {
-        "id": "openrouter:mistralai/mistral-small-3.1-24b-instruct:free",
-        "nombre": "Mistral Small 3.1 24B (Free)",
+        "id": "openrouter:nvidia/nemotron-3.5-lightning:free",
+        "nombre": "NVIDIA Nemotron 3.5 Lightning (Free)",
         "proveedor": "openrouter",
         "gratis": True,
-        "descripcion": "OpenRouter Gratis · Rápido y preciso en español",
+        "descripcion": "OpenRouter Gratis · Respuesta ultrarrápida de baja latencia",
+    },
+    {
+        "id": "openrouter:cohere/north-mini-code:free",
+        "nombre": "Cohere North Mini Code (Free)",
+        "proveedor": "openrouter",
+        "gratis": True,
+        "descripcion": "OpenRouter Gratis · Especializado en programación y código",
+    },
+    {
+        "id": "openrouter:poolside/laguna-s-2.1:free",
+        "nombre": "Poolside Laguna S 2.1 (Free)",
+        "proveedor": "openrouter",
+        "gratis": True,
+        "descripcion": "OpenRouter Gratis · Ingeniería de software y arquitectura",
     },
     {
         "id": "groq:llama-3.3-70b-versatile",
@@ -234,9 +248,9 @@ class LLMClient:
             "gemma-4-31b-it",
             self.model_name,
             "gemini-3.5-flash",
-            "gemini-3.7-flash",
             "gemini-3.8-flash",
             "gemini-3.1-flash-lite",
+            "gemini-3.7-flash",
         ]
         if get_groq_api_key():
             candidatos_base.extend([
@@ -245,10 +259,12 @@ class LLMClient:
             ])
         if get_openrouter_api_key():
             candidatos_base.extend([
-                "openrouter:deepseek/deepseek-chat-v3-0324:free",
-                "openrouter:qwen/qwen3-235b-a22b:free",
-                "openrouter:meta-llama/llama-3.3-70b-instruct:free",
-                "openrouter:mistralai/mistral-small-3.1-24b-instruct:free",
+                "openrouter:openrouter/free",
+                "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+                "openrouter:minimax/minimax-m3.1-flash:free",
+                "openrouter:nvidia/nemotron-3.5-lightning:free",
+                "openrouter:cohere/north-mini-code:free",
+                "openrouter:poolside/laguna-s-2.1:free",
             ])
 
         activos = []
@@ -376,10 +392,13 @@ class LLMClient:
         for mod in modelos:
             try:
                 if mod.startswith(("openrouter:", "groq:")):
-                    if response_mime_type == "application/json":
-                        continue
+                    sys_oa = (
+                        f"{sys_inst}\n\nIMPORTANTE: Devuelve ÚNICAMENTE un JSON válido sin bloques markdown ni texto adicional."
+                        if response_mime_type == "application/json"
+                        else sys_inst
+                    )
                     res_oa = self._llamar_openai_compatible(
-                        mod, [{"role": "user", "text": prompt}], sys_inst, temperatura
+                        mod, [{"role": "user", "text": prompt}], sys_oa, temperatura
                     )
                     if res_oa:
                         return res_oa

@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.config import (
+    console,
     ensure_directories,
     MATERIALES_DIR,
     CLASES_GRABADAS_DIR,
@@ -50,8 +51,6 @@ from src.core.academic_structure import (
 from src.core.study_navigator import NavegadorAcademico
 from src.core.progress_tracker import GestorProgreso
 from src.ui.web_server import iniciar_servidor_web
-
-console = Console()
 
 
 def mostrar_banner():

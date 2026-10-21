@@ -16,8 +16,33 @@ ENV_FILE = BASE_DIR / ".env"
 # 2. Carga variables de entorno si existe un archivo .env local
 load_dotenv(dotenv_path=ENV_FILE)
 
-# 3. Inicializa consola de Rich para salidas elegantes en terminal
-console = Console()
+# 3. Inicializa consola de Rich protegida contra BrokenPipeError cuando corre como daemon web
+class SafeConsole(Console):
+    """Consola Rich que ignora BrokenPipeError / OSError si stdout/stderr se cierra en segundo plano."""
+
+    def print(self, *args, **kwargs) -> None:
+        try:
+            super().print(*args, **kwargs)
+        except (BrokenPipeError, OSError):
+            pass
+
+    def log(self, *args, **kwargs) -> None:
+        try:
+            super().log(*args, **kwargs)
+        except (BrokenPipeError, OSError):
+            pass
+
+    def _write_buffer(self) -> None:
+        try:
+            super()._write_buffer()
+        except (BrokenPipeError, OSError):
+            try:
+                self._buffer.clear()
+            except Exception:
+                pass
+
+
+console = SafeConsole()
 
 # 4. Rutas del sistema de datos (Entrada, Almacén y Procesado)
 DATA_DIR = BASE_DIR / "data"
@@ -95,6 +120,7 @@ def save_gemini_api_key(api_key: str):
 
 def get_openrouter_api_key() -> str:
     """Obtiene la clave gratuita de OpenRouter desde las variables de entorno."""
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
     return os.getenv("OPENROUTER_API_KEY", "").strip()
 
 
@@ -104,13 +130,22 @@ def save_openrouter_api_key(api_key: str):
 
 
 def get_groq_api_key() -> str:
-    """Obtiene la clave gratuita de Groq desde las variables de entorno."""
-    return os.getenv("GROQ_API_KEY", "").strip()
+    """Obtiene la clave gratuita de Groq (prefijo gsk_) desde las variables de entorno."""
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
+    key = os.getenv("GROQ_API_KEY", "").strip()
+    if key.startswith("sk-or-"):
+        return ""
+    return key
 
 
 def save_groq_api_key(api_key: str):
-    """Guarda o actualiza GROQ_API_KEY en .env."""
-    _guardar_variable_env("GROQ_API_KEY", api_key.strip())
+    """Guarda o actualiza GROQ_API_KEY en .env (si es sk-or-, la guarda como OpenRouter)."""
+    k = api_key.strip()
+    if k.startswith("sk-or-"):
+        _guardar_variable_env("OPENROUTER_API_KEY", k)
+        _guardar_variable_env("GROQ_API_KEY", "")
+    else:
+        _guardar_variable_env("GROQ_API_KEY", k)
 
 
 def get_hub_access_token() -> str:
