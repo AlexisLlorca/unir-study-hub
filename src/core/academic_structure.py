@@ -89,6 +89,7 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                 "asignaturas": [
                     "Aula de Información General (PFU)",
                     "PFU - Ingeniería del Software",
+                    "PFU - Bases de Datos Avanzadas",
                     "PFU - Estructura de Datos y Algoritmos",
                     "PFU - Arquitectura de Computadores",
                     "PFU - Matemáticas y Lógica Computacional",
@@ -258,6 +259,8 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
         if "pfu" in s or "16645" in s or "universitaria" in s or "software" in s:
             return "Aula de Información General (PFU)"
         return "Aula de Información General"
+    if "bases de datos avanzadas" in s or ("bases de datos" in s and ("16645" in s or "pfu" in s)):
+        return "PFU - Bases de Datos Avanzadas"
     if "ingeniería del software" in s or "ingenieria del software" in s or "16645" in s:
         return "PFU - Ingeniería del Software"
     if "estructura de datos" in s or ("algoritmos" in s and "pfu" in s):

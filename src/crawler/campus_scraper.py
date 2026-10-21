@@ -117,24 +117,28 @@ class CampusScraper:
         total_nuevos_archivos = 0
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=False,
+                args=["--headless=new", "--disable-blink-features=AutomationControlled"],
+            )
             try:
                 context = browser.new_context(
                     storage_state=str(SESSION_STATE_FILE),
                     viewport={"width": 1280, "height": 800},
-                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 )
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 page = context.new_page()
 
                 # Inicializar sesión de requests con las cookies activas
                 req_session = requests.Session()
                 req_session.headers.update({
-                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
                 })
                 for ck in context.cookies():
                     req_session.cookies.set(ck["name"], ck["value"], domain=ck.get("domain", ""))
 
-                table = Table(title="📥 Sincronización Multi-Campus UNIR (Canvas)", border_style="cyan")
+                table = Table(title="📥 Sincronización Multi-Campus UNIR (Canvas + Moodle ESIT)", border_style="cyan")
                 table.add_column("Plataforma", style="yellow")
                 table.add_column("Asignatura", style="cyan")
                 table.add_column("Archivo Descargado", style="white")
@@ -204,17 +208,191 @@ class CampusScraper:
                         page, req_session, cursos, portal_nombre, portal_url, table
                     )
 
+                # 2. Explorar y descargar desde Moodle UNIR-ESIT (campusonline.unir.net -> PFU, Python, AWS, AZ-900)
+                total_nuevos_archivos += self._explorar_y_descargar_moodle_campusonline(
+                    page, context, req_session, table
+                )
+
                 if total_nuevos_archivos > 0:
                     console.print(table)
                     console.print(f"\n[bold green]✔ ¡Se han descargado {total_nuevos_archivos} nuevos archivos del campus![/bold green]\n")
                 else:
                     console.print("[dim]Todos los archivos del campus ya están descargados y al día.[/dim]\n")
             except Exception as e:
-                console.print(f"[bold red]❌ Error navegando por Canvas:[/bold red] {e}")
+                console.print(f"[bold red]❌ Error navegando por el campus:[/bold red] {e}")
             finally:
                 browser.close()
 
         return total_nuevos_archivos
+
+    def _explorar_y_descargar_moodle_campusonline(self, page, context, req_session, table: Table) -> int:
+        """
+        Conecta a Moodle UNIR-ESIT (campusonline.unir.net) vía SSO de crosscutting.unir.net,
+        descubre las asignaturas del PFU en Ingeniería de Software y cursos técnicos (Python, AWS, AZ-900),
+        y descarga los PDFs completos desde el Visor Interactivo (visorinteractivo.unir.net / cms.unir.net).
+        """
+        nuevos_archivos = 0
+        portal_nombre = "Moodle UNIR-ESIT (PFU)"
+        console.print(f"\n[cyan]🌐 Conectando a {portal_nombre} (campusonline.unir.net)...[/cyan]")
+
+        auth_visor = {"token": ""}
+
+        def capturar_auth(req):
+            if "visorinteractivo.unir.net/api/v" in req.url and req.headers.get("authorization"):
+                auth_visor["token"] = req.headers.get("authorization")
+
+        context.on("request", capturar_auth)
+
+        try:
+            page.goto("https://crosscutting.unir.net/loggedin?university=UNIR_ES", wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(1200)
+            if page.locator("#ApplicationUrl").count() > 0:
+                page.select_option("#ApplicationUrl", value="https://campusonline.unir.net")
+                page.click("input[type='submit']")
+                page.wait_for_load_state("domcontentloaded", timeout=20000)
+                page.wait_for_timeout(2500)
+
+            if "campusonline.unir.net" not in page.url:
+                console.print("[yellow]⚠ No se pudo acceder a campusonline.unir.net.[/yellow]")
+                return 0
+
+            console.print(f"[green]✔ Acceso concedido: {page.title()}[/green]")
+
+            cursos_moodle = page.evaluate("""() => {
+                const seen = new Set();
+                const res = [];
+                document.querySelectorAll("a[href*='/course/view.php?id=']").forEach(a => {
+                    const href = a.href;
+                    const text = a.innerText.trim().replace(/\\s+/g, " ");
+                    if (href && text && !seen.has(href)) {
+                        seen.add(href);
+                        res.push({name: text, url: href});
+                    }
+                });
+                return res;
+            }""")
+
+            console.print(f"[green]✔ Cursos detectados en {portal_nombre}:[/green] [bold]{len(cursos_moodle or [])}[/bold]")
+
+            for cm in (cursos_moodle or []):
+                c_name_limpio = normalizar_nombre_asignatura(cm["name"])
+                dir_asig = MATERIALES_DIR / c_name_limpio
+                dir_asig.mkdir(parents=True, exist_ok=True)
+
+                try:
+                    page.goto(cm["url"], wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(1500)
+
+                    url_temario = page.evaluate("""() => {
+                        const links = Array.from(document.querySelectorAll("a[href*='/mod/lti/view.php'], a[href*='/mod/url/view.php']"));
+                        const found = links.find(a => {
+                            const t = a.innerText.trim().toLowerCase();
+                            return t === "temario" || t.startsWith("temario");
+                        });
+                        return found ? found.href : null;
+                    }""")
+                    if not url_temario:
+                        continue
+
+                    page.goto(url_temario, wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(3000)
+
+                    for frame in page.frames:
+                        if "visorinteractivo.unir.net/lti/" in frame.url:
+                            m_subj = re.search(r"/lti/(\d+)", frame.url)
+                            if not m_subj:
+                                continue
+                            subject_id = m_subj.group(1)
+
+                            np = None
+                            try:
+                                with context.expect_page(timeout=8000) as np_info:
+                                    frame.click("button")
+                                np = np_info.value
+                                np.wait_for_load_state("domcontentloaded", timeout=15000)
+                                np.wait_for_timeout(2500)
+
+                                tok = auth_visor.get("token", "")
+                                topics = np.evaluate("""async ({sid, token}) => {
+                                    try {
+                                        const r = await fetch(`/api/v3/subjects/${sid}/user-topics`, {
+                                            headers: token ? {"Authorization": token} : {}
+                                        });
+                                        if (!r.ok) return [];
+                                        const d = await r.json();
+                                        return d.topics || [];
+                                    } catch (e) { return []; }
+                                }""", {"sid": subject_id, "token": tok})
+
+                                for t_obj in (topics or []):
+                                    t_id = t_obj.get("topicId")
+                                    t_title = (t_obj.get("title") or f"Tema_{t_id}").strip()
+                                    t_clean = re.sub(r'[\\/*?:"<>|]', "", t_title).strip()
+                                    if not t_clean.lower().endswith(".pdf"):
+                                        t_clean += ".pdf"
+                                    dest_pdf = dir_asig / t_clean
+
+                                    if dest_pdf.exists() and dest_pdf.stat().st_size > 0:
+                                        continue
+
+                                    dl_info = np.evaluate("""async ({tid, token}) => {
+                                        try {
+                                            const r = await fetch(`/api/v1/topics/${tid}/download`, {
+                                                method: "POST",
+                                                headers: token ? {"Authorization": token} : {}
+                                            });
+                                            if (!r.ok) return null;
+                                            return await r.json();
+                                        } catch (e) { return null; }
+                                    }""", {"tid": t_id, "token": tok})
+
+                                    dl_url = (dl_info or {}).get("downloadUrl")
+                                    if dl_url:
+                                        r_pdf = req_session.get(dl_url, timeout=30)
+                                        if r_pdf.status_code == 200 and len(r_pdf.content) > 1000:
+                                            dest_pdf.write_bytes(r_pdf.content)
+                                            tam_mb = len(r_pdf.content) / (1024 * 1024)
+                                            table.add_row(portal_nombre, c_name_limpio, t_clean, f"{tam_mb:.1f} MB (Visor)")
+                                            nuevos_archivos += 1
+                            except Exception as e_vis:
+                                console.print(f"[dim]Nota en Visor Interactivo ({c_name_limpio}): {e_vis}[/dim]")
+                            finally:
+                                if np:
+                                    try:
+                                        np.close()
+                                    except Exception:
+                                        pass
+                            break
+                        elif "cms.unir.net" in frame.url:
+                            try:
+                                lti_links = frame.evaluate("""() => {
+                                    const list = [];
+                                    document.querySelectorAll('a[title*="Descargar PDF"], a[href*="/file/"]').forEach((a, idx) => {
+                                        if (a.href) list.push({idx: idx + 1, href: a.href, title: (a.innerText || a.title || '').trim()});
+                                    });
+                                    return list;
+                                }""")
+                                for it in (lti_links or []):
+                                    t_num = it.get("idx")
+                                    t_file = f"Tema {t_num:02d}.pdf"
+                                    t_dest = dir_asig / t_file
+                                    if not t_dest.exists() or t_dest.stat().st_size == 0:
+                                        r_pdf = req_session.get(it["href"], timeout=30)
+                                        if r_pdf.status_code == 200 and len(r_pdf.content) > 1000:
+                                            t_dest.write_bytes(r_pdf.content)
+                                            tam_mb = len(r_pdf.content) / (1024 * 1024)
+                                            table.add_row(portal_nombre, c_name_limpio, t_file, f"{tam_mb:.1f} MB (CMS)")
+                                            nuevos_archivos += 1
+                            except Exception:
+                                pass
+                            break
+                except Exception as e_curso:
+                    console.print(f"[dim]Error procesando curso Moodle {c_name_limpio}: {e_curso}[/dim]")
+
+        except Exception as e_moodle:
+            console.print(f"[dim]Nota conectando a {portal_nombre}: {e_moodle}[/dim]")
+
+        return nuevos_archivos
 
     def _descargar_archivos_de_cursos(self, page, req_session, cursos, portal_nombre: str, portal_url: str, table: Table) -> int:
         """Descarga archivos y temarios externos de una lista de cursos de Canvas."""
