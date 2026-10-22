@@ -81,11 +81,17 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
             f"[cyan]☁️ Subiendo {archivos_copiados} archivos ({bytes_copiados / (1024*1024):.1f} MB) "
             f"al Dataset privado {repo_id}...[/cyan]"
         )
-        api.upload_large_folder(
-            folder_path=str(Path(tmpdir)),
-            repo_id=repo_id,
-            repo_type="dataset",
-        )
+        for sub in ["clases_grabadas", "procesado", "materiales"]:
+            sub_path = tmp_data / sub
+            if sub_path.exists():
+                console.print(f"[dim]   → Sincronizando data/{sub}...[/dim]")
+                api.upload_folder(
+                    folder_path=str(sub_path),
+                    path_in_repo=f"data/{sub}",
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    commit_message=f"sync: data/{sub}",
+                )
         console.print(f"[bold green]✔ Biblioteca sincronizada en https://huggingface.co/datasets/{repo_id}[/bold green]")
         return True
 
