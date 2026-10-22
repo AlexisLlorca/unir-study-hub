@@ -28,6 +28,9 @@ def extraer_texto_pdf(ruta_pdf: Path) -> Dict[str, Any]:
     """
     if not ruta_pdf.exists():
         raise FileNotFoundError(f"No se encontró el archivo: {ruta_pdf}")
+    if ruta_pdf.stat().st_size == 0:
+        from src.core.cloud_sync import asegurar_archivo_local
+        asegurar_archivo_local(ruta_pdf)
 
     reader = PdfReader(str(ruta_pdf))
     total_paginas = len(reader.pages)

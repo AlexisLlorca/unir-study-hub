@@ -66,6 +66,9 @@ def ruta_segura_lectura(ruta_relativa: str, extensiones: Optional[Iterable[str]]
 
     if not real.exists() or not real.is_file():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    if real.stat().st_size == 0:
+        from src.core.cloud_sync import asegurar_archivo_local
+        asegurar_archivo_local(real)
     return real
 
 

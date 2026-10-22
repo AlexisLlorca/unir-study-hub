@@ -14,9 +14,12 @@ if str(BASE_DIR) not in sys.path:
 
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] in ["--web", "-w"]:
     from src.core.config import ensure_directories
-    from src.ui.web_server import iniciar_servidor_web
+    from src.core.cloud_sync import descargar_datos_desde_hf_si_vacio
 
     ensure_directories()
+    descargar_datos_desde_hf_si_vacio()
+    from src.ui.web_server import iniciar_servidor_web
+
     iniciar_servidor_web()
     sys.exit(0)
 

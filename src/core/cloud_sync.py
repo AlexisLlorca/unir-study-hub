@@ -1,23 +1,31 @@
 """
-Sincronización en la Nube (Cloud Storage gratuito en Hugging Face Datasets).
-Permite que una instancia gratuita de Render / Koyeb / Railway descargue automáticamente
-las transcripciones, guías, exámenes y temarios desde el Dataset privado del usuario
-('AlexLlorca/unir-study-hub-data') y persista las nuevas guías/tests generados en la nube.
+Sincronización Inteligente en la Nube (Cloud Storage gratuito en Hugging Face Datasets).
+Diseñado específicamente para que en servidores gratuitos como Render Free (512 MB RAM):
+1. Al arrancar (en < 1 segundo), descargue `procesado_bundle.tar.gz` (~5 MB) con todo el progreso,
+   guías, exámenes, flashcards y las 145+ transcripciones de clases, además del índice de los 580+ PDFs.
+2. Cree placeholders ligeros de los PDFs para que todo el catálogo aparezca al instante sin gastar RAM ni disco.
+3. Cuando el usuario abra un PDF o genere una guía/test con IA sobre un PDF, descargue ese PDF concreto
+   bajo demanda desde `AlexLlorca/unir-study-hub-data` en milisegundos.
+4. Persista en segundo plano cualquier nueva guía, test o progreso generado en la nube.
 """
 
 import json
 import os
 import shutil
+import tarfile
 import tempfile
 import threading
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from src.core.config import BASE_DIR, DATA_DIR, ENV_FILE, console
 from dotenv import load_dotenv
+from src.core.config import BASE_DIR, DATA_DIR, ENV_FILE, console
 
 DEFAULT_HF_DATASET = "AlexLlorca/unir-study-hub-data"
 EXTENSIONES_SINCRONIZABLES = {".pdf", ".docx", ".md", ".json", ".txt"}
+BUNDLE_FILENAME = "procesado_bundle.tar.gz"
 
 
 def get_hf_token() -> str:
@@ -30,9 +38,173 @@ def get_hf_dataset_repo() -> str:
     return os.getenv("HF_DATASET_REPO", DEFAULT_HF_DATASET).strip()
 
 
+def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
+    """
+    Crea `procesado_bundle.tar.gz` con:
+    - Todo `data/procesado/` (guías, tests, transcripciones, flashcards, progreso_academico.json)
+    - Todo `data/clases_grabadas/`
+    - `data/catalogo_materiales.json` (lista de todos los PDFs/DOCX en `data/materiales/` para crear placeholders instantáneos)
+    Y lo sube a la raíz del Dataset privado en Hugging Face.
+    """
+    from huggingface_hub import HfApi
+
+    hf_token = (token or get_hf_token()).strip()
+    if not hf_token:
+        console.print("[red]❌ Falta HF_TOKEN para crear el bundle cloud.[/red]")
+        return False
+
+    api = HfApi(token=hf_token)
+    repo_id = get_hf_dataset_repo()
+
+    # Recopilar lista de todos los materiales (PDF/DOCX/MD/TXT)
+    mats_dir = DATA_DIR / "materiales"
+    lista_materiales = []
+    if mats_dir.exists():
+        for p in sorted(mats_dir.rglob("*")):
+            try:
+                if p.is_file() and p.suffix.lower() in EXTENSIONES_SINCRONIZABLES:
+                    rel = p.relative_to(DATA_DIR)
+                    if not any(part.startswith(".") for part in rel.parts):
+                        lista_materiales.append(str(rel).replace("\\", "/"))
+            except Exception:
+                continue
+
+    with tempfile.TemporaryDirectory(prefix="unir_bundle_") as tmpdir:
+        tmp_path = Path(tmpdir)
+        bundle_path = tmp_path / BUNDLE_FILENAME
+        manifest_path = tmp_path / "catalogo_materiales.json"
+        manifest_path.write_text(json.dumps(lista_materiales, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        with tarfile.open(bundle_path, "w:gz") as tar:
+            tar.add(str(manifest_path), arcname="data/catalogo_materiales.json")
+            for sub in ("procesado", "clases_grabadas"):
+                sub_dir = DATA_DIR / sub
+                if sub_dir.exists():
+                    for f in sub_dir.rglob("*"):
+                        if f.is_file() and f.suffix.lower() in EXTENSIONES_SINCRONIZABLES:
+                            rel_arc = f.relative_to(BASE_DIR)
+                            tar.add(str(f.resolve()), arcname=str(rel_arc).replace("\\", "/"))
+
+        sz_mb = bundle_path.stat().st_size / (1024 * 1024)
+        console.print(f"[cyan]📦 Subiendo {BUNDLE_FILENAME} ({sz_mb:.2f} MB, {len(lista_materiales)} materiales indexados) a {repo_id}...[/cyan]")
+        api.upload_file(
+            path_or_fileobj=str(bundle_path),
+            path_in_repo=BUNDLE_FILENAME,
+            repo_id=repo_id,
+            repo_type="dataset",
+            commit_message="sync: actualizar procesado_bundle.tar.gz para arranque instantáneo en cloud",
+        )
+        console.print(f"[bold green]✔ Bundle instantáneo subido a {repo_id} ({sz_mb:.2f} MB)[/bold green]")
+        return True
+
+
+def _descargar_archivo_hf_directo(path_in_repo: str, destino_local: Path) -> bool:
+    """Descarga un único archivo desde el Dataset privado de Hugging Face usando HTTP directo ligero."""
+    hf_token = get_hf_token()
+    if not hf_token:
+        return False
+    repo_id = get_hf_dataset_repo()
+    partes_encoded = "/".join(urllib.parse.quote(p, safe="") for p in path_in_repo.split("/"))
+    url = f"https://huggingface.co/datasets/{repo_id}/resolve/main/{partes_encoded}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {hf_token}", "User-Agent": "UNIR-Study-Hub/3.3"})
+    destino_local.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=destino_local.parent, delete=False, suffix=".tmp") as tmp_f:
+        tmp_name = tmp_f.name
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                shutil.copyfileobj(resp, tmp_f)
+        except Exception as e:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            console.print(f"[yellow]⚠ Error descargando {path_in_repo} desde HF: {e}[/yellow]")
+            return False
+    os.replace(tmp_name, destino_local)
+    return True
+
+
+def asegurar_archivo_local(ruta: Path) -> Path:
+    """
+    Si `ruta` es un placeholder de 0 bytes (o no existe aún en el contenedor cloud),
+    lo descarga bajo demanda desde el Dataset privado de Hugging Face antes de servirlo o leerlo.
+    """
+    try:
+        if ruta.exists() and ruta.is_file() and ruta.stat().st_size > 0:
+            return ruta
+    except Exception:
+        pass
+
+    try:
+        rel_to_base = ruta.absolute().relative_to(BASE_DIR.absolute())
+    except Exception:
+        return ruta
+
+    path_in_repo = str(rel_to_base).replace("\\", "/")
+    if not path_in_repo.startswith("data/"):
+        return ruta
+
+    console.print(f"[cyan]☁️ Descargando bajo demanda desde la nube: {ruta.name}...[/cyan]")
+    _descargar_archivo_hf_directo(path_in_repo, ruta)
+    return ruta
+
+
+def descargar_datos_desde_hf_si_vacio() -> bool:
+    """
+    Se ejecuta de forma síncrona y ultrarrápida (~1 seg) al iniciar el servidor en la nube:
+    1. Descarga `procesado_bundle.tar.gz` (~5 MB) y lo extrae en `BASE_DIR`.
+    2. Crea archivos placeholder (0 bytes) para todos los PDFs/DOCX listados en `data/catalogo_materiales.json`
+       que no existan aún localmente, de modo que el catálogo web muestre las 100% de asignaturas y PDFs al instante.
+    """
+    hf_token = get_hf_token()
+    if not hf_token:
+        return False
+
+    trans_dir = DATA_DIR / "procesado" / "transcripciones"
+    guias_dir = DATA_DIR / "procesado" / "guias"
+    # Considerar que ya tiene datos reales si hay más de 10 transcripciones locales
+    num_trans = len(list(trans_dir.rglob("*.md"))) if trans_dir.exists() else 0
+    if num_trans > 10 and not os.getenv("FORCE_HF_SYNC_ON_START"):
+        return True
+
+    console.print("[cyan]☁️ Inicializando biblioteca desde Hugging Face Cloud (modo instantáneo)...[/cyan]")
+    with tempfile.TemporaryDirectory(prefix="unir_init_") as tmpdir:
+        bundle_local = Path(tmpdir) / BUNDLE_FILENAME
+        if not _descargar_archivo_hf_directo(BUNDLE_FILENAME, bundle_local):
+            return False
+
+        try:
+            with tarfile.open(bundle_local, "r:gz") as tar:
+                tar.extractall(path=str(BASE_DIR))
+        except Exception as e:
+            console.print(f"[red]❌ Error extrayendo {BUNDLE_FILENAME}: {e}[/red]")
+            return False
+
+    # Crear placeholders de 0 bytes para todos los materiales del catálogo
+    manifest_file = DATA_DIR / "catalogo_materiales.json"
+    if manifest_file.exists():
+        try:
+            materiales_rel = json.loads(manifest_file.read_text(encoding="utf-8"))
+            creados = 0
+            for rel_str in materiales_rel:
+                p_mat = DATA_DIR / rel_str
+                if not p_mat.exists():
+                    p_mat.parent.mkdir(parents=True, exist_ok=True)
+                    p_mat.touch()
+                    creados += 1
+            console.print(
+                f"[bold green]✔ Biblioteca cloud lista al 100% (progreso, guías, tests, transcripciones y {creados} PDFs disponibles bajo demanda).[/bold green]"
+            )
+        except Exception as e:
+            console.print(f"[yellow]⚠ Error creando índice de materiales: {e}[/yellow]")
+
+    return True
+
+
 def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) -> bool:
     """
-    Empaqueta y sube data/ (excluyendo vídeos .mp4/.zip pesados) al Dataset privado de Hugging Face.
+    Sincroniza tanto las carpetas completas en el Dataset privado de Hugging Face
+    como el paquete instantáneo `procesado_bundle.tar.gz`.
     """
     from huggingface_hub import HfApi
 
@@ -47,44 +219,31 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
     repo_id = f"{username}/unir-study-hub-data"
 
     api.create_repo(repo_id=repo_id, repo_type="dataset", private=True, exist_ok=True)
+    crear_y_subir_bundle_rapido(token=hf_token)
 
     with tempfile.TemporaryDirectory(prefix="unir_hf_data_") as tmpdir:
         tmp_data = Path(tmpdir) / "data"
         tmp_data.mkdir(parents=True, exist_ok=True)
 
-        archivos_copiados = 0
-        bytes_copiados = 0
-
         for ruta_origen in DATA_DIR.rglob("*"):
             try:
-                if not ruta_origen.is_file():
-                    continue
-                if ruta_origen.suffix.lower() not in EXTENSIONES_SINCRONIZABLES:
+                if not ruta_origen.is_file() or ruta_origen.suffix.lower() not in EXTENSIONES_SINCRONIZABLES:
                     continue
                 rel = ruta_origen.relative_to(DATA_DIR)
                 if any(part.startswith(".") for part in rel.parts):
                     continue
-
                 ruta_real = ruta_origen.resolve()
-                if not ruta_real.exists() or not ruta_real.is_file():
+                if not ruta_real.exists() or not ruta_real.is_file() or ruta_real.stat().st_size == 0:
                     continue
-
                 destino = tmp_data / rel
                 destino.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ruta_real, destino)
-                archivos_copiados += 1
-                bytes_copiados += destino.stat().st_size
             except Exception:
                 continue
 
-        console.print(
-            f"[cyan]☁️ Subiendo {archivos_copiados} archivos ({bytes_copiados / (1024*1024):.1f} MB) "
-            f"al Dataset privado {repo_id}...[/cyan]"
-        )
         for sub in ["clases_grabadas", "procesado", "materiales"]:
             sub_path = tmp_data / sub
             if sub_path.exists():
-                console.print(f"[dim]   → Sincronizando data/{sub}...[/dim]")
                 api.upload_folder(
                     folder_path=str(sub_path),
                     path_in_repo=f"data/{sub}",
@@ -92,62 +251,13 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
                     repo_type="dataset",
                     commit_message=f"sync: data/{sub}",
                 )
-        console.print(f"[bold green]✔ Biblioteca sincronizada en https://huggingface.co/datasets/{repo_id}[/bold green]")
-        return True
-
-
-def descargar_datos_desde_hf_si_vacio() -> bool:
-    """
-    Si el servidor arranca en un contenedor efímero en la nube (ej. Render Free) donde data/procesado
-    o data/materiales no existen aún, descarga la biblioteca desde el Dataset privado de Hugging Face
-    en segundo plano con uso mínimo de RAM (max_workers=2).
-    """
-    hf_token = get_hf_token()
-    if not hf_token:
-        return False
-
-    trans_dir = DATA_DIR / "procesado" / "transcripciones"
-    mats_dir = DATA_DIR / "materiales"
-    tiene_local = trans_dir.exists() and any(trans_dir.rglob("*.md")) and mats_dir.exists() and any(mats_dir.rglob("*.pdf"))
-    if tiene_local and not os.getenv("FORCE_HF_SYNC_ON_START"):
-        return True
-
-    repo_id = get_hf_dataset_repo()
-
-    def _sync_worker():
-        try:
-            from huggingface_hub import snapshot_download
-
-            console.print(f"[cyan]☁️ [1/2] Descargando transcripciones, guías y tests desde {repo_id}...[/cyan]")
-            snapshot_download(
-                repo_id=repo_id,
-                repo_type="dataset",
-                local_dir=str(BASE_DIR),
-                token=hf_token,
-                allow_patterns=["data/procesado/**", "data/clases_grabadas/**"],
-                max_workers=2,
-            )
-            console.print(f"[cyan]☁️ [2/2] Descargando temarios PDF en segundo plano desde {repo_id}...[/cyan]")
-            snapshot_download(
-                repo_id=repo_id,
-                repo_type="dataset",
-                local_dir=str(BASE_DIR),
-                token=hf_token,
-                allow_patterns=["data/materiales/**"],
-                max_workers=2,
-            )
-            console.print("[bold green]✔ Biblioteca académica 100% sincronizada en el servidor cloud.[/bold green]")
-        except Exception as e:
-            console.print(f"[yellow]⚠ Aviso en sincronización cloud desde {repo_id}: {e}[/yellow]")
-
-    threading.Thread(target=_sync_worker, daemon=True).start()
     return True
 
 
 def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
     """
     Sube en segundo plano un archivo recién generado (guía, test JSON, progreso o flashcards)
-    al Dataset privado de Hugging Face para que nunca se pierda en contenedores cloud efímeros.
+    al Dataset privado de Hugging Face y actualiza el bundle si es posible.
     """
     hf_token = get_hf_token()
     if not hf_token:
@@ -169,6 +279,7 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
                 repo_type="dataset",
                 commit_message=f"auto-backup: {rel_to_base.name}",
             )
+            crear_y_subir_bundle_rapido(token=hf_token)
         except Exception:
             pass
 

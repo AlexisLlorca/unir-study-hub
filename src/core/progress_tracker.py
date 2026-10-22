@@ -51,6 +51,11 @@ class GestorProgreso:
     def _guardar(self, datos: Dict[str, Any]):
         datos["fecha_actualizacion"] = datetime.now().isoformat()
         escribir_json_atomico(self.archivo_progreso, datos)
+        try:
+            from src.core.cloud_sync import respaldar_archivo_en_hf_async
+            respaldar_archivo_en_hf_async(self.archivo_progreso)
+        except Exception:
+            pass
 
     def registrar_resultado_test(
         self,
