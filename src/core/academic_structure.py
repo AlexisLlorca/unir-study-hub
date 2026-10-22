@@ -316,15 +316,70 @@ def normalizar_nombre_asignatura(nombre_sucio: str) -> str:
     return nombre_sucio.strip()
 
 
+EXTENSIONES_DOCUMENTOS = {".pdf", ".docx"}
+
+
+def _orden_pedagogico_material(p: Path) -> tuple:
+    """
+    Ordena los documentos de una asignatura de forma pedagógica y numérica natural:
+    1. Temas / Units / Módulos oficiales (Tema 1, Tema 2, ..., Tema 9, Tema 10)
+    2. Resúmenes de temas y repasos finales
+    3. Presentaciones de clase, manuales, fastbooks e introducciones
+    4. Prácticas, laboratorios, ejercicios y bancos de preguntas
+    5. Actividades evaluables y pruebas trimestrales (Actividad 1, 2, 3...)
+    6. Documentación oficial de la asignatura (Guía del Estudiante, Programación Didáctica, Criterios de Evaluación)
+    """
+    name = p.name
+    nl = name.lower()
+
+    # 1. Temario principal: Tema X, Unit X, Módulo X
+    m_tema = re.match(r"^(tema|unit|m[óo]dulo)\s+(\d+)\b", nl)
+    if m_tema:
+        return (0, int(m_tema.group(2)), nl)
+
+    # 2. Resúmenes de temas
+    m_res = re.match(r"^resumen\s*-\s*(?:tema|unit|m[óo]dulo)\s+(\d+)\b", nl)
+    if m_res:
+        return (1, int(m_res.group(1)), nl)
+    if nl.startswith("resumen"):
+        return (1, 99, nl)
+
+    # 3. Presentaciones, introducciones, manuales y fastbooks
+    if nl.startswith(("presentación", "presentacion", "introducción", "introduccion", "manual", "fastbook", "repaso")):
+        nums = [int(x) for x in re.findall(r"\d+", nl)]
+        return (2, nums[0] if nums else 50, nl)
+
+    # 4. Prácticas, casos prácticos, cuadernos y bancos de test
+    if nl.startswith(("práctica", "practica", "caso", "cuaderno", "banco", "simulacro", "anexo", "plan ")):
+        nums = [int(x) for x in re.findall(r"\d+", nl)]
+        return (3, nums[0] if nums else 50, nl)
+
+    # 5. Actividades y pruebas trimestrales
+    if nl.startswith(("actividad", "prueba", "plantilla", "anteproyecto", "compromiso")):
+        nums = [int(x) for x in re.findall(r"\d+", nl)]
+        return (4, nums[0] if nums else 50, nl)
+
+    # 6. Guías, Programación Didáctica y Criterios de Evaluación al final bien agrupados
+    if "guía" in nl or "guia" in nl:
+        return (5, 1, nl)
+    if "programación" in nl or "programacion" in nl:
+        return (5, 2, nl)
+    if "criterio" in nl or "rúbrica" in nl or "rubrica" in nl:
+        return (5, 3, nl)
+
+    nums = [int(x) for x in re.findall(r"\d+", nl)]
+    return (3, nums[0] if nums else 99, nl)
+
+
 def sincronizar_estudios_externos():
     """
     Escanea carpetas externas en RESPALDO_DIR
     (Ciberseguridad y 1º DAM) y las vincula limpiamente en data/materiales/
-    mediante enlaces simbólicos directos (sin duplicar espacio en disco).
+    únicamente si la carpeta de destino aún está vacía.
     """
     MATERIALES_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Vincular Máster en Ciberseguridad (M1 a M7)
+    # 1. Vincular Máster en Ciberseguridad (M1 a M7) solo si la carpeta aún no tiene PDFs organizados
     ciber_root = RESPALDO_DIR / "Temario Ciberseguridad"
     if ciber_root.exists():
         mapeo_ciber = {
@@ -338,24 +393,26 @@ def sincronizar_estudios_externos():
         }
 
         for m_folder, m_nombre in mapeo_ciber.items():
+            dest_dir = MATERIALES_DIR / m_nombre
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            if any(dest_dir.glob("*.pdf")):
+                continue
+
             src_temas = ciber_root / m_folder / "Temas"
             if not src_temas.exists():
                 src_temas = ciber_root / m_folder
 
             if src_temas.exists():
-                dest_dir = MATERIALES_DIR / m_nombre
-                dest_dir.mkdir(parents=True, exist_ok=True)
-
                 for f in src_temas.glob("*"):
-                    if f.is_file() and not f.name.startswith("."):
+                    if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in EXTENSIONES_DOCUMENTOS:
                         target_link = dest_dir / f.name
                         if not target_link.exists():
                             try:
-                                os.symlink(f.resolve(), target_link)
+                                shutil.copy2(f.resolve(), target_link)
                             except Exception:
                                 pass
 
-    # 2. Vincular todas las Asignaturas de 1º DAM desde el respaldo local
+    # 2. Vincular Asignaturas de 1º DAM desde el respaldo local solo si la carpeta aún está vacía
     backup_dam_root = RESPALDO_DIR / "Proyectos" / "FP DAM unir"
     if backup_dam_root.exists():
         mapeo_1dam = {
@@ -369,24 +426,19 @@ def sincronizar_estudios_externos():
         }
 
         for folder_src, canonico in mapeo_1dam.items():
+            dir_dest = MATERIALES_DIR / canonico
+            dir_dest.mkdir(parents=True, exist_ok=True)
+            if any(dir_dest.glob("*.pdf")):
+                continue
+
             dir_src = backup_dam_root / folder_src
             if dir_src.exists():
-                dir_dest = MATERIALES_DIR / canonico
-                dir_dest.mkdir(parents=True, exist_ok=True)
-
                 for f in dir_src.glob("**/*"):
-                    if f.is_file() and f.suffix.lower() in [".pdf", ".docx", ".zip", ".psc"]:
+                    if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in EXTENSIONES_DOCUMENTOS:
                         dest_link = dir_dest / f.name
-                        # Evitar re-crear enlaces genéricos si ya existe un archivo con título descriptivo (ej: "Tema 1. *.pdf")
-                        stem_prefix = f.stem.lower() + "."
-                        ya_existe = any(
-                            dest_item.name.lower() == f.name.lower() or 
-                            dest_item.name.lower().startswith(stem_prefix)
-                            for dest_item in dir_dest.iterdir()
-                        )
-                        if not ya_existe:
+                        if not dest_link.exists():
                             try:
-                                os.symlink(f.resolve(), dest_link)
+                                shutil.copy2(f.resolve(), dest_link)
                             except Exception:
                                 pass
 
@@ -512,7 +564,15 @@ def obtener_info_asignatura(asig: str) -> Dict[str, Any]:
     dir_exam = EXAMENES_DIR / asig
     dir_guias = GUIAS_DIR / asig
 
-    materiales = sorted([f for f in dir_mat.glob("*") if f.is_file()]) if dir_mat.exists() else []
+    materiales = sorted(
+        [
+            f for f in dir_mat.glob("*")
+            if f.is_file()
+            and not f.name.startswith((".", "~$"))
+            and f.suffix.lower() in EXTENSIONES_DOCUMENTOS
+        ],
+        key=_orden_pedagogico_material,
+    ) if dir_mat.exists() else []
     transcripciones = sorted([f for f in dir_trans.glob("*.md") if f.is_file()]) if dir_trans.exists() else []
     fichas_clases = sorted([f for f in dir_clases.glob("*_info.json") if f.is_file()]) if dir_clases.exists() else []
     apuntes = sorted([f for f in dir_apuntes.glob("*.md") if f.is_file()]) if dir_apuntes.exists() else []
@@ -615,7 +675,12 @@ def obtener_resumen_programas() -> List[Dict[str, Any]]:
                 dir_exam = EXAMENES_DIR / asig
 
                 if dir_mat.exists():
-                    total_mats += len([f for f in dir_mat.glob("*") if f.is_file()])
+                    total_mats += len([
+                        f for f in dir_mat.glob("*")
+                        if f.is_file()
+                        and not f.name.startswith((".", "~$"))
+                        and f.suffix.lower() in EXTENSIONES_DOCUMENTOS
+                    ])
                 if dir_trans.exists():
                     total_clases += len(list(dir_trans.glob("*.md")))
                 if dir_exam.exists():

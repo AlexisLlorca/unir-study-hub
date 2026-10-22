@@ -249,7 +249,8 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
                     path_in_repo=f"data/{sub}",
                     repo_id=repo_id,
                     repo_type="dataset",
-                    commit_message=f"sync: data/{sub}",
+                    commit_message=f"sync: data/{sub} (biblioteca limpia y deduplicada)",
+                    delete_patterns="**" if sub == "materiales" else None,
                 )
     return True
 
