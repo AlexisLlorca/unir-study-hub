@@ -12,6 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] in ["--web", "-w"]:
+    from src.core.config import ensure_directories
+    from src.ui.web_server import iniciar_servidor_web
+
+    ensure_directories()
+    iniciar_servidor_web()
+    sys.exit(0)
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table

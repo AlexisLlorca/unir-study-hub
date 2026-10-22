@@ -15,7 +15,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from playwright.sync_api import sync_playwright, BrowserContext, Page
+try:
+    from playwright.sync_api import sync_playwright, BrowserContext, Page
+except ImportError:
+    sync_playwright = None  # type: ignore
+    BrowserContext = object  # type: ignore
+    Page = object  # type: ignore
 from rich.panel import Panel
 
 from src.core.config import (
