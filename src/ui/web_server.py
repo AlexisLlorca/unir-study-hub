@@ -371,6 +371,11 @@ def api_generar_guia(req: GenerarGuiaRequest):
             detail="No se pudo generar ni la guía ni el test. El servicio de IA está temporalmente saturado, por favor intenta en unos momentos."
         )
 
+    from src.core.cloud_sync import respaldar_archivo_en_hf_async
+    for k in ("guia", "test_json", "test_md"):
+        if res.get(k):
+            respaldar_archivo_en_hf_async(Path(res[k]))
+
     return {
         "status": "ok",
         "resultado": {
@@ -410,6 +415,8 @@ def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
     try:
         with open(ruta_archivo, "w", encoding="utf-8") as f:
             f.write(req.contenido)
+        from src.core.cloud_sync import respaldar_archivo_en_hf_async
+        respaldar_archivo_en_hf_async(ruta_archivo)
         return {
             "status": "ok",
             "mensaje": f"Guía guardada correctamente en {slug_asig}",
@@ -4477,6 +4484,8 @@ def dashboard_html():
 
 def iniciar_servidor_web(host: str = "0.0.0.0", port: int = 8080):
     """Lanza el servidor web de FastAPI accesible en local y con token seguro en la red local o nube."""
+    from src.core.cloud_sync import descargar_datos_desde_hf_si_vacio
+    descargar_datos_desde_hf_si_vacio()
     port = int(os.getenv("PORT", str(port)))
     ip_local = obtener_ip_red_local()
     console.print(f"\n[bold green]🚀 Iniciando Interfaz Gráfica Web de UNIR Study Hub (Multi-Titulación)...[/bold green]")
