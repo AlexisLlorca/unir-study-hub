@@ -4476,11 +4476,12 @@ def dashboard_html():
 
 
 def iniciar_servidor_web(host: str = "0.0.0.0", port: int = 8080):
-    """Lanza el servidor web de FastAPI accesible en local y con token seguro en la red local."""
+    """Lanza el servidor web de FastAPI accesible en local y con token seguro en la red local o nube."""
+    port = int(os.getenv("PORT", str(port)))
     ip_local = obtener_ip_red_local()
     console.print(f"\n[bold green]🚀 Iniciando Interfaz Gráfica Web de UNIR Study Hub (Multi-Titulación)...[/bold green]")
     console.print(f"[bold cyan]💻 En tu ordenador (acceso directo):[/bold cyan]      [bold white underline]http://localhost:{port}[/bold white underline]")
-    console.print(f"[bold yellow]📱 En tu móvil (Wi-Fi con token seguro):[/bold yellow]  [bold white underline]http://{ip_local}:{port}/?token={HUB_ACCESS_TOKEN}[/bold white underline]\n")
+    console.print(f"[bold yellow]📱 En tu móvil / Nube (con token seguro):[/bold yellow] [bold white underline]http://{ip_local}:{port}/?token={HUB_ACCESS_TOKEN}[/bold white underline]\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

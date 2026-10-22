@@ -123,13 +123,29 @@ def obtener_ip_red_local() -> str:
 
 
 def _hosts_permitidos(ip_local: str) -> set:
+    import os
     hosts = {"localhost", "127.0.0.1", "::1", "[::1]", ip_local}
     try:
         nombre = socket.gethostname().lower()
         hosts.update({nombre, f"{nombre}.local", f"{nombre}.lan"})
     except Exception:
         pass
+    extra = os.getenv("HUB_ALLOWED_HOSTS", "")
+    for h in extra.split(","):
+        if h.strip():
+            hosts.add(h.strip().lower())
     return hosts
+
+
+_SUFIJOS_NUBE_PERMITIDOS = (
+    ".hf.space",
+    ".huggingface.co",
+    ".onrender.com",
+    ".up.railway.app",
+    ".fly.dev",
+    ".trycloudflare.com",
+    ".ts.net",
+)
 
 
 _PAGINA_TOKEN = """<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
@@ -139,15 +155,15 @@ _PAGINA_TOKEN = """<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 h1{font-size:18px;margin:0 0 8px}p{font-size:13px;color:#9ca3af}input{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #374151;background:#030712;color:#fff;margin:12px 0}
 button{width:100%;padding:12px;border:0;border-radius:12px;background:linear-gradient(90deg,#06b6d4,#4f46e5);color:#fff;font-weight:600}</style></head>
 <body><form class="c" method="get" action="/"><h1>🔒 Acceso a UNIR Study Hub</h1>
-<p>Este dispositivo necesita el código de acceso. Escanea el QR que aparece en el ordenador (botón «📱 Móvil») o pega aquí el código.</p>
-<input name="token" placeholder="Código de acceso" autocomplete="off" required><button>Entrar</button></form></body></html>"""
+<p>Introduce tu código de acceso privado (<code>HUB_ACCESS_TOKEN</code>) para entrar a tu plataforma en la nube o red local.</p>
+<input name="token" type="password" placeholder="Código de acceso" autocomplete="off" required><button>Entrar</button></form></body></html>"""
 
 
 class AccesoSeguroMiddleware(BaseHTTPMiddleware):
     """
     1. Rechaza cabeceras Host desconocidas (protección contra DNS rebinding).
     2. Rechaza peticiones que modifican datos (POST/PUT/DELETE...) hechas desde otra web (CSRF).
-    3. Exige el token de acceso a cualquier cliente que no sea el propio ordenador.
+    3. Exige el token de acceso a cualquier cliente externo o en la nube.
     """
 
     def __init__(self, app, token: str, ip_local: str):
@@ -158,31 +174,47 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
     def _token_valido(self, valor: Optional[str]) -> bool:
         return bool(valor) and hmac.compare_digest(valor, self.token)
 
+    def _es_host_valido(self, host_sin_puerto: str) -> bool:
+        if host_sin_puerto in self.hosts:
+            return True
+        return any(host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS)
+
     async def dispatch(self, request: Request, call_next):
         host_hdr = (request.headers.get("host") or "").lower()
         host_sin_puerto = host_hdr.rsplit(":", 1)[0] if not host_hdr.startswith("[") else host_hdr.split("]")[0] + "]"
-        if host_sin_puerto not in self.hosts:
+        if not self._es_host_valido(host_sin_puerto):
             return JSONResponse({"detail": "Host no permitido"}, status_code=421)
 
         # CSRF: una petición que cambia datos debe venir de la propia web del Hub
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             origin = request.headers.get("origin")
-            sec_site = request.headers.get("sec-fetch-site")
-            if origin and origin.split("://", 1)[-1].lower() != host_hdr:
-                return JSONResponse({"detail": "Origen no permitido"}, status_code=403)
-            if sec_site and sec_site not in ("same-origin", "none"):
-                return JSONResponse({"detail": "Origen no permitido"}, status_code=403)
+            if origin:
+                origin_host = origin.split("://", 1)[-1].lower()
+                origin_sin_puerto = origin_host.rsplit(":", 1)[0]
+                if origin_host != host_hdr and not self._es_host_valido(origin_sin_puerto):
+                    return JSONResponse({"detail": "Origen no permitido"}, status_code=403)
 
         cliente = request.client.host if request.client else None
-        if _es_loopback(cliente):
+        es_nube_o_proxy = bool(request.headers.get("x-forwarded-for")) or any(
+            host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS
+        )
+        if _es_loopback(cliente) and not es_nube_o_proxy:
             return await call_next(request)
 
-        # Dispositivo de la red: token por parámetro (primera vez) o por cookie
+        # Dispositivo de la red o acceso en la nube: token por parámetro (primera vez) o por cookie
         token_query = request.query_params.get("token")
         if self._token_valido(token_query):
             destino = request.url.remove_query_params("token")
             resp = RedirectResponse(url=str(destino.path) + (f"?{destino.query}" if destino.query else ""), status_code=303)
-            resp.set_cookie(COOKIE_TOKEN, self.token, max_age=60 * 60 * 24 * 365, httponly=True, samesite="strict")
+            es_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+            resp.set_cookie(
+                COOKIE_TOKEN,
+                self.token,
+                max_age=60 * 60 * 24 * 365,
+                httponly=True,
+                secure=es_https,
+                samesite="none" if es_https else "lax",
+            )
             return resp
 
         if self._token_valido(request.cookies.get(COOKIE_TOKEN)):
