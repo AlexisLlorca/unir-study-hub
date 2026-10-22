@@ -99,13 +99,13 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
 def descargar_datos_desde_hf_si_vacio() -> bool:
     """
     Si el servidor arranca en un contenedor efímero en la nube (ej. Render Free) donde data/procesado
-    o data/materiales no existen aún, descarga la biblioteca desde el Dataset privado de Hugging Face.
+    o data/materiales no existen aún, descarga la biblioteca desde el Dataset privado de Hugging Face
+    en segundo plano con uso mínimo de RAM (max_workers=2).
     """
     hf_token = get_hf_token()
     if not hf_token:
         return False
 
-    # Si ya tenemos transcripciones y materiales locales, no hace falta descargar todo al arrancar
     trans_dir = DATA_DIR / "procesado" / "transcripciones"
     mats_dir = DATA_DIR / "materiales"
     tiene_local = trans_dir.exists() and any(trans_dir.rglob("*.md")) and mats_dir.exists() and any(mats_dir.rglob("*.pdf"))
@@ -113,22 +113,35 @@ def descargar_datos_desde_hf_si_vacio() -> bool:
         return True
 
     repo_id = get_hf_dataset_repo()
-    try:
-        from huggingface_hub import snapshot_download
 
-        console.print(f"[cyan]☁️ Descargando biblioteca académica desde {repo_id} al contenedor cloud...[/cyan]")
-        snapshot_download(
-            repo_id=repo_id,
-            repo_type="dataset",
-            local_dir=str(BASE_DIR),
-            token=hf_token,
-            allow_patterns=["data/**"],
-        )
-        console.print("[bold green]✔ Biblioteca académica cargada desde la nube correctamente.[/bold green]")
-        return True
-    except Exception as e:
-        console.print(f"[yellow]⚠ No se pudo sincronizar desde {repo_id} al iniciar: {e}[/yellow]")
-        return False
+    def _sync_worker():
+        try:
+            from huggingface_hub import snapshot_download
+
+            console.print(f"[cyan]☁️ [1/2] Descargando transcripciones, guías y tests desde {repo_id}...[/cyan]")
+            snapshot_download(
+                repo_id=repo_id,
+                repo_type="dataset",
+                local_dir=str(BASE_DIR),
+                token=hf_token,
+                allow_patterns=["data/procesado/**", "data/clases_grabadas/**"],
+                max_workers=2,
+            )
+            console.print(f"[cyan]☁️ [2/2] Descargando temarios PDF en segundo plano desde {repo_id}...[/cyan]")
+            snapshot_download(
+                repo_id=repo_id,
+                repo_type="dataset",
+                local_dir=str(BASE_DIR),
+                token=hf_token,
+                allow_patterns=["data/materiales/**"],
+                max_workers=2,
+            )
+            console.print("[bold green]✔ Biblioteca académica 100% sincronizada en el servidor cloud.[/bold green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ Aviso en sincronización cloud desde {repo_id}: {e}[/yellow]")
+
+    threading.Thread(target=_sync_worker, daemon=True).start()
+    return True
 
 
 def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
