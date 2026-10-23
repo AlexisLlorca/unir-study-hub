@@ -149,25 +149,24 @@ def asegurar_archivo_local(ruta: Path) -> Path:
     return ruta
 
 
-def descargar_datos_desde_hf_si_vacio() -> bool:
+def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
     """
-    Se ejecuta de forma síncrona y ultrarrápida (~1 seg) al iniciar el servidor en la nube:
+    Se ejecuta de forma síncrona y ultrarrápida (~1 seg) al iniciar el servidor en la nube
+    o al pulsar 'Sincronizar' desde la web cloud:
     1. Descarga `procesado_bundle.tar.gz` (~5 MB) y lo extrae en `BASE_DIR`.
     2. Crea archivos placeholder (0 bytes) para todos los PDFs/DOCX listados en `data/catalogo_materiales.json`
-       que no existan aún localmente, de modo que el catálogo web muestre las 100% de asignaturas y PDFs al instante.
+       y elimina placeholders antiguos que hayan sido renombrados o deduplicados.
     """
     hf_token = get_hf_token()
     if not hf_token:
         return False
 
     trans_dir = DATA_DIR / "procesado" / "transcripciones"
-    guias_dir = DATA_DIR / "procesado" / "guias"
-    # Considerar que ya tiene datos reales si hay más de 10 transcripciones locales
     num_trans = len(list(trans_dir.rglob("*.md"))) if trans_dir.exists() else 0
-    if num_trans > 10 and not os.getenv("FORCE_HF_SYNC_ON_START"):
+    if not forzar and num_trans > 10 and not os.getenv("FORCE_HF_SYNC_ON_START"):
         return True
 
-    console.print("[cyan]☁️ Inicializando biblioteca desde Hugging Face Cloud (modo instantáneo)...[/cyan]")
+    console.print("[cyan]☁️ Sincronizando biblioteca desde Hugging Face Cloud (modo instantáneo)...[/cyan]")
     with tempfile.TemporaryDirectory(prefix="unir_init_") as tmpdir:
         bundle_local = Path(tmpdir) / BUNDLE_FILENAME
         if not _descargar_archivo_hf_directo(BUNDLE_FILENAME, bundle_local):
@@ -180,11 +179,19 @@ def descargar_datos_desde_hf_si_vacio() -> bool:
             console.print(f"[red]❌ Error extrayendo {BUNDLE_FILENAME}: {e}[/red]")
             return False
 
-    # Crear placeholders de 0 bytes para todos los materiales del catálogo
     manifest_file = DATA_DIR / "catalogo_materiales.json"
     if manifest_file.exists():
         try:
             materiales_rel = json.loads(manifest_file.read_text(encoding="utf-8"))
+            set_validos = {str((DATA_DIR / rel_str).resolve()) for rel_str in materiales_rel}
+
+            # Limpiar placeholders antiguos de 0 bytes que ya no existan en el catálogo limpio
+            mats_dir = DATA_DIR / "materiales"
+            if mats_dir.exists():
+                for f_old in list(mats_dir.rglob("*")):
+                    if f_old.is_file() and f_old.stat().st_size == 0 and str(f_old.resolve()) not in set_validos:
+                        f_old.unlink(missing_ok=True)
+
             creados = 0
             for rel_str in materiales_rel:
                 p_mat = DATA_DIR / rel_str
@@ -193,7 +200,7 @@ def descargar_datos_desde_hf_si_vacio() -> bool:
                     p_mat.touch()
                     creados += 1
             console.print(
-                f"[bold green]✔ Biblioteca cloud lista al 100% (progreso, guías, tests, transcripciones y {creados} PDFs disponibles bajo demanda).[/bold green]"
+                f"[bold green]✔ Biblioteca cloud lista al 100% ({len(materiales_rel)} documentos activos y {creados} nuevos indexados).[/bold green]"
             )
         except Exception as e:
             console.print(f"[yellow]⚠ Error creando índice de materiales: {e}[/yellow]")

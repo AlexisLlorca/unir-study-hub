@@ -84,6 +84,8 @@ class CampusScraper:
 
             dir_destino = MATERIALES_DIR / asignatura
             dir_destino.mkdir(parents=True, exist_ok=True)
+            if any(dir_destino.glob("*.pdf")):
+                continue
 
             archivo_destino = dir_destino / pdf.name
             if not archivo_destino.exists():

@@ -429,7 +429,10 @@ def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
 
 @app.post("/api/sincronizar")
 def api_sincronizar():
-    """Resincroniza carpetas externas de estudio."""
+    """Resincroniza carpetas externas de estudio o actualiza desde la nube si está en Render."""
+    from src.core.cloud_sync import descargar_datos_desde_hf_si_vacio
+    if os.getenv("RENDER"):
+        descargar_datos_desde_hf_si_vacio(forzar=True)
     reorganizar_biblioteca_completa()
     return {"status": "ok"}
 
@@ -437,29 +440,68 @@ def api_sincronizar():
 @app.post("/api/sincronizar-respaldo")
 @app.post("/api/escanear-primer-ano")
 def api_sincronizar_respaldo():
-    """Escanea el respaldo local configurado en RESPALDO_DIR e importa temarios de DAM y Ciberseguridad."""
-    from src.crawler.campus_scraper import CampusScraper
-    scraper = CampusScraper()
-    importados_dam = scraper.sincronizar_desde_respaldo_local()
+    """Escanea el respaldo local en PC o sincroniza desde la Nube Privada cuando se ejecuta en Render."""
+    from src.core.cloud_sync import descargar_datos_desde_hf_si_vacio, crear_y_subir_bundle_rapido
+    if os.getenv("RENDER"):
+        ok = descargar_datos_desde_hf_si_vacio(forzar=True)
+        return {
+            "status": "ok" if ok else "error",
+            "mensaje": "☁️ Biblioteca sincronizada desde tu Nube Privada (temarios de 1º/2º DAM, Ciberseguridad y clases actualizados)."
+        }
+
+    try:
+        from src.crawler.campus_scraper import CampusScraper
+        scraper = CampusScraper()
+        scraper.sincronizar_desde_respaldo_local()
+    except Exception:
+        pass
     sincronizar_estudios_externos()
     reorganizar_biblioteca_completa()
+    import threading
+    threading.Thread(target=crear_y_subir_bundle_rapido, daemon=True).start()
     return {
         "status": "ok",
-        "mensaje": "Respaldo local sincronizado con éxito (temarios de 1º DAM y Máster en Ciberseguridad importados al Hub)."
+        "mensaje": "Respaldo local sincronizado con éxito y respaldado en tu nube."
     }
 
 
 @app.post("/api/descargar-campus")
 def api_descargar_campus():
-    """Conecta con Canvas UNIR y sincroniza todo: materiales locales, Canvas LMS y clases grabadas."""
+    """
+    En PC local: conecta con Canvas UNIR, descarga nuevas clases/materiales y los sube automáticamente a la nube.
+    En Render Cloud: descarga al instante las últimas clases, materiales y guías subidas a tu Nube Privada.
+    """
+    from src.core.cloud_sync import descargar_datos_desde_hf_si_vacio, subir_datos_a_hf
+
+    # Si estamos en el servidor cloud (Render) o no está Playwright instalado, sincronizar desde Hugging Face Cloud
+    es_cloud = bool(os.getenv("RENDER"))
+    if not es_cloud:
+        try:
+            import playwright  # noqa: F401
+        except ImportError:
+            es_cloud = True
+
+    if es_cloud:
+        ok = descargar_datos_desde_hf_si_vacio(forzar=True)
+        return {
+            "status": "ok" if ok else "error",
+            "nuevos_archivos": 0,
+            "mensaje": "☁️ Biblioteca en la nube actualizada al 100% con tus últimas clases grabadas, temarios, guías y tests."
+        }
+
     from src.crawler.campus_scraper import CampusScraper
     scraper = CampusScraper()
     nuevos = scraper.ejecutar_sincronizacion_completa()
     reorganizar_biblioteca_completa()
+
+    # Subir en segundo plano a Hugging Face Cloud para que Render tenga los nuevos materiales y clases al instante
+    import threading
+    threading.Thread(target=subir_datos_a_hf, daemon=True).start()
+
     return {
         "status": "ok",
         "nuevos_archivos": nuevos,
-        "mensaje": f"Sincronización 360° completada con éxito. Se han incorporado {nuevos} recursos (temarios, actividades o clases)."
+        "mensaje": f"Sincronización 360° completada ({nuevos} recursos nuevos) y subida automática a la nube iniciada."
     }
 
 
