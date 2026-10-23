@@ -949,21 +949,6 @@ def api_sincronizar_agenda():
     return {"status": "ok", "total": len(eventos), "eventos": eventos}
 
 
-@app.get("/api/descargar-calendario-ics")
-def api_descargar_calendario():
-    """Permite descargar el archivo .ics del plan de estudio semanal."""
-    ics_path = BASE_DIR / "data" / "horario_estudio_dam.ics"
-    if not ics_path.exists():
-        ics_path = Path("/home/alexllorca/horario_estudio_dam.ics")
-    if ics_path.exists():
-        return FileResponse(
-            path=str(ics_path),
-            media_type="text/calendar",
-            filename="horario_estudio_dam.ics"
-        )
-    raise HTTPException(status_code=404, detail="Archivo de calendario no encontrado")
-
-
 @app.get("/api/flashcards")
 def api_flashcards(programa: str = "dam", asig: Optional[str] = None):
     """Devuelve las barajas de flashcards para memorización y repaso activo."""
@@ -1457,19 +1442,6 @@ def dashboard_html():
               <span>Tutor Inteligente NOVA</span>
             </button>
             <a href="/?tab=tutor" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          <div class="flex items-center group/item">
-            <button @click="irASeccion('plan_estudio')"
-                    :class="tab === 'plan_estudio' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
-              <div class="flex items-center space-x-2.5">
-                <i class="fa-solid fa-calendar-days w-4 text-center text-blue-400"></i>
-                <span>Plan Semanal (DAM 2º)</span>
-              </div>
-              <span class="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full font-bold">09:00-15:40</span>
-            </button>
-            <a href="/?tab=plan_estudio" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-blue-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
@@ -2156,272 +2128,6 @@ def dashboard_html():
             </div>
           </template>
         </div>
-      </div>
-
-      <!-- ==================== VISTA PLAN SEMANAL & CALENDARIO DAM 2º ==================== -->
-      <div x-show="tab === 'plan_estudio'" x-data="{ subtab: 'semana' }" x-transition class="space-y-6">
-        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
-          <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-lg">
-              <i class="fa-solid fa-calendar-days"></i>
-            </div>
-            <div>
-              <div class="flex items-center space-x-2">
-                <h2 class="text-xl font-bold text-white">Plan Semanal & Calendario Vivo (2º DAM)</h2>
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold">09:00 - 15:40</span>
-              </div>
-              <p class="text-xs text-gray-400">Método Jon Machado: Bloques de 50/10 min • Avance L-X • Consolidación J • Repaso Activo V</p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-3">
-            <div class="flex bg-gray-900 p-1 rounded-xl border border-gray-800 text-xs">
-              <button @click="subtab = 'semana'" :class="subtab === 'semana' ? 'bg-gray-800 text-white font-bold' : 'text-gray-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition">Semana Tipo</button>
-              <button @click="subtab = 'unir'" :class="subtab === 'unir' ? 'bg-gray-800 text-white font-bold' : 'text-gray-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition">Hitos UNIR</button>
-              <button @click="subtab = 'semaforo'" :class="subtab === 'semaforo' ? 'bg-gray-800 text-white font-bold' : 'text-gray-400 hover:text-white'" class="px-3 py-1.5 rounded-lg transition">Semáforo</button>
-            </div>
-            <a href="/api/descargar-calendario-ics" download="horario_estudio_dam.ics" class="px-3.5 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-blue-500/20">
-              <i class="fa-solid fa-download"></i>
-              <span>Descargar .ics</span>
-            </a>
-          </div>
-        </div>
-
-        <!-- SUBTAB 1: SEMANA TIPO -->
-        <div x-show="subtab === 'semana'" class="space-y-4">
-          <div class="p-4 rounded-2xl bg-blue-950/20 border border-blue-500/20 flex items-start space-x-3 text-xs">
-            <i class="fa-solid fa-lightbulb text-blue-400 text-base mt-0.5"></i>
-            <div>
-              <span class="font-bold text-blue-300">Regla de Oro (Avance vs Repaso):</span>
-              <p class="text-gray-300 mt-0.5">
-                <strong>Lunes a Miércoles:</strong> 100% Avance (código de actividades y redacción del proyecto).<br>
-                <strong>Jueves:</strong> Consolidación, testeo de código y resolución de dudas puntuales a 1.5x.<br>
-                <strong class="text-amber-400">Viernes:</strong> Día de Repaso Activo (vaciado en frío sin mirar, autoexplicación y subida oficial al campus).
-              </p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-3.5">
-            <!-- LUNES -->
-            <div class="glass p-4 rounded-2xl border border-gray-800 space-y-3">
-              <div class="flex items-center justify-between border-b border-gray-800 pb-2">
-                <span class="font-bold text-xs text-white">LUNES</span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">AVANCE</span>
-              </div>
-              <div class="space-y-2 text-xs">
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-blue-400 font-mono text-[11px] font-bold">09:15 - 11:05</span>
-                  <p class="font-bold text-white mt-1">🚀 Proyecto Intramodular</p>
-                  <p class="text-gray-400 text-[11px]">1ª Entrega: Justificación y Estado del Arte.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-emerald-400 font-mono text-[11px] font-bold">11:15 - 13:05</span>
-                  <p class="font-bold text-white mt-1">💾 Acceso a Datos</p>
-                  <p class="text-gray-400 text-[11px]">Avance de temario / Consultas JDBC.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-purple-400 font-mono text-[11px] font-bold">14:00 - 14:50</span>
-                  <p class="font-bold text-white mt-1">📝 Memoria Técnica</p>
-                  <p class="text-gray-400 text-[11px]">Documentación y capturas.</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- MARTES -->
-            <div class="glass p-4 rounded-2xl border border-gray-800 space-y-3">
-              <div class="flex items-center justify-between border-b border-gray-800 pb-2">
-                <span class="font-bold text-xs text-white">MARTES</span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">AVANCE</span>
-              </div>
-              <div class="space-y-2 text-xs">
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-blue-400 font-mono text-[11px] font-bold">09:15 - 11:05</span>
-                  <p class="font-bold text-white mt-1">⚡ PSP (Servicios & Proc.)</p>
-                  <p class="text-gray-400 text-[11px]">Hilos, concurrencia y sockets.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-emerald-400 font-mono text-[11px] font-bold">11:15 - 13:05</span>
-                  <p class="font-bold text-white mt-1">🎨 Desarrollo Interfaces</p>
-                  <p class="text-gray-400 text-[11px]">Actividad 1 UI (HTML/CSS/JS).</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-purple-400 font-mono text-[11px] font-bold">14:00 - 14:50</span>
-                  <p class="font-bold text-white mt-1">📝 Memoria DI</p>
-                  <p class="text-gray-400 text-[11px]">Redacción de memoria de interfaz.</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- MIÉRCOLES -->
-            <div class="glass p-4 rounded-2xl border border-gray-800 space-y-3">
-              <div class="flex items-center justify-between border-b border-gray-800 pb-2">
-                <span class="font-bold text-xs text-white">MIÉRCOLES</span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">AVANCE</span>
-              </div>
-              <div class="space-y-2 text-xs">
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-blue-400 font-mono text-[11px] font-bold">09:15 - 11:05</span>
-                  <p class="font-bold text-white mt-1">🚀 Proyecto Intramodular</p>
-                  <p class="text-gray-400 text-[11px]">Casos de uso y rúbrica oficial.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-emerald-400 font-mono text-[11px] font-bold">11:15 - 13:05</span>
-                  <p class="font-bold text-white mt-1">📱 Móviles (PMDM)</p>
-                  <p class="text-gray-400 text-[11px]">Android Studio (Calculadora Kotlin).</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-purple-400 font-mono text-[11px] font-bold">14:00 - 14:50</span>
-                  <p class="font-bold text-white mt-1">💼 SGE / Odoo</p>
-                  <p class="text-gray-400 text-[11px]">ERPs y consultas de negocio.</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- JUEVES -->
-            <div class="glass p-4 rounded-2xl border border-gray-800 space-y-3">
-              <div class="flex items-center justify-between border-b border-gray-800 pb-2">
-                <span class="font-bold text-xs text-white">JUEVES</span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300">PULIDO</span>
-              </div>
-              <div class="space-y-2 text-xs">
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-cyan-400 font-mono text-[11px] font-bold">09:15 - 11:05</span>
-                  <p class="font-bold text-white mt-1">🧪 Testeo & Depuración</p>
-                  <p class="text-gray-400 text-[11px]">Probar código de actividades sin fallos.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-emerald-400 font-mono text-[11px] font-bold">11:15 - 13:05</span>
-                  <p class="font-bold text-white mt-1">🔍 Dudas Quirúrgicas</p>
-                  <p class="text-gray-400 text-[11px]">Vídeos selectivos a 1.5x / Test UNIR.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-gray-800">
-                  <span class="text-purple-400 font-mono text-[11px] font-bold">14:00 - 14:50</span>
-                  <p class="font-bold text-white mt-1">📦 Empaquetado</p>
-                  <p class="text-gray-400 text-[11px]">Generar ZIPs y PDFs finales.</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- VIERNES -->
-            <div class="glass p-4 rounded-2xl border border-amber-500/30 bg-amber-950/10 space-y-3">
-              <div class="flex items-center justify-between border-b border-amber-500/30 pb-2">
-                <span class="font-bold text-xs text-amber-400">VIERNES</span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">REPASO</span>
-              </div>
-              <div class="space-y-2 text-xs">
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-amber-500/20">
-                  <span class="text-amber-400 font-mono text-[11px] font-bold">09:15 - 11:05</span>
-                  <p class="font-bold text-white mt-1">🧠 Vaciado en Frío</p>
-                  <p class="text-gray-400 text-[11px]">Escribir en blanco sin mirar (Curva del olvido).</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-gray-900/80 border border-amber-500/20">
-                  <span class="text-amber-400 font-mono text-[11px] font-bold">11:15 - 13:05</span>
-                  <p class="font-bold text-white mt-1">🗣️ Autoexplicación</p>
-                  <p class="text-gray-400 text-[11px]">Explicar dudas y test de examen.</p>
-                </div>
-                <div class="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30">
-                  <span class="text-emerald-400 font-mono text-[11px] font-bold">14:00 - 15:30</span>
-                  <p class="font-bold text-white mt-1">📤 Subida UNIR & Git</p>
-                  <p class="text-gray-400 text-[11px]">Entrega formal. Fin de semana libre.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- SUBTAB 2: HITOS UNIR -->
-        <div x-show="subtab === 'unir'" class="space-y-3 text-xs sm:text-sm">
-          <div class="p-4 rounded-2xl bg-gray-900 border border-gray-800">
-            <h4 class="font-bold text-white mb-1">Calendario Académico Oficial UNIR (2º Curso 2026-2027)</h4>
-            <p class="text-gray-400 text-xs">Ruta del primer trimestre desde la Semana 7 hasta los Simulacros de Diciembre.</p>
-          </div>
-          <div class="space-y-2.5">
-            <div class="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-between">
-              <div>
-                <span class="font-bold text-blue-300">Semana 7 (26 - 30 Octubre)</span>
-                <p class="text-xs text-gray-300 mt-0.5">🚨 Vencimiento de Actividades 1 y 1ª Entrega Proyecto Intramodular</p>
-              </div>
-              <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300">En curso</span>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-between">
-              <div>
-                <span class="font-bold text-white">Semanas 8-9 (2 - 13 Noviembre)</span>
-                <p class="text-xs text-gray-400 mt-0.5">Avance de temarios y apertura de Actividades 2 (Sockets PSP, ORM en AD, UI avanzada Android)</p>
-              </div>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-between">
-              <div>
-                <span class="font-bold text-white">Semanas 10-11 (16 - 27 Noviembre)</span>
-                <p class="text-xs text-gray-400 mt-0.5">Cierre de Actividades 2 y 2ª Entrega del Proyecto (Desarrollo y metodología)</p>
-              </div>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-between">
-              <div>
-                <span class="font-bold text-white">Semanas 12-13 (30 Noviembre - 11 Diciembre)</span>
-                <p class="text-xs text-gray-400 mt-0.5">Semanas de repaso espaciado intensivo, bancos de preguntas y simulacros de años anteriores</p>
-              </div>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
-              <div>
-                <span class="font-bold text-amber-300">Semana 14 (14 - 20 Diciembre)</span>
-                <p class="text-xs text-gray-300 mt-0.5">🎯 Simulacros Oficiales de Examen & Cierre 1er Trimestre</p>
-              </div>
-              <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300">Meta Trimestre</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- SUBTAB 3: SEMAFORO -->
-        <div x-show="subtab === 'semaforo'" class="space-y-3">
-          <div class="p-3.5 rounded-2xl bg-gray-900 border border-gray-800">
-            <h4 class="font-bold text-white text-xs sm:text-sm">Semáforo de Entregas (Actividades 1 & Proyecto)</h4>
-            <p class="text-xs text-gray-400">Estado de avance en tu disco local:</p>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            <div class="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 opacity-70">
-              <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-circle-check text-emerald-400"></i>
-                <span class="font-bold text-white">PSP - Actividad 1</span>
-              </div>
-              <p class="text-gray-400 mt-1">Gestor de procesos finalizado con memoria PDF y ZIP empaquetado.</p>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 opacity-70">
-              <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-circle-check text-emerald-400"></i>
-                <span class="font-bold text-white">Acceso a Datos - Actividad 1</span>
-              </div>
-              <p class="text-gray-400 mt-1">Gestión de clientes y pedidos terminada (ejercicios eximidos).</p>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30">
-              <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-clock text-amber-400"></i>
-                <span class="font-bold text-white">Desarrollo de Interfaces - Actividad 1</span>
-              </div>
-              <p class="text-gray-400 mt-1">Código web listo (HTML/CSS/JS). Falta montar memoria en PDF.</p>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-rose-950/20 border border-rose-500/30">
-              <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-circle-exclamation text-rose-400"></i>
-                <span class="font-bold text-white">Proyecto Intramodular - 1ª Entrega</span>
-              </div>
-              <p class="text-gray-400 mt-1">Portada, Resumen, Índice, Justificación y Estado del Arte.</p>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-rose-950/20 border border-rose-500/30">
-              <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-circle-exclamation text-rose-400"></i>
-                <span class="font-bold text-white">Móviles (PMDM) - Actividad 1</span>
-              </div>
-              <p class="text-gray-400 mt-1">Calculadora de salario neto en Android Studio (Kotlin).</p>
-            </div>
-            <div class="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30">
-              <div class="flex items-center space-x-2">
-                <i class="fa-solid fa-clock text-amber-400"></i>
-                <span class="font-bold text-white">SGE - Actividad 1 (Odoo)</span>
-              </div>
-              <p class="text-gray-400 mt-1">Consultas y flujos de información en Odoo ERP (vence 26 Oct).</p>
-            </div>
-          </div>
-        </div>
-
       </div>
 
       <!-- ==================== VISTA FLASHCARDS / REPASO ACTIVO ==================== -->
@@ -3695,7 +3401,6 @@ def dashboard_html():
         irASeccion(sec) {
           const titulos = {
             dashboard: 'Inicio',
-            plan_estudio: 'Plan Semanal & Bloques',
             asignaturas: 'Materias & Temarios',
             clases: 'Videoclases',
             tutor: 'Tutor NOVA',
@@ -3705,7 +3410,6 @@ def dashboard_html():
           };
           const iconos = {
             dashboard: 'fa-house',
-            plan_estudio: 'fa-calendar-days',
             asignaturas: 'fa-folder-tree',
             clases: 'fa-video',
             tutor: 'fa-robot',

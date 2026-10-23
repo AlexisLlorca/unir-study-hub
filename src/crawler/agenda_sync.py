@@ -23,7 +23,6 @@ from src.core.config import (
 from src.core.academic_structure import normalizar_nombre_asignatura
 
 AGENDA_CACHE_FILE = PROCESADO_DIR / "agenda_cache.json"
-AGENDA_BACKUP_FILE = BASE_DIR / "data" / "agenda_backup.json"
 
 
 def calcular_dias_restantes(fecha_iso: Optional[str]) -> tuple[int, str]:
@@ -161,13 +160,8 @@ def sincronizar_agenda_canvas() -> List[Dict[str, Any]]:
             # Ordenar por fecha más próxima (las más urgentes primero)
             eventos_limpios.sort(key=lambda x: (x["dias_restantes"] if x["dias_restantes"] >= 0 else 9999))
 
-            # Guardar en cache y en backup para la nube
-            raw_json = json.dumps(eventos_limpios, indent=2, ensure_ascii=False)
-            AGENDA_CACHE_FILE.write_text(raw_json, encoding="utf-8")
-            try:
-                AGENDA_BACKUP_FILE.write_text(raw_json, encoding="utf-8")
-            except Exception:
-                pass
+            # Guardar en cache
+            AGENDA_CACHE_FILE.write_text(json.dumps(eventos_limpios, indent=2, ensure_ascii=False), encoding="utf-8")
             console.print(f"[bold green]✔ Sincronizados {len(eventos_limpios)} eventos y entregas de Canvas.[/bold green]")
             return eventos_limpios
 
@@ -177,47 +171,12 @@ def sincronizar_agenda_canvas() -> List[Dict[str, Any]]:
 
 
 def cargar_agenda_cache() -> List[Dict[str, Any]]:
-    """Carga los eventos cacheados y recalcula dinámicamente los días restantes y la urgencia."""
-    items = []
-    archivo_origen = None
-    if AGENDA_CACHE_FILE.exists() and AGENDA_CACHE_FILE.stat().st_size > 10:
-        archivo_origen = AGENDA_CACHE_FILE
-    elif AGENDA_BACKUP_FILE.exists() and AGENDA_BACKUP_FILE.stat().st_size > 10:
-        archivo_origen = AGENDA_BACKUP_FILE
-
-    if archivo_origen:
+    """Carga los eventos cacheados o genera eventos base de calendario."""
+    if AGENDA_CACHE_FILE.exists():
         try:
-            items = json.loads(archivo_origen.read_text(encoding="utf-8"))
+            return json.loads(AGENDA_CACHE_FILE.read_text(encoding="utf-8"))
         except Exception:
-            items = []
-
-    if items:
-        actualizados = []
-        for ev in items:
-            fecha_iso = ev.get("fecha_iso")
-            dias_restantes, plazo_texto = calcular_dias_restantes(fecha_iso)
-            # Omitir eventos finalizados hace más de 1 día para mantener la agenda limpia
-            if dias_restantes < -1:
-                continue
-
-            if dias_restantes < 0:
-                urgencia = "vencida"
-            elif dias_restantes <= 2:
-                urgencia = "critica"
-            elif dias_restantes <= 7:
-                urgencia = "alta"
-            elif dias_restantes <= 15:
-                urgencia = "media"
-            else:
-                urgencia = "baja"
-
-            ev["dias_restantes"] = dias_restantes
-            ev["plazo_texto"] = plazo_texto
-            ev["urgencia"] = urgencia
-            actualizados.append(ev)
-
-        actualizados.sort(key=lambda x: (x["dias_restantes"] if x["dias_restantes"] >= 0 else 9999))
-        return actualizados
+            pass
 
     # Eventos predeterminados del calendario FP DAM UNIR
     eventos_base = [
