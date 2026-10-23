@@ -185,11 +185,11 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
             materiales_rel = json.loads(manifest_file.read_text(encoding="utf-8"))
             set_validos = {str((DATA_DIR / rel_str).resolve()) for rel_str in materiales_rel}
 
-            # Limpiar placeholders antiguos de 0 bytes que ya no existan en el catálogo limpio
+            # Limpiar cualquier archivo antiguo que ya no exista en el catálogo limpio
             mats_dir = DATA_DIR / "materiales"
             if mats_dir.exists():
                 for f_old in list(mats_dir.rglob("*")):
-                    if f_old.is_file() and f_old.stat().st_size == 0 and str(f_old.resolve()) not in set_validos:
+                    if f_old.is_file() and str(f_old.resolve()) not in set_validos:
                         f_old.unlink(missing_ok=True)
 
             creados = 0
@@ -199,6 +199,10 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
                     p_mat.parent.mkdir(parents=True, exist_ok=True)
                     p_mat.touch()
                     creados += 1
+
+            from src.core.academic_structure import normalizar_y_limpiar_biblioteca
+            normalizar_y_limpiar_biblioteca()
+
             console.print(
                 f"[bold green]✔ Biblioteca cloud lista al 100% ({len(materiales_rel)} documentos activos y {creados} nuevos indexados).[/bold green]"
             )
@@ -257,8 +261,32 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
                     repo_id=repo_id,
                     repo_type="dataset",
                     commit_message=f"sync: data/{sub} (biblioteca limpia y deduplicada)",
-                    delete_patterns="**" if sub == "materiales" else None,
                 )
+
+        # Purgar archivos obsoletos/duplicados remotos que ya no existan localmente
+        try:
+            from huggingface_hub import CommitOperationDelete
+            remote_files = api.list_repo_files(repo_id=repo_id, repo_type="dataset")
+            local_valid = {
+                str(p.relative_to(BASE_DIR)).replace("\\", "/")
+                for p in DATA_DIR.rglob("*")
+                if p.is_file()
+            }
+            deletions = [
+                CommitOperationDelete(path_in_repo=rf)
+                for rf in remote_files
+                if rf.startswith("data/materiales/") and rf not in local_valid
+            ]
+            if deletions:
+                api.create_commit(
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    operations=deletions,
+                    commit_message=f"clean: purgar {len(deletions)} archivos obsoletos o duplicados en data/materiales",
+                )
+        except Exception as e:
+            console.print(f"[yellow]⚠ Aviso en purga remota de Hugging Face: {e}[/yellow]")
+
     return True
 
 

@@ -685,6 +685,7 @@ class CampusScraper:
             console.print(f"[dim]Nota: Sincronización de clases grabadas: {e}[/dim]")
 
         total = importados + descargados + total_grabaciones
+        reorganizar_biblioteca_completa()
         if total > 0:
             try:
                 import subprocess
