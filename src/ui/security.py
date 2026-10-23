@@ -201,6 +201,9 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         es_nube_o_proxy = bool(request.headers.get("x-forwarded-for")) or any(
             host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS
         )
+        if request.url.path in ("/ping", "/health"):
+            return JSONResponse({"status": "ok", "app": "unir-study-hub"}, status_code=200)
+
         if _es_loopback(cliente) and not es_nube_o_proxy:
             return await call_next(request)
 
