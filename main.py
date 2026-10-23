@@ -376,6 +376,8 @@ if __name__ == "__main__":
         ensure_directories()
         scraper = CampusScraper()
         scraper.ejecutar_sincronizacion_completa()
+        from src.core.cloud_sync import subir_datos_a_hf
+        subir_datos_a_hf()
         sys.exit(0)
     elif len(sys.argv) > 1 and sys.argv[1] in ["--web", "-w"]:
         ensure_directories()
