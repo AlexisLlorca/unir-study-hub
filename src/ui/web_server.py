@@ -945,7 +945,7 @@ def api_agenda():
 def api_sincronizar_agenda():
     """Sincroniza en directo la agenda y PACs con Canvas LMS."""
     from src.crawler.agenda_sync import sincronizar_agenda_canvas
-    eventos = sincronizar_agenda_canvas()
+    eventos = sincronizar_agenda_canvas() or []
     return {"status": "ok", "total": len(eventos), "eventos": eventos}
 
 
@@ -4144,11 +4144,16 @@ def dashboard_html():
           this.sincronizandoAgenda = true;
           try {
             const res = await fetch('/api/sincronizar-agenda', { method: 'POST' });
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.detail || `HTTP ${res.status}`);
+            }
             const data = await res.json();
             this.agendaEventos = data.eventos || [];
             alert(`Sincronización completada. ${this.agendaEventos.length} entregas y eventos en tu calendario de Canvas.`);
           } catch(e) {
-            alert('Error al sincronizar la agenda con Canvas.');
+            console.error('Error sincronizando agenda:', e);
+            alert('Error al sincronizar la agenda: ' + (e.message || e));
           } finally {
             this.sincronizandoAgenda = false;
           }

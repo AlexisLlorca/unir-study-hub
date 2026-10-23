@@ -23,6 +23,7 @@ from src.core.config import (
 from src.core.academic_structure import normalizar_nombre_asignatura
 
 AGENDA_CACHE_FILE = PROCESADO_DIR / "agenda_cache.json"
+AGENDA_BACKUP_FILE = BASE_DIR / "data" / "agenda_backup.json"
 
 
 def calcular_dias_restantes(fecha_iso: Optional[str]) -> tuple[int, str]:
@@ -59,13 +60,23 @@ def sincronizar_agenda_canvas() -> List[Dict[str, Any]]:
     ensure_directories()
     eventos_limpios = []
 
-    if not SESSION_STATE_FILE.exists():
-        console.print("[yellow]⚠ No hay sesión de Canvas activa para sincronizar la agenda.[/yellow]")
+    # En la nube (Render) o si no hay sesión activa de Canvas local, sincronizar desde HF Cloud
+    if os.getenv("RENDER") or not SESSION_STATE_FILE.exists():
+        console.print("[cyan]☁️ Sincronizando agenda desde Hugging Face Cloud (modo Cloud)...[/cyan]")
+        try:
+            from src.core.cloud_sync import _descargar_archivo_hf_directo
+            _descargar_archivo_hf_directo("data/procesado/agenda_cache.json", AGENDA_CACHE_FILE)
+        except Exception as e:
+            console.print(f"[yellow]⚠ No se pudo actualizar agenda_cache.json desde HF: {e}[/yellow]")
         return cargar_agenda_cache()
 
     try:
         from playwright.sync_api import sync_playwright
+    except ImportError:
+        console.print("[yellow]⚠ Playwright no instalado. Usando agenda en caché.[/yellow]")
+        return cargar_agenda_cache()
 
+    try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
@@ -160,10 +171,23 @@ def sincronizar_agenda_canvas() -> List[Dict[str, Any]]:
             # Ordenar por fecha más próxima (las más urgentes primero)
             eventos_limpios.sort(key=lambda x: (x["dias_restantes"] if x["dias_restantes"] >= 0 else 9999))
 
-            # Guardar en cache
-            AGENDA_CACHE_FILE.write_text(json.dumps(eventos_limpios, indent=2, ensure_ascii=False), encoding="utf-8")
+            # Guardar en cache local y en backup versionado
+            raw_json = json.dumps(eventos_limpios, indent=2, ensure_ascii=False)
+            AGENDA_CACHE_FILE.write_text(raw_json, encoding="utf-8")
+            try:
+                AGENDA_BACKUP_FILE.write_text(raw_json, encoding="utf-8")
+            except Exception:
+                pass
+
+            # Respaldar en Hugging Face en segundo plano
+            try:
+                from src.core.cloud_sync import respaldar_archivo_en_hf_async
+                respaldar_archivo_en_hf_async(AGENDA_CACHE_FILE)
+            except Exception:
+                pass
+
             console.print(f"[bold green]✔ Sincronizados {len(eventos_limpios)} eventos y entregas de Canvas.[/bold green]")
-            return eventos_limpios
+            return cargar_agenda_cache()
 
     except Exception as e:
         console.print(f"[red]Error al sincronizar agenda de Canvas: {e}[/red]")
@@ -171,53 +195,86 @@ def sincronizar_agenda_canvas() -> List[Dict[str, Any]]:
 
 
 def cargar_agenda_cache() -> List[Dict[str, Any]]:
-    """Carga los eventos cacheados o genera eventos base de calendario."""
-    if AGENDA_CACHE_FILE.exists():
+    """Carga los eventos cacheados y recalcula dinámicamente los días restantes y la urgencia."""
+    items = []
+    archivo_origen = None
+
+    if AGENDA_CACHE_FILE.exists() and AGENDA_CACHE_FILE.stat().st_size > 10:
+        archivo_origen = AGENDA_CACHE_FILE
+    else:
+        # Intentar descargar desde HF si estamos en la nube
         try:
-            return json.loads(AGENDA_CACHE_FILE.read_text(encoding="utf-8"))
+            from src.core.cloud_sync import _descargar_archivo_hf_directo
+            if _descargar_archivo_hf_directo("data/procesado/agenda_cache.json", AGENDA_CACHE_FILE):
+                archivo_origen = AGENDA_CACHE_FILE
         except Exception:
             pass
 
-    # Eventos predeterminados del calendario FP DAM UNIR
+    if not archivo_origen and AGENDA_BACKUP_FILE.exists() and AGENDA_BACKUP_FILE.stat().st_size > 10:
+        archivo_origen = AGENDA_BACKUP_FILE
+
+    if archivo_origen:
+        try:
+            items = json.loads(archivo_origen.read_text(encoding="utf-8"))
+        except Exception:
+            items = []
+
+    if items:
+        actualizados = []
+        for ev in items:
+            fecha_iso = ev.get("fecha_iso")
+            dias_restantes, plazo_texto = calcular_dias_restantes(fecha_iso)
+            # Omitir eventos finalizados hace más de 1 día para mantener la agenda limpia
+            if dias_restantes < -1:
+                continue
+
+            if dias_restantes < 0:
+                urgencia = "vencida"
+            elif dias_restantes <= 2:
+                urgencia = "critica"
+            elif dias_restantes <= 7:
+                urgencia = "alta"
+            elif dias_restantes <= 15:
+                urgencia = "media"
+            else:
+                urgencia = "baja"
+
+            ev_copia = dict(ev)
+            ev_copia["dias_restantes"] = dias_restantes
+            ev_copia["plazo_texto"] = plazo_texto
+            ev_copia["urgencia"] = urgencia
+            actualizados.append(ev_copia)
+
+        actualizados.sort(key=lambda x: (x["dias_restantes"] if x["dias_restantes"] >= 0 else 9999))
+        return actualizados
+
+    # Eventos predeterminados del calendario FP DAM UNIR (fallback cuando no hay datos)
     eventos_base = [
         {
             "id": "anteproyecto_dam",
             "tipo": "tarea",
             "titulo": "Entrega de Anteproyecto - Proyecto Intermodular",
             "asignatura": "Proyecto Intermodular DAM",
-            "fecha_iso": "2026-10-12T21:59:59Z",
-            "dias_restantes": 2,
-            "plazo_texto": "En 2 días (12 de Octubre)",
-            "urgencia": "alta",
+            "fecha_iso": "2026-11-02T21:59:59Z",
+            "dias_restantes": 9,
+            "plazo_texto": "En 9 días",
+            "urgencia": "media",
             "puntos": 10,
             "url": "https://campusfp.unir.net",
             "descripcion": "Entrega de la memoria inicial del equipo y planteamiento tecnológico del proyecto."
         },
         {
-            "id": "act1_psp",
+            "id": "act1_sge",
             "tipo": "tarea",
-            "titulo": "Actividad 1 Individual - Hilos y Procesos",
-            "asignatura": "Programación de Servicios y Procesos",
-            "fecha_iso": "2026-10-12T21:59:59Z",
+            "titulo": "Actividad 1 Individual - Sistemas de Gestión Empresarial",
+            "asignatura": "Sistemas de Gestión Empresarial",
+            "fecha_iso": "2026-10-26T22:59:59Z",
             "dias_restantes": 2,
-            "plazo_texto": "En 2 días (12 de Octubre)",
-            "urgencia": "alta",
+            "plazo_texto": "En 2 días",
+            "urgencia": "critica",
             "puntos": 3,
             "url": "https://campusfp.unir.net",
-            "descripcion": "Implementación práctica de concurrencia y gestión de subprocesos en Java."
-        },
-        {
-            "id": "clase_digitalizacion",
-            "tipo": "clase_directo",
-            "titulo": "Clase en Directo: Digitalización Aplicada (David Cantos)",
-            "asignatura": "Digitalización Aplicada",
-            "fecha_iso": "2026-10-13T15:00:00Z",
-            "dias_restantes": 3,
-            "plazo_texto": "En 3 días (13 de Octubre a las 17:00)",
-            "urgencia": "media",
-            "puntos": None,
-            "url": "https://campusfp.unir.net",
-            "descripcion": "Sesión presencial interactiva con resolución de casos de digitalización empresarial."
+            "descripcion": "Actividad evaluable individual de ERP y gestión de procesos empresariales."
         }
     ]
     return eventos_base
