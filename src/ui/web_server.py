@@ -1313,11 +1313,33 @@ def dashboard_html():
     ::-webkit-scrollbar-track { background: #0b0f19; }
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+    /* Ajustes específicos de fluidez para móviles y tablets */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .safe-area-pb { padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem)); }
+    @media (max-width: 768px) {
+      .glass { backdrop-filter: blur(10px); }
+      .markdown-content pre { font-size: 0.78rem; padding: 0.75rem; }
+      .markdown-content table { font-size: 0.75rem; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    }
   </style>
 </head>
 <body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-[#0b0f19] text-gray-100 overflow-x-hidden">
 
-  <!-- ==================== SIDEBAR PRINCIPAL DE SECCIONES ==================== -->
+  <!-- BACKDROP OVERLAY PARA MÓVIL CUANDO EL MENÚ ESTÁ ABIERTO -->
+  <div x-show="sidebarVisible" 
+       @click="sidebarVisible = false"
+       x-transition:enter="transition-opacity ease-out duration-300"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition-opacity ease-in duration-200"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 md:hidden"
+       style="display: none;"></div>
+
+  <!-- ==================== SIDEBAR PRINCIPAL DE SECCIONES (DRAWER EN MÓVIL, STICKY EN DESKTOP) ==================== -->
   <aside x-show="sidebarVisible"
          x-transition:enter="transition-all ease-out duration-300"
          x-transition:enter-start="-translate-x-full opacity-0"
@@ -1325,10 +1347,10 @@ def dashboard_html():
          x-transition:leave="transition-all ease-in duration-200"
          x-transition:leave-start="translate-x-0 opacity-100"
          x-transition:leave-end="-translate-x-full opacity-0"
-         class="w-72 bg-[#0f172a]/95 border-r border-gray-800 flex flex-col shrink-0 min-h-screen sticky top-0 z-40 select-none shadow-xl">
+         class="w-72 bg-[#0f172a]/98 border-r border-gray-800 flex flex-col shrink-0 min-h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 select-none shadow-2xl md:shadow-xl">
     
     <!-- BRAND / LOGO -->
-    <div class="p-5 border-b border-gray-800 flex items-center justify-between">
+    <div class="p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between">
       <div class="flex items-center space-x-3">
         <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20 shrink-0">
           <i class="fa-solid fa-graduation-cap text-lg"></i>
@@ -1338,8 +1360,9 @@ def dashboard_html():
           <p class="text-[11px] text-gray-400 font-medium">Plataforma Multi-Titulación</p>
         </div>
       </div>
-      <button @click="toggleSidebar()" class="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition" title="Ocultar barra lateral">
-        <i class="fa-solid fa-angles-left text-sm"></i>
+      <button @click="sidebarVisible = false" class="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition" title="Ocultar barra lateral">
+        <i class="fa-solid fa-xmark text-lg md:hidden"></i>
+        <i class="fa-solid fa-angles-left text-sm hidden md:inline"></i>
       </button>
     </div>
 
@@ -1505,52 +1528,52 @@ def dashboard_html():
   <div class="flex-1 flex flex-col min-h-screen max-w-full overflow-hidden">
     
     <!-- TOPBAR -->
-    <header class="glass sticky top-0 z-30 px-6 py-3.5 flex items-center justify-between border-b border-gray-800/80">
-      <div class="flex items-center space-x-3">
+    <header class="glass sticky top-0 z-30 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between border-b border-gray-800/80 gap-2">
+      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
         <!-- BOTÓN TOGGLE SIDEBAR -->
         <button @click="toggleSidebar()" 
-                class="p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800/80 rounded-xl transition flex items-center space-x-1.5 text-xs font-semibold border border-transparent hover:border-gray-700"
+                class="p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800/80 rounded-xl transition flex items-center space-x-1.5 text-xs font-semibold border border-transparent hover:border-gray-700 shrink-0"
                 :title="sidebarVisible ? 'Ocultar barra lateral' : 'Mostrar barra lateral'">
           <i :class="sidebarVisible ? 'fa-solid fa-bars-staggered' : 'fa-solid fa-bars text-cyan-400 text-sm'"></i>
-          <span x-show="!sidebarVisible" class="text-xs text-gray-300 ml-1 font-semibold">Menú</span>
+          <span x-show="!sidebarVisible" class="text-xs text-gray-300 ml-1 font-semibold hidden sm:inline">Menú</span>
         </button>
 
-        <span class="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider"
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider truncate max-w-[140px] sm:max-w-none"
               :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)"
               x-text="programaActual?.nombre"></span>
-        <span class="text-xs text-gray-400 hidden sm:inline" x-text="cursoFiltro === 'todos' ? 'Todo el programa' : (cursoFiltro === '2dam' ? '2º Curso' : '1º Curso')"></span>
+        <span class="text-xs text-gray-400 hidden lg:inline" x-text="cursoFiltro === 'todos' ? 'Todo el programa' : (cursoFiltro === '2dam' ? '2º Curso' : '1º Curso')"></span>
       </div>
 
-      <!-- BUSCADOR RÁPIDO -->
-      <div class="flex items-center space-x-4">
-        <div class="relative w-64">
+      <!-- BUSCADOR RÁPIDO Y BOTÓN NOVA -->
+      <div class="flex items-center space-x-2 sm:space-x-4 shrink-0">
+        <div class="relative w-28 sm:w-48 md:w-64 focus-within:w-44 sm:focus-within:w-48 md:focus-within:w-64 transition-all">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-gray-500"></i>
-          <input type="text" x-model="busquedaTexto" placeholder="Buscar materia, tema o pdf..." class="w-full bg-gray-900/80 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2 rounded-xl border border-gray-800 focus:outline-none focus:border-cyan-500">
+          <input type="text" x-model="busquedaTexto" placeholder="Buscar..." class="w-full bg-gray-900/80 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2 rounded-xl border border-gray-800 focus:outline-none focus:border-cyan-500">
         </div>
-        <button @click="abrirChatConAsignatura('')" class="px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
-          <i class="fa-solid fa-robot"></i><span>Consultar NOVA</span>
+        <button @click="abrirChatConAsignatura('')" class="px-2.5 sm:px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-1.5 shrink-0">
+          <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">Consultar </span><span>NOVA</span>
         </button>
       </div>
     </header>
 
     <!-- ==================== BARRA DE PESTAÑAS MULTI-TAREA ==================== -->
-    <nav class="bg-[#0c1222]/95 border-b border-gray-800/80 px-4 py-2 flex items-center justify-between gap-3 overflow-x-auto select-none shrink-0 sticky top-[57px] z-20 backdrop-blur-md">
-      <div class="flex items-center space-x-1.5 overflow-x-auto py-0.5 max-w-full">
+    <nav class="bg-[#0c1222]/95 border-b border-gray-800/80 px-2 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2 sm:gap-3 overflow-x-auto select-none shrink-0 sticky top-[49px] sm:top-[57px] z-20 backdrop-blur-md no-scrollbar">
+      <div class="flex items-center space-x-1.5 overflow-x-auto py-0.5 max-w-full no-scrollbar">
         <template x-for="(p, index) in pestanasAbiertas" :key="p.id">
-          <div class="group flex items-center rounded-xl text-xs transition border cursor-pointer shrink-0 pl-3 pr-2 py-1.5"
+          <div class="group flex items-center rounded-xl text-xs transition border cursor-pointer shrink-0 pl-2.5 sm:pl-3 pr-2 py-1 sm:py-1.5"
                :class="pestanaActivaId === p.id 
                        ? 'bg-gray-800/95 text-white border-cyan-500/40 shadow-lg shadow-cyan-500/10 font-medium ring-1 ring-cyan-500/20' 
                        : 'bg-gray-900/60 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-gray-800/80'"
                @click="activarPestana(p.id)">
             <!-- ICONO -->
-            <i :class="'fa-solid ' + p.icono + ' mr-2 text-[11px] ' + (pestanaActivaId === p.id ? 'text-cyan-400' : 'text-gray-500')"></i>
+            <i :class="'fa-solid ' + p.icono + ' mr-1.5 sm:mr-2 text-[11px] ' + (pestanaActivaId === p.id ? 'text-cyan-400' : 'text-gray-500')"></i>
             
             <!-- TÍTULO -->
-            <span class="max-w-[130px] sm:max-w-[180px] truncate" x-text="p.titulo"></span>
+            <span class="max-w-[100px] sm:max-w-[180px] truncate" x-text="p.titulo"></span>
             
             <!-- BOTÓN ABRIR EN PESTAÑA NUEVA DEL NAVEGADOR -->
             <a :href="p.url" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" 
-               class="ml-2 p-1 text-gray-500 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-md transition opacity-0 group-hover:opacity-100">
+               class="ml-1.5 sm:ml-2 p-1 text-gray-500 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-md transition opacity-0 group-hover:opacity-100 hidden sm:inline-block">
               <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
             </a>
 
@@ -1575,44 +1598,45 @@ def dashboard_html():
     </nav>
 
     <!-- CUERPO DE LA APLICACIÓN -->
-    <main class="flex-1 p-8 space-y-6 overflow-y-auto max-w-7xl w-full mx-auto">
+    <main class="flex-1 p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto max-w-7xl w-full mx-auto pb-24 md:pb-8">
 
       <!-- ==================== 1. VISTA DASHBOARD ==================== -->
       <div x-show="tab === 'dashboard' && !asigSeleccionada" x-transition class="space-y-6">
         
         <!-- HERO BANNER DEL PROGRAMA ACTIVO -->
-        <div class="glass p-6 rounded-3xl relative overflow-hidden border border-gray-800">
-          <div class="flex flex-wrap items-center justify-between gap-6 relative z-10">
-            <div class="flex items-center space-x-5">
-              <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-xl shrink-0"
+        <div class="glass p-4 sm:p-6 rounded-2xl sm:rounded-3xl relative overflow-hidden border border-gray-800">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 sm:gap-6 relative z-10">
+            <div class="flex items-center space-x-3 sm:space-x-5">
+              <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl shadow-xl shrink-0"
                    :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)">
                 <i :class="'fa-solid ' + (programaActual?.icono || 'fa-graduation-cap')"></i>
               </div>
-              <div>
-                <div class="flex items-center space-x-3">
-                  <h2 class="text-2xl font-black text-white" x-text="programaActual?.nombre"></h2>
-                  <span class="text-xs px-3 py-0.5 rounded-full font-bold border"
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="text-lg sm:text-2xl font-black text-white truncate" x-text="programaActual?.nombre"></h2>
+                  <span class="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold border shrink-0"
                         :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color) + '; border-color: ' + obtenerColorHex(programaActual?.color) + '40'"
                         x-text="programaActual?.badge"></span>
                 </div>
-                <p class="text-xs text-gray-400 mt-1 max-w-2xl" x-text="programaActual?.descripcion"></p>
+                <p class="text-xs text-gray-400 mt-1 line-clamp-2 sm:line-clamp-none max-w-2xl" x-text="programaActual?.descripcion"></p>
               </div>
             </div>
 
             <!-- ACCIONES Y CURSO SELECTOR RÁPIDO -->
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800/80">
               <div class="flex items-center space-x-2">
                 <button @click="sincronizarRespaldoLocal()" :disabled="sincronizandoRespaldo"
-                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center space-x-1.5 shadow-sm"
-                        :title="'Sincronizar carpetas locales de estudio (/home/alexllorca/Respaldo_Estudios: DAM 1º/2º y Ciberseguridad M1-M7)'">
+                        class="px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center space-x-1.5 shadow-sm"
+                        :title="'Sincronizar carpetas locales de estudio (/home/alexllorca/Respaldo_Estudios)'">
                   <i :class="sincronizandoRespaldo ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-folder-tree'"></i>
-                  <span x-text="sincronizandoRespaldo ? 'Importando...' : ('📥 Importar Respaldo ' + (programaActivoId === 'dam' ? 'DAM' : (programaActivoId === 'ciber' ? 'Ciberseguridad' : 'Local')))"></span>
+                  <span class="hidden sm:inline" x-text="sincronizandoRespaldo ? 'Importando...' : ('📥 Importar Respaldo ' + (programaActivoId === 'dam' ? 'DAM' : 'Local'))"></span>
+                  <span class="sm:hidden" x-text="sincronizandoRespaldo ? '...' : '📥 Respaldo'"></span>
                 </button>
                 <button @click="descargarCanvasOnline()" :disabled="descargandoCanvas"
-                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1.5 shadow-sm"
-                        title="Sincronización 360° con Canvas UNIR: Archivos, CMS, Módulos y Clases Grabadas">
+                        class="px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1.5 shadow-sm"
+                        title="Sincronización con Canvas UNIR">
                   <i :class="descargandoCanvas ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-cloud-arrow-down'"></i>
-                  <span x-text="descargandoCanvas ? 'Sincronizando...' : '🌐 Sincronizar Canvas'"></span>
+                  <span x-text="descargandoCanvas ? '...' : '🌐 Canvas'"></span>
                 </button>
               </div>
 
@@ -1620,13 +1644,13 @@ def dashboard_html():
               <div x-show="programaActual?.cursos && programaActual?.cursos.length > 1" class="flex items-center space-x-1 bg-gray-900/90 p-1 rounded-2xl border border-gray-800">
                 <button @click="filtrarCurso('todos')"
                         :class="cursoFiltro === 'todos' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent">
-                  Todo el Ciclo
+                        class="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition border border-transparent">
+                  Todo
                 </button>
                 <template x-for="c in programaActual?.cursos" :key="c.id">
                   <button @click="filtrarCurso(c.id)"
                           :class="cursoFiltro === c.id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                          class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border border-transparent" x-text="c.nombre">
+                          class="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition border border-transparent" x-text="c.nombre">
                   </button>
                 </template>
               </div>
@@ -1635,27 +1659,27 @@ def dashboard_html():
         </div>
 
         <!-- AGENDA & PACs WIDGET (CANVAS ALERT BANNER) -->
-        <div x-show="agendaEventos.length > 0" class="glass-card p-5 rounded-3xl border border-rose-500/30 bg-gradient-to-r from-rose-950/20 via-gray-900/60 to-purple-950/20">
-          <div class="flex flex-wrap items-center justify-between gap-4 mb-3">
+        <div x-show="agendaEventos.length > 0" class="glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-rose-500/30 bg-gradient-to-r from-rose-950/20 via-gray-900/60 to-purple-950/20">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
             <div class="flex items-center space-x-3">
-              <span class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-sm font-bold animate-pulse">
+              <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs sm:text-sm font-bold animate-pulse shrink-0">
                 <i class="fa-solid fa-bell"></i>
               </span>
               <div>
-                <h3 class="text-sm font-extrabold text-white flex items-center space-x-2">
-                  <span>Próximas Entregas y PACs de Canvas</span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-mono font-bold" x-text="agendaEventos.length + ' en calendario'"></span>
+                <h3 class="text-xs sm:text-sm font-extrabold text-white flex items-center space-x-2">
+                  <span>Próximas Entregas y PACs</span>
+                  <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-mono font-bold" x-text="agendaEventos.length + ' en calendario'"></span>
                 </h3>
-                <p class="text-[11px] text-gray-400">Actividades evaluables, fechas límite y sesiones oficiales</p>
+                <p class="text-[10px] sm:text-[11px] text-gray-400">Actividades evaluables y plazos oficiales</p>
               </div>
             </div>
-            <div class="flex items-center space-x-2">
-              <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition flex items-center space-x-1.5 border border-gray-700">
+            <div class="flex items-center space-x-2 self-end sm:self-auto">
+              <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition flex items-center space-x-1.5 border border-gray-700">
                 <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
-                <span x-text="sincronizandoAgenda ? 'Actualizando...' : 'Refrescar Canvas'"></span>
+                <span x-text="sincronizandoAgenda ? '...' : 'Refrescar'"></span>
               </button>
-              <button @click="tab = 'agenda'" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition flex items-center space-x-1">
-                <span>Ver Agenda Completa</span>
+              <button @click="tab = 'agenda'" class="px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition flex items-center space-x-1">
+                <span>Ver Agenda</span>
                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
               </button>
             </div>
@@ -1687,59 +1711,59 @@ def dashboard_html():
         </div>
 
         <!-- STATS HERO CARDS -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Materias / Módulos</p>
-                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="catalogoFiltrado.length">0</h3>
+                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Módulos</p>
+                <h3 class="text-xl sm:text-3xl font-extrabold text-white mt-1" x-text="catalogoFiltrado.length">0</h3>
               </div>
-              <div class="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xl">
+              <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-base sm:text-xl shrink-0">
                 <i class="fa-solid fa-layer-group"></i>
               </div>
             </div>
-            <div class="mt-4 flex items-center text-xs text-cyan-400">
-              <i class="fa-solid fa-check-circle mr-1.5"></i>
-              <span>Estructura oficial limpia</span>
+            <div class="mt-3 sm:mt-4 flex items-center text-[10px] sm:text-xs text-cyan-400 truncate">
+              <i class="fa-solid fa-check-circle mr-1 shrink-0"></i>
+              <span class="truncate">Estructura limpia</span>
             </div>
           </div>
 
-          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/30 transition">
+          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/30 transition">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Temarios Oficiales</p>
-                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalMaterialesPrograma">0</h3>
+                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Temarios</p>
+                <h3 class="text-xl sm:text-3xl font-extrabold text-white mt-1" x-text="totalMaterialesPrograma">0</h3>
               </div>
-              <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl">
+              <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-base sm:text-xl shrink-0">
                 <i class="fa-solid fa-file-pdf"></i>
               </div>
             </div>
-            <div class="mt-4 flex items-center text-xs text-indigo-400">
-              <i class="fa-solid fa-folder-open mr-1.5"></i>
-              <span>PDFs indexados sin duplicar</span>
+            <div class="mt-3 sm:mt-4 flex items-center text-[10px] sm:text-xs text-indigo-400 truncate">
+              <i class="fa-solid fa-folder-open mr-1 shrink-0"></i>
+              <span class="truncate">PDFs sin duplicar</span>
             </div>
           </div>
 
-          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition">
+          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Videoclases Oficiales</p>
-                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalClasesPrograma">0</h3>
+                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Clases</p>
+                <h3 class="text-xl sm:text-3xl font-extrabold text-white mt-1" x-text="totalClasesPrograma">0</h3>
               </div>
-              <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+              <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-base sm:text-xl shrink-0">
                 <i class="fa-solid fa-video"></i>
               </div>
             </div>
-            <div class="mt-4 flex items-center text-xs text-amber-400">
-              <i class="fa-solid fa-file-lines mr-1.5"></i>
-              <span>Transcripciones completas</span>
+            <div class="mt-3 sm:mt-4 flex items-center text-[10px] sm:text-xs text-amber-400 truncate">
+              <i class="fa-solid fa-file-lines mr-1 shrink-0"></i>
+              <span class="truncate">Transcripciones</span>
             </div>
           </div>
 
-          <div class="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition">
+          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition">
             <div class="flex items-center justify-between">
               <div>
-                <p class="text-xs uppercase tracking-wider text-gray-400 font-semibold">Simulacros y Tests</p>
+                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Simulacros</p>
                 <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalTestsPrograma">0</h3>
               </div>
               <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
@@ -3034,11 +3058,46 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0f172a]/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
+    <button @click="irASeccion('dashboard')" 
+            :class="tab === 'dashboard' ? 'text-cyan-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
+      <i class="fa-solid fa-house text-base mb-0.5" :class="tab === 'dashboard' ? 'text-cyan-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">Inicio</span>
+    </button>
+    <button @click="irASeccion('asignaturas')" 
+            :class="tab === 'asignaturas' ? 'text-cyan-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
+      <i class="fa-solid fa-folder-tree text-base mb-0.5" :class="tab === 'asignaturas' ? 'text-cyan-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">Materias</span>
+    </button>
+    <button @click="irASeccion('agenda')" 
+            :class="tab === 'agenda' ? 'text-rose-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center relative">
+      <i class="fa-solid fa-calendar-check text-base mb-0.5" :class="tab === 'agenda' ? 'text-rose-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">Agenda</span>
+      <span x-show="agendaEventos.length > 0" class="absolute top-1 right-3 sm:right-6 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+    </button>
+    <button @click="irASeccion('flashcards')" 
+            :class="tab === 'flashcards' ? 'text-purple-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
+      <i class="fa-solid fa-clone text-base mb-0.5" :class="tab === 'flashcards' ? 'text-purple-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">Cards</span>
+    </button>
+    <button @click="irASeccion('tutor')" 
+            :class="tab === 'tutor' ? 'text-cyan-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
+      <i class="fa-solid fa-robot text-base mb-0.5" :class="tab === 'tutor' ? 'text-cyan-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">NOVA</span>
+    </button>
+  </nav>
+
   <script>
     function studyHubApp() {
       return {
         tab: 'dashboard',
-        sidebarVisible: localStorage.getItem('unir_sidebar_visible') !== 'false',
+        sidebarVisible: window.innerWidth >= 768 && localStorage.getItem('unir_sidebar_visible') !== 'false',
         
         // Sistema de Pestañas Multi-tarea
         pestanasAbiertas: [
@@ -3399,6 +3458,9 @@ def dashboard_html():
         },
 
         irASeccion(sec) {
+          if (window.innerWidth < 768) {
+            this.sidebarVisible = false;
+          }
           const titulos = {
             dashboard: 'Inicio',
             asignaturas: 'Materias & Temarios',
@@ -3487,6 +3549,9 @@ def dashboard_html():
         },
 
         seleccionarPrograma(progId) {
+          if (window.innerWidth < 768) {
+            this.sidebarVisible = false;
+          }
           this.programaActivoId = progId;
           this.cursoFiltro = 'todos';
           this.asigSeleccionada = null;
@@ -3497,6 +3562,9 @@ def dashboard_html():
         },
 
         filtrarCurso(cursoId) {
+          if (window.innerWidth < 768) {
+            this.sidebarVisible = false;
+          }
           this.cursoFiltro = cursoId;
           this.asigSeleccionada = null;
           this.aplicarFiltroCatalogo();
@@ -3528,9 +3596,11 @@ def dashboard_html():
 
         toggleSidebar() {
           this.sidebarVisible = !this.sidebarVisible;
-          try {
-            localStorage.setItem('unir_sidebar_visible', this.sidebarVisible);
-          } catch(e) {}
+          if (window.innerWidth >= 768) {
+            try {
+              localStorage.setItem('unir_sidebar_visible', this.sidebarVisible);
+            } catch(e) {}
+          }
         },
 
         async sincronizarRespaldoLocal() {
@@ -3883,6 +3953,9 @@ def dashboard_html():
         },
 
         abrirAsignatura(asig) {
+          if (window.innerWidth < 768) {
+            this.sidebarVisible = false;
+          }
           this.asigSeleccionada = asig;
           this.tab = 'asignaturas';
           this.abrirOPestana({
@@ -3896,6 +3969,9 @@ def dashboard_html():
         },
 
         abrirChatConAsignatura(nombre) {
+          if (window.innerWidth < 768) {
+            this.sidebarVisible = false;
+          }
           this.guardarHistorialActual();
           this.chatAsignatura = nombre || '';
           this.tab = 'tutor';
