@@ -1863,7 +1863,7 @@ def dashboard_html():
         <div x-show="asigSeleccionada" class="space-y-6">
           <div class="glass p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-gray-800">
             <div class="flex items-center space-x-4">
-              <button @click="asigSeleccionada = null; tab = 'dashboard'" class="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center transition">
+              <button @click="asigSeleccionada = null; irASeccion('asignaturas')" class="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center transition">
                 <i class="fa-solid fa-arrow-left"></i>
               </button>
               <div>
@@ -3268,9 +3268,9 @@ def dashboard_html():
         
         // Sistema de Pestañas Multi-tarea
         pestanasAbiertas: [
-          { id: 'dashboard', titulo: 'Inicio (Dashboard)', icono: 'fa-house', tipo: 'seccion', seccion: 'dashboard', url: '/?tab=dashboard' }
+          { id: 'sec-dashboard', titulo: 'Inicio', icono: 'fa-house', tipo: 'seccion', seccion: 'dashboard', url: '/?tab=dashboard' }
         ],
-        pestanaActivaId: 'dashboard',
+        pestanaActivaId: 'sec-dashboard',
         modalRutaActiva: '',
 
         programas: [],
@@ -3560,11 +3560,22 @@ def dashboard_html():
         },
 
         abrirOPestana(p) {
-          const index = this.pestanasAbiertas.findIndex(x => x.id === p.id);
+          if (p.id === 'dashboard' || (p.tipo === 'seccion' && p.seccion === 'dashboard')) {
+            p.id = 'sec-dashboard';
+            p.titulo = 'Inicio';
+          }
+          const index = this.pestanasAbiertas.findIndex(x => {
+            if (x.id === p.id) return true;
+            if (x.id === 'dashboard' && p.id === 'sec-dashboard') return true;
+            if (x.id === 'sec-dashboard' && p.id === 'dashboard') return true;
+            if (p.tipo === 'seccion' && x.tipo === 'seccion' && x.seccion === p.seccion) return true;
+            return false;
+          });
           if (index === -1) {
             this.pestanasAbiertas.push(p);
           } else {
             this.pestanasAbiertas[index] = { ...this.pestanasAbiertas[index], ...p };
+            p.id = this.pestanasAbiertas[index].id;
           }
           this.activarPestana(p.id);
         },
@@ -3654,14 +3665,14 @@ def dashboard_html():
 
           if (this.pestanasAbiertas.length === 0) {
             this.pestanasAbiertas.push({
-              id: 'dashboard',
-              titulo: 'Inicio (Dashboard)',
+              id: 'sec-dashboard',
+              titulo: 'Inicio',
               icono: 'fa-house',
               tipo: 'seccion',
               seccion: 'dashboard',
               url: '/?tab=dashboard'
             });
-            this.activarPestana('dashboard');
+            this.activarPestana('sec-dashboard');
             return;
           }
 
@@ -3780,7 +3791,7 @@ def dashboard_html():
           this.programaActivoId = progId;
           this.cursoFiltro = 'todos';
           this.asigSeleccionada = null;
-          this.tab = 'dashboard';
+          this.irASeccion('dashboard');
           this.aplicarFiltroCatalogo();
           this.actualizarMensajeBienvenidaChat();
           this.cargarFlashcards();
