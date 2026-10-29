@@ -341,8 +341,15 @@ class LLMClient:
                 return texto
         return None
 
-    def _obtener_cliente(self) -> Optional[genai.Client]:
-        """Inicializa de forma perezosa el cliente de Gemini."""
+    def _obtener_cliente(self, api_key_override: Optional[str] = None) -> Optional[genai.Client]:
+        """Inicializa de forma perezosa el cliente de Gemini. Si se pasa api_key_override, usa esa clave."""
+        if api_key_override and api_key_override.strip():
+            try:
+                return genai.Client(api_key=api_key_override.strip())
+            except Exception as e:
+                self._log_seguro(f"[red]Error inicializando cliente de Gemini con clave personalizada:[/red] {e}")
+                return None
+
         if self._client:
             return self._client
 
@@ -383,9 +390,10 @@ class LLMClient:
         max_output_tokens: Optional[int] = None,
         response_mime_type: Optional[str] = None,
         modelo_preferido: Optional[str] = None,
+        api_key_override: Optional[str] = None,
     ) -> Optional[str]:
         """Genera una respuesta completa a partir del prompt proporcionado."""
-        client = self._obtener_cliente()
+        client = self._obtener_cliente(api_key_override)
         sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
         modelos = self._obtener_lista_modelos(modelo_preferido)
 
@@ -471,9 +479,10 @@ class LLMClient:
         system_instruction: Optional[str] = None,
         temperatura: float = 0.4,
         modelo_preferido: Optional[str] = None,
+        api_key_override: Optional[str] = None,
     ) -> Optional[str]:
         """Genera una respuesta en un diálogo multi-turno manteniendo la memoria contextual exacta."""
-        client = self._obtener_cliente()
+        client = self._obtener_cliente(api_key_override)
         sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
         mensajes_norm = self._normalizar_mensajes(mensajes)
         if not mensajes_norm:
@@ -522,9 +531,10 @@ class LLMClient:
         system_instruction: Optional[str] = None,
         temperatura: float = 0.4,
         modelo_preferido: Optional[str] = None,
+        api_key_override: Optional[str] = None,
     ) -> Generator[str, None, None]:
         """Genera una respuesta en streaming en un diálogo multi-turno con respaldo automático de modelos."""
-        client = self._obtener_cliente()
+        client = self._obtener_cliente(api_key_override)
         sys_inst = system_instruction or SYSTEM_PROMPT_TUTOR
         mensajes_norm = self._normalizar_mensajes(mensajes)
         if not mensajes_norm:

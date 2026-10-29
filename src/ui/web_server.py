@@ -1046,6 +1046,7 @@ class ChatMessage(BaseModel):
     programa: Optional[str] = "dam"
     historial: Optional[List[ChatHistorialItem]] = None
     modelo: Optional[str] = "auto"
+    api_key: Optional[str] = None
 
 
 class ConfigurarProveedoresReq(BaseModel):
@@ -1160,9 +1161,25 @@ def _preparar_contexto_chat(msg: ChatMessage):
     return system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto
 
 
+@app.post("/api/validar-gemini-key")
+def api_validar_gemini_key(req: dict):
+    """Comprueba de forma rápida si una clave de Gemini proporcionada por el usuario es válida."""
+    key = (req.get("api_key") or "").strip()
+    if not key:
+        return {"valida": False, "error": "Debes introducir una clave de API."}
+    try:
+        from google import genai
+        c = genai.Client(api_key=key)
+        r = c.models.generate_content(model="gemini-2.5-flash", contents="hola")
+        return {"valida": True, "mensaje": "Clave de Gemini verificada y operativa."}
+    except Exception as e:
+        return {"valida": False, "error": str(e)}
+
+
 @app.post("/api/chat")
-def api_chat(msg: ChatMessage):
+def api_chat(msg: ChatMessage, request: Request):
     """Responde preguntas mediante NOVA con rol especializado, memoria multi-turno e inyección RAG completa."""
+    user_key = (msg.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
     system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg)
 
     respuesta = tutor_ia.client.generar_chat(
@@ -1170,12 +1187,13 @@ def api_chat(msg: ChatMessage):
         system_instruction=system_instruction_completo,
         temperatura=0.4,
         modelo_preferido=msg.modelo,
+        api_key_override=user_key,
     )
 
     if not respuesta:
         prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
         respuesta = tutor_ia.client.generar_contenido(
-            prompt_fallback, temperatura=0.4, modelo_preferido=msg.modelo
+            prompt_fallback, temperatura=0.4, modelo_preferido=msg.modelo, api_key_override=user_key
         )
 
     mod_usado = tutor_ia.client.ultimo_modelo_usado
@@ -1183,12 +1201,14 @@ def api_chat(msg: ChatMessage):
         "respuesta": respuesta or "No se pudo generar respuesta en este momento. Inténtalo de nuevo.",
         "modelo_usado": mod_usado,
         "modelo_nombre": tutor_ia.client.obtener_nombre_legible(mod_usado),
+        "personal_key_used": bool(user_key),
     }
 
 
 @app.post("/api/chat-stream")
-def api_chat_stream(msg: ChatMessage):
+def api_chat_stream(msg: ChatMessage, request: Request):
     """Emite la respuesta de NOVA en tiempo real mediante Server-Sent Events (SSE)."""
+    user_key = (msg.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
     system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg)
 
     def event_generator():
@@ -1199,11 +1219,12 @@ def api_chat_stream(msg: ChatMessage):
                 system_instruction=system_instruction_completo,
                 temperatura=0.4,
                 modelo_preferido=msg.modelo,
+                api_key_override=user_key,
             ):
                 if chunk:
                     emitido = True
                     mod_usado = tutor_ia.client.ultimo_modelo_usado
-                    yield f"data: {json.dumps({'chunk': chunk, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado)}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'chunk': chunk, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado), 'personal_key_used': bool(user_key)}, ensure_ascii=False)}\n\n"
         except Exception:
             pass
 
@@ -1211,16 +1232,16 @@ def api_chat_stream(msg: ChatMessage):
             try:
                 prompt_fallback = f"{system_instruction_completo}\n\n{mensaje_actual_con_contexto}\n\nNOVA:"
                 res = tutor_ia.client.generar_contenido(
-                    prompt_fallback, temperatura=0.4, modelo_preferido=msg.modelo
+                    prompt_fallback, temperatura=0.4, modelo_preferido=msg.modelo, api_key_override=user_key
                 )
                 texto_final = res or "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
             except Exception:
                 texto_final = "No se pudo generar respuesta en este momento. Inténtalo de nuevo."
             mod_usado = tutor_ia.client.ultimo_modelo_usado
-            yield f"data: {json.dumps({'chunk': texto_final, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado)}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'chunk': texto_final, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado), 'personal_key_used': bool(user_key)}, ensure_ascii=False)}\n\n"
 
         mod_usado = tutor_ia.client.ultimo_modelo_usado
-        yield f"data: {json.dumps({'done': True, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado)}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'done': True, 'modelo_usado': mod_usado, 'modelo_nombre': tutor_ia.client.obtener_nombre_legible(mod_usado), 'personal_key_used': bool(user_key)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -2280,9 +2301,19 @@ def dashboard_html():
               <button @click="configurarClavesIaGratis()"
                       class="text-xs text-cyan-400 hover:text-white px-2.5 py-1.5 rounded-xl bg-gray-800 border border-gray-700 hover:border-cyan-500/40 transition"
                       title="Añadir claves gratuitas opcionales de OpenRouter o Groq (DeepSeek V3, Qwen 3 235B, Llama 3.3 70B)">
-                <i class="fa-solid fa-key text-[11px]"></i>
+                <i class="fa-solid fa-sliders text-[11px]"></i>
               </button>
             </div>
+
+            <!-- BOTÓN BYOK (BRING YOUR OWN KEY) PARA USAR TOKENS PROPIOS DE GEMINI -->
+            <button @click="abrirModalApiKey()"
+                    :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
+                    class="text-xs px-2.5 py-1.5 rounded-xl border transition flex items-center space-x-1.5 shadow-sm"
+                    :title="userGeminiKey ? 'Estás usando tu propia clave privada de Gemini (tokens tuyos)' : 'Configurar mi propia clave gratuita de Gemini para no gastar la del Hub'">
+              <span class="h-2 w-2 rounded-full" :class="userGeminiKey ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'"></span>
+              <span class="hidden sm:inline font-medium" x-text="userGeminiKey ? 'Mi Gemini Key' : 'Mi Key'"></span>
+              <i class="fa-solid fa-key text-[10px]" :class="userGeminiKey ? 'text-emerald-400' : 'text-gray-400'"></i>
+            </button>
 
             <select x-model="chatAsignatura" @change="cambiarAsignaturaChat($event.target.value)" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
               <option value="">General (Todo el programa)</option>
@@ -3058,6 +3089,99 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== MODAL CONFIGURACIÓN BYOK: MI PROPIA API KEY DE GEMINI ==================== -->
+  <div x-show="modalApiKey"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalApiKey = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800">
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+            <i class="fa-solid fa-key text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-gray-100 text-base">Mi Propia Clave de Gemini</h3>
+            <p class="text-xs text-gray-400">Tokens y cuota privada (BYOK)</p>
+          </div>
+        </div>
+        <button @click="modalApiKey = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Si vas a compartir la web con un compañero o quieres usar tu propia cuota de Google, pega aquí tu clave gratuita de <strong>Google AI Studio</strong>.
+        </p>
+
+        <div class="p-3 bg-gray-950/70 border border-cyan-500/20 rounded-2xl text-[11px] text-gray-400 space-y-1">
+          <div class="flex items-center text-cyan-400 font-semibold gap-1.5">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>100% Privada y Segura en tu Navegador</span>
+          </div>
+          <p>Tu clave se almacena <strong>únicamente en tu propio navegador (localStorage)</strong>. El servidor no la guardará en disco ni la compartirá con otros alumnos.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1.5">Clave de API de Gemini (AI Studio):</label>
+          <input type="password" 
+                 x-model="inputApiKeyTemp"
+                 placeholder="AIzaSy..." 
+                 class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-cyan-300 outline-none focus:border-cyan-500 font-mono transition">
+        </div>
+
+        <div class="flex items-center justify-between text-[11px]">
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-cyan-400 hover:underline flex items-center gap-1">
+            <span>Obtener clave gratis en Google AI Studio</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </a>
+          <span class="text-gray-500">Gratis (Tier Free oficial)</span>
+        </div>
+
+        <template x-if="apiKeyMensajeError">
+          <div class="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation shrink-0"></i>
+            <span x-text="apiKeyMensajeError"></span>
+          </div>
+        </template>
+
+        <template x-if="apiKeyMensajeExito">
+          <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-check shrink-0"></i>
+            <span x-text="apiKeyMensajeExito"></span>
+          </div>
+        </template>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-gray-800 flex items-center justify-between gap-3">
+        <button x-show="userGeminiKey" 
+                @click="eliminarApiKeyUsuario()" 
+                type="button"
+                class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 text-xs transition border border-gray-700">
+          Usar la clave del Hub
+        </button>
+        <div class="flex items-center gap-2 ml-auto">
+          <button @click="modalApiKey = false" type="button" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 hover:text-white text-xs transition">
+            Cancelar
+          </button>
+          <button @click="guardarApiKeyUsuario()" 
+                  :disabled="apiKeyValidando"
+                  type="button" 
+                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-cyan-500/20 transition flex items-center gap-2">
+            <i x-show="apiKeyValidando" class="fa-solid fa-spinner fa-spin text-xs"></i>
+            <span x-text="apiKeyValidando ? 'Verificando...' : 'Guardar y Activar'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0f172a]/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
     <button @click="irASeccion('dashboard')" 
@@ -3142,6 +3266,14 @@ def dashboard_html():
         chatModeloSeleccionado: localStorage.getItem('unir_modelo_ia') || 'auto',
         chatModeloActualNombre: 'Gemini 3 Flash Preview',
         modelosIaDisponibles: [],
+
+        // BYOK (Bring Your Own Key) para tokens privados
+        userGeminiKey: localStorage.getItem('unir_user_gemini_key') || '',
+        modalApiKey: false,
+        inputApiKeyTemp: '',
+        apiKeyValidando: false,
+        apiKeyMensajeError: '',
+        apiKeyMensajeExito: '',
 
         // Test Web
         modalTest: false,
@@ -3332,6 +3464,55 @@ def dashboard_html():
           } catch(e) {
             alert('No se pudieron guardar las claves.');
           }
+        },
+
+        abrirModalApiKey() {
+          this.inputApiKeyTemp = this.userGeminiKey || '';
+          this.apiKeyMensajeError = '';
+          this.apiKeyMensajeExito = '';
+          this.modalApiKey = true;
+        },
+
+        async guardarApiKeyUsuario() {
+          const keyLimpia = (this.inputApiKeyTemp || '').trim();
+          if (!keyLimpia) {
+            this.userGeminiKey = '';
+            try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
+            this.modalApiKey = false;
+            return;
+          }
+
+          this.apiKeyValidando = true;
+          this.apiKeyMensajeError = '';
+          this.apiKeyMensajeExito = '';
+
+          try {
+            const res = await fetch('/api/validar-gemini-key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ api_key: keyLimpia })
+            });
+            const data = await res.json();
+            if (data.valida) {
+              this.userGeminiKey = keyLimpia;
+              try { localStorage.setItem('unir_user_gemini_key', keyLimpia); } catch(e) {}
+              this.apiKeyMensajeExito = '¡Clave de Gemini verificada y guardada en tu navegador!';
+              setTimeout(() => { this.modalApiKey = false; }, 1200);
+            } else {
+              this.apiKeyMensajeError = data.error || 'La clave no es válida.';
+            }
+          } catch(e) {
+            this.apiKeyMensajeError = 'Error conectando con el verificador de clave.';
+          } finally {
+            this.apiKeyValidando = false;
+          }
+        },
+
+        eliminarApiKeyUsuario() {
+          this.userGeminiKey = '';
+          this.inputApiKeyTemp = '';
+          try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
+          this.modalApiKey = false;
         },
 
         abrirOPestana(p) {
@@ -4510,17 +4691,25 @@ def dashboard_html():
             }
           };
 
+          const chatHeaders = { 'Content-Type': 'application/json' };
+          if (this.userGeminiKey && this.userGeminiKey.trim()) {
+            chatHeaders['X-User-Gemini-Key'] = this.userGeminiKey.trim();
+          }
+
+          const chatPayload = {
+            mensaje: texto,
+            asignatura: asigOrigen,
+            programa: programaOrigen,
+            historial: historialPrevio,
+            modelo: this.chatModeloSeleccionado || 'auto',
+            api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+          };
+
           try {
             const res = await fetch('/api/chat-stream', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                mensaje: texto,
-                asignatura: asigOrigen,
-                programa: programaOrigen,
-                historial: historialPrevio,
-                modelo: this.chatModeloSeleccionado || 'auto'
-              })
+              headers: chatHeaders,
+              body: JSON.stringify(chatPayload)
             });
 
             if (!res.ok || !res.body) {
@@ -4572,14 +4761,8 @@ def dashboard_html():
             try {
               const resFallback = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  mensaje: texto,
-                  asignatura: asigOrigen,
-                  programa: programaOrigen,
-                  historial: historialPrevio,
-                  modelo: this.chatModeloSeleccionado || 'auto'
-                })
+                headers: chatHeaders,
+                body: JSON.stringify(chatPayload)
               });
               const data = await resFallback.json();
               if (data.modelo_nombre) {
