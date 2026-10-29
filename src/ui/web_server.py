@@ -265,6 +265,8 @@ class GenerarGuiaRequest(BaseModel):
     archivo_pdf: Optional[str] = None
     profundidad: Optional[str] = "media"
     num_preguntas: Optional[int] = 10
+    tipo_generacion: Optional[str] = "ambos"
+    api_key: Optional[str] = None
 
 
 def _buscar_pdf_relevante(dir_mats: Path, nombre_tema: str) -> Optional[Path]:
@@ -332,8 +334,9 @@ def _buscar_transcripcion_relevante(dir_trans: Path, nombre_tema: str) -> Option
 
 
 @app.post("/api/generar-guia")
-def api_generar_guia(req: GenerarGuiaRequest):
-    """Genera una guía de estudio y test interactivo con IA desde la web."""
+def api_generar_guia(req: GenerarGuiaRequest, request: Request):
+    """Genera una guía de estudio y/o test interactivo con IA desde la web."""
+    user_key = (req.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
     asig_limpia = nombre_seguro(req.asignatura, "asignatura")
     ruta_pdf = None
     if req.archivo_pdf:
@@ -360,6 +363,8 @@ def api_generar_guia(req: GenerarGuiaRequest):
         ruta_transcripcion=ruta_trans,
         profundidad=req.profundidad or "media",
         num_preguntas=req.num_preguntas,
+        tipo_generacion=req.tipo_generacion or "ambos",
+        api_key_override=user_key,
     )
 
     tiene_guia = bool(res.get("guia"))
@@ -2524,9 +2529,47 @@ def dashboard_html():
         <input type="text" x-model="generadorTemaNombre" placeholder="Ej: Tema 1 - Fundamentos y Arquitectura" class="w-full bg-gray-900 text-white text-xs p-3 rounded-xl border border-gray-700 focus:outline-none focus:border-emerald-500">
       </div>
 
+      <!-- Selector de Tipo de Generación: Ambos / Solo Guía / Solo Test -->
+      <div>
+        <label class="block text-xs font-bold text-gray-300 mb-2">¿Qué deseas generar con IA?</label>
+        <div class="grid grid-cols-3 gap-2">
+          <!-- Opción Ambos -->
+          <button type="button" 
+                  @click="generadorTipo = 'ambos'"
+                  :class="generadorTipo === 'ambos' ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500 font-bold' : 'border-gray-800 bg-gray-900/60 text-gray-400 hover:border-gray-700'"
+                  class="p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1">
+            <i class="fa-solid fa-wand-magic-sparkles text-sm" :class="generadorTipo === 'ambos' ? 'text-emerald-400' : 'text-gray-500'"></i>
+            <span class="text-xs">Guía + Test</span>
+            <span class="text-[10px] opacity-75">Completo</span>
+          </button>
+
+          <!-- Opción Solo Guía -->
+          <button type="button" 
+                  @click="generadorTipo = 'solo_guia'"
+                  :class="generadorTipo === 'solo_guia' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500 font-bold' : 'border-gray-800 bg-gray-900/60 text-gray-400 hover:border-gray-700'"
+                  class="p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1">
+            <i class="fa-solid fa-book-bookmark text-sm" :class="generadorTipo === 'solo_guia' ? 'text-cyan-400' : 'text-gray-500'"></i>
+            <span class="text-xs">Solo Guía</span>
+            <span class="text-[10px] opacity-75">Apuntes MD</span>
+          </button>
+
+          <!-- Opción Solo Test -->
+          <button type="button" 
+                  @click="generadorTipo = 'solo_test'"
+                  :class="generadorTipo === 'solo_test' ? 'border-purple-500 bg-purple-500/15 text-purple-300 ring-1 ring-purple-500 font-bold' : 'border-gray-800 bg-gray-900/60 text-gray-400 hover:border-gray-700'"
+                  class="p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1">
+            <i class="fa-solid fa-clipboard-question text-sm" :class="generadorTipo === 'solo_test' ? 'text-purple-400' : 'text-gray-500'"></i>
+            <span class="text-xs">Solo Test</span>
+            <span class="text-[10px] opacity-75">Simulacro</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Selector de Profundidad de la Guía -->
       <div>
-        <label class="block text-xs font-bold text-gray-300 mb-2">Profundidad y Rigor de la Guía:</label>
+        <label class="block text-xs font-bold text-gray-300 mb-2">
+          <span x-text="generadorTipo === 'solo_test' ? 'Dificultad del Test:' : 'Profundidad y Rigor de la Guía:'"></span>
+        </label>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <!-- Opción Corta -->
           <div @click="generadorProfundidad = 'corta'; generadorNumPreguntas = 5"
@@ -2575,8 +2618,8 @@ def dashboard_html():
         </div>
       </div>
 
-      <!-- Selector de Preguntas para el Test -->
-      <div class="flex items-center justify-between bg-gray-900/80 p-2.5 rounded-xl border border-gray-800">
+      <!-- Selector de Preguntas para el Test (oculto si es solo guía) -->
+      <div x-show="generadorTipo !== 'solo_guia'" x-transition class="flex items-center justify-between bg-gray-900/80 p-2.5 rounded-xl border border-gray-800">
         <label class="text-xs text-gray-300 font-semibold flex items-center space-x-2">
           <i class="fa-solid fa-list-check text-emerald-400"></i>
           <span>Preguntas en el simulacro tipo test:</span>
@@ -2598,7 +2641,7 @@ def dashboard_html():
         <div class="flex items-center justify-between text-xs">
           <span class="font-bold text-emerald-300 flex items-center space-x-2">
             <i class="fa-solid fa-spinner fa-spin text-emerald-400"></i>
-            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y vinculando videoclase del tema...' : (generandoIaPaso === 2 ? 'Paso 2/3: Redactando Guía de Estudio (' + generadorProfundidad.toUpperCase() + ') con NOVA...' : 'Paso 3/3: Diseñando Simulacro Tipo Test (' + generadorNumPreguntas + ' preguntas UNIR)...')"></span>
+            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Guía de Estudio con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando guía oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas UNIR)...'))"></span>
           </span>
           <span class="text-[11px] font-mono text-emerald-400" x-text="generandoIaPaso + ' / 3'"></span>
         </div>
@@ -2612,7 +2655,7 @@ def dashboard_html():
         <button @click="modalGenerador = false" class="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl text-xs font-semibold">Cancelar</button>
         <button @click="ejecutarGeneracionIa()" :disabled="generandoIa || !generadorTemaNombre.trim()" class="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-xl text-xs transition flex items-center space-x-2 disabled:opacity-50">
           <i :class="generandoIa ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-bolt'"></i>
-          <span x-text="generandoIa ? 'Generando con IA...' : 'Generar Paquete de Estudio'"></span>
+          <span x-text="generandoIa ? 'Generando con IA...' : (generadorTipo === 'solo_guia' ? 'Generar Guía de Estudio' : (generadorTipo === 'solo_test' ? 'Generar Examen Tipo Test' : 'Generar Guía y Test'))"></span>
         </button>
       </div>
     </div>
@@ -3249,6 +3292,7 @@ def dashboard_html():
         generadorPdfSeleccionado: '',
         generadorProfundidad: 'media',
         generadorNumPreguntas: 10,
+        generadorTipo: 'ambos', // 'ambos', 'solo_guia', 'solo_test'
         generandoIa: false,
         generandoIaPaso: 1,
         
@@ -3917,6 +3961,7 @@ def dashboard_html():
           this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
           this.generadorProfundidad = 'media';
           this.generadorNumPreguntas = 10;
+          this.generadorTipo = 'ambos';
           this.modalGenerador = true;
         },
 
@@ -3929,13 +3974,18 @@ def dashboard_html():
           try {
             const res = await fetch('/api/generar-guia', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
               body: JSON.stringify({
                 asignatura: this.asigSeleccionada.nombre,
                 nombre_tema: this.generadorTemaNombre.trim(),
                 archivo_pdf: this.generadorPdfSeleccionado || null,
                 profundidad: this.generadorProfundidad || 'media',
-                num_preguntas: parseInt(this.generadorNumPreguntas) || 10
+                num_preguntas: parseInt(this.generadorNumPreguntas) || 10,
+                tipo_generacion: this.generadorTipo || 'ambos',
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -3954,9 +4004,9 @@ def dashboard_html():
             if (data.tiene_guia && data.tiene_test) {
               alert('¡Guía de estudio y test interactivo generados con éxito!');
             } else if (data.tiene_guia) {
-              alert('¡Guía de estudio generada con éxito!');
+              alert('¡Guía de estudio oficial generada con éxito!');
             } else if (data.tiene_test) {
-              alert('Se ha generado el simulacro de test, pero la redacción de la guía no pudo completarse debido a saturación temporal de la IA.');
+              alert('¡Simulacro tipo test oficial generado con éxito!');
             }
           } catch(e) {
             console.error(e);
