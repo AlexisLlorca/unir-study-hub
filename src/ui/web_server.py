@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -49,8 +49,25 @@ from src.core.progress_tracker import GestorProgreso
 from src.core.config import RESPALDO_DIR, get_hub_access_token
 from src.ai.tutor import TutorIA
 from src.generators.study_guide_generator import GeneradorGuiaEstudio
+from src.core.auth import (
+    inicializar_bd_usuarios,
+    autenticar_usuario,
+    registrar_usuario,
+    crear_sesion,
+    eliminar_sesion,
+    listar_usuarios,
+    cambiar_estado_usuario,
+    cambiar_rol_usuario,
+    eliminar_usuario,
+    contar_pendientes,
+)
 from src.ui.security import (
     AccesoSeguroMiddleware,
+    COOKIE_TOKEN,
+    _obtener_ip_cliente,
+    _esta_ip_bloqueada,
+    _registrar_intento_fallido,
+    _limpiar_intentos_exitosos,
     nombre_seguro,
     obtener_ip_red_local,
     ruta_dentro_de,
@@ -65,9 +82,132 @@ HUB_ACCESS_TOKEN = get_hub_access_token()
 IP_LOCAL = obtener_ip_red_local()
 app.add_middleware(AccesoSeguroMiddleware, token=HUB_ACCESS_TOKEN, ip_local=IP_LOCAL)
 
+inicializar_bd_usuarios()
+
 tracker = GestorProgreso()
 tutor_ia = TutorIA()
 generador = GeneradorGuiaEstudio(tutor_ia)
+
+
+# --- MODELOS AUTH Y ADMIN ---
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class RegistroRequest(BaseModel):
+    nombre: str
+    username: str
+    password: str
+
+class CambiarEstadoRequest(BaseModel):
+    user_id: int
+    activo: int
+
+class CambiarRolRequest(BaseModel):
+    user_id: int
+    rol: str
+
+def _verificar_es_admin(request: Request):
+    u = getattr(request.state, "usuario", None)
+    if not u or u.get("rol") != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: se requieren permisos de administrador.")
+
+
+# --- API ENDPOINTS ---
+
+@app.post("/api/auth/login")
+def api_auth_login(req: LoginRequest, request: Request, response: Response):
+    ip = _obtener_ip_cliente(request)
+    bloqueada, restantes = _esta_ip_bloqueada(ip)
+    if bloqueada:
+        minutos = max(1, restantes // 60)
+        raise HTTPException(status_code=429, detail=f"Demasiados intentos fallidos. IP bloqueada durante {minutos} min.")
+
+    usuario, msg = autenticar_usuario(req.username, req.password)
+    if not usuario:
+        bloqueada_ahora, duracion = _registrar_intento_fallido(ip)
+        if bloqueada_ahora:
+            raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Acceso bloqueado durante 15 minutos.")
+        raise HTTPException(status_code=401, detail=msg)
+
+    _limpiar_intentos_exitosos(ip)
+    token = crear_sesion(usuario["username"])
+    es_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    response.set_cookie(
+        COOKIE_TOKEN,
+        token,
+        max_age=60 * 60 * 24 * 30,
+        httponly=True,
+        secure=es_https,
+        samesite="none" if es_https else "lax",
+    )
+    return {"status": "ok", "usuario": usuario}
+
+
+@app.post("/api/auth/registro")
+def api_auth_registro(req: RegistroRequest):
+    ok, msg = registrar_usuario(req.username, req.nombre, req.password, rol="estudiante", activo=0)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "ok", "message": "Cuenta registrada con éxito. Pendiente de activación por el administrador."}
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout(request: Request, response: Response):
+    token = request.cookies.get(COOKIE_TOKEN)
+    if token:
+        eliminar_sesion(token)
+    response.delete_cookie(COOKIE_TOKEN)
+    return {"status": "ok"}
+
+
+@app.get("/api/usuario/actual")
+def api_usuario_actual(request: Request):
+    u = getattr(request.state, "usuario", None)
+    if not u:
+        return {"autenticado": False, "es_admin": False}
+    return {
+        "autenticado": True,
+        "id": u.get("id"),
+        "username": u.get("username"),
+        "nombre": u.get("nombre"),
+        "rol": u.get("rol"),
+        "activo": u.get("activo"),
+        "es_admin": u.get("rol") == "admin"
+    }
+
+
+@app.get("/api/admin/usuarios")
+def api_admin_usuarios(request: Request):
+    _verificar_es_admin(request)
+    return {
+        "usuarios": listar_usuarios(),
+        "pendientes": contar_pendientes()
+    }
+
+
+@app.post("/api/admin/usuario/estado")
+def api_admin_usuario_estado(req: CambiarEstadoRequest, request: Request):
+    _verificar_es_admin(request)
+    cambiar_estado_usuario(req.user_id, req.activo)
+    return {"status": "ok"}
+
+
+@app.post("/api/admin/usuario/rol")
+def api_admin_usuario_rol(req: CambiarRolRequest, request: Request):
+    _verificar_es_admin(request)
+    cambiar_rol_usuario(req.user_id, req.rol)
+    return {"status": "ok"}
+
+
+@app.delete("/api/admin/usuario/{user_id}")
+def api_admin_usuario_eliminar(user_id: int, request: Request):
+    _verificar_es_admin(request)
+    ok = eliminar_usuario(user_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="No se puede eliminar la cuenta del administrador principal.")
+    return {"status": "ok"}
 
 
 # --- API ENDPOINTS ---
@@ -1533,6 +1673,22 @@ def dashboard_html():
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
+
+          <!-- ENLACE PANEL ADMIN (SOLO VISIBLE PARA ADMINISTRADORES) -->
+          <div x-show="usuarioActual && usuarioActual.es_admin" class="flex items-center group/item pt-1">
+            <button @click="irASeccion('admin')"
+                    :class="tab === 'admin' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-amber-300 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <i class="fa-solid fa-shield-halved w-4 text-center text-amber-400"></i>
+                <span class="font-semibold text-amber-300/90">Panel Admin</span>
+              </div>
+              <span x-show="adminPendientesCount > 0" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-black" x-text="adminPendientesCount"></span>
+            </button>
+            <a href="/?tab=admin" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
         </div>
       </div>
 
@@ -1579,6 +1735,19 @@ def dashboard_html():
         <button @click="abrirChatConAsignatura('')" class="px-2.5 sm:px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-1.5 shrink-0">
           <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">Consultar </span><span>NOVA</span>
         </button>
+
+        <!-- USUARIO ACTIVO Y BOTÓN CERRAR SESIÓN -->
+        <div x-show="usuarioActual && usuarioActual.autenticado" class="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-gray-800 shrink-0">
+          <div class="text-right hidden sm:block">
+            <p class="text-xs font-bold text-gray-200 truncate max-w-[120px]" x-text="usuarioActual?.nombre || usuarioActual?.username"></p>
+            <span class="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded-full inline-block"
+                  :class="usuarioActual?.es_admin ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'"
+                  x-text="usuarioActual?.es_admin ? 'Admin' : 'Estudiante'"></span>
+          </div>
+          <button @click="cerrarSesionUsuario()" title="Cerrar sesión" class="p-2 text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition">
+            <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -2488,6 +2657,147 @@ def dashboard_html():
 
       </div>
 
+      <!-- ==================== 8. PANEL DE ADMINISTRACIÓN ==================== -->
+      <div x-show="tab === 'admin' && usuarioActual?.es_admin" x-transition class="space-y-6">
+        <!-- HEADER PANEL ADMIN -->
+        <div class="glass p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent">
+          <div class="flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl shadow-lg shadow-amber-500/10">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div>
+              <h2 class="text-2xl font-black text-white">Panel de Administración</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Control de acceso, usuarios registrados y permisos del Hub</p>
+            </div>
+          </div>
+          <button @click="cargarAdminUsuarios()" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center space-x-2 transition border border-gray-700">
+            <i class="fa-solid fa-rotate" :class="adminCargando ? 'fa-spin text-amber-400' : ''"></i>
+            <span>Actualizar</span>
+          </button>
+        </div>
+
+        <!-- TARJETAS DE MÉTRICAS -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="glass p-5 rounded-2xl border border-gray-800 flex items-center justify-between">
+            <div>
+              <p class="text-xs text-gray-400 font-medium">Total Usuarios</p>
+              <h3 class="text-2xl font-black text-white mt-1" x-text="adminUsuarios.length"></h3>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-gray-800/80 text-gray-300 flex items-center justify-center text-base">
+              <i class="fa-solid fa-users"></i>
+            </div>
+          </div>
+
+          <div class="glass p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-between">
+            <div>
+              <p class="text-xs text-emerald-400 font-medium">Usuarios Activos</p>
+              <h3 class="text-2xl font-black text-emerald-300 mt-1" x-text="adminUsuarios.filter(u => u.activo === 1).length"></h3>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-base border border-emerald-500/20">
+              <i class="fa-solid fa-user-check"></i>
+            </div>
+          </div>
+
+          <div class="glass p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 flex items-center justify-between">
+            <div>
+              <p class="text-xs text-amber-400 font-medium">Pendientes de Aprobación</p>
+              <h3 class="text-2xl font-black text-amber-300 mt-1" x-text="adminPendientesCount"></h3>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-base border border-amber-500/20">
+              <i class="fa-solid fa-user-clock"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- AVISO SI HAY PENDIENTES -->
+        <div x-show="adminPendientesCount > 0" class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4">
+          <div class="flex items-center space-x-3 text-xs text-amber-200">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base"></i>
+            <span>Hay <strong x-text="adminPendientesCount"></strong> usuario(s) esperando tu aprobación para poder entrar al Hub.</span>
+          </div>
+        </div>
+
+        <!-- TABLA DE USUARIOS -->
+        <div class="glass rounded-3xl border border-gray-800 overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between">
+            <h3 class="font-bold text-white text-sm flex items-center space-x-2">
+              <i class="fa-solid fa-address-book text-amber-400"></i>
+              <span>Cuentas Registradas</span>
+            </h3>
+            <span class="text-xs text-gray-500" x-text="adminUsuarios.length + ' usuario(s)'"></span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-900/60 text-gray-400 uppercase text-[10px] tracking-wider border-b border-gray-800/80">
+                <tr>
+                  <th class="py-3 px-4">Usuario</th>
+                  <th class="py-3 px-4">Nombre</th>
+                  <th class="py-3 px-4">Rol</th>
+                  <th class="py-3 px-4">Estado</th>
+                  <th class="py-3 px-4">Registro / Acceso</th>
+                  <th class="py-3 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-800/60 text-gray-300">
+                <template x-for="u in adminUsuarios" :key="u.id">
+                  <tr class="hover:bg-gray-800/30 transition">
+                    <td class="py-3 px-4 font-bold text-white flex items-center space-x-2">
+                      <div class="w-7 h-7 rounded-lg bg-gray-800 text-gray-300 flex items-center justify-center text-xs font-bold shrink-0 uppercase"
+                           x-text="u.username.substring(0, 2)"></div>
+                      <span x-text="u.username"></span>
+                    </td>
+                    <td class="py-3 px-4 text-gray-300 font-medium" x-text="u.nombre"></td>
+                    <td class="py-3 px-4">
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                            :class="u.rol === 'admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'"
+                            x-text="u.rol"></span>
+                    </td>
+                    <td class="py-3 px-4">
+                      <span x-show="u.activo === 1" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Activo
+                      </span>
+                      <span x-show="u.activo === 0" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30 animate-pulse">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Pendiente
+                      </span>
+                      <span x-show="u.activo === -1" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Bloqueado
+                      </span>
+                    </td>
+                    <td class="py-3 px-4 text-gray-400 text-[11px]">
+                      <div x-text="'Alta: ' + u.creado_en.split(' ')[0]"></div>
+                      <div class="text-[10px] text-gray-500" x-text="'Último: ' + u.ultimo_acceso"></div>
+                    </td>
+                    <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                      <!-- Botón Aprobar / Activar -->
+                      <button x-show="u.activo !== 1" @click="cambiarEstadoUsuario(u.id, 1)"
+                              title="Aprobar y activar acceso"
+                              class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-semibold transition">
+                        <i class="fa-solid fa-check mr-1 text-[10px]"></i> Aprobar
+                      </button>
+
+                      <!-- Botón Bloquear -->
+                      <button x-show="u.activo === 1 && u.username !== 'admin'" @click="cambiarEstadoUsuario(u.id, -1)"
+                              title="Bloquear acceso"
+                              class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 border border-gray-700 hover:border-rose-500/30 transition">
+                        <i class="fa-solid fa-ban text-[10px]"></i>
+                      </button>
+
+                      <!-- Botón Eliminar -->
+                      <button x-show="u.username !== 'admin'" @click="eliminarUsuario(u.id, u.username)"
+                              title="Eliminar usuario"
+                              class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-rose-600/30 text-gray-400 hover:text-rose-300 border border-gray-700 hover:border-rose-600/40 transition">
+                        <i class="fa-solid fa-trash text-[10px]"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </main>
 
   </div>
@@ -3266,6 +3576,12 @@ def dashboard_html():
         tab: 'dashboard',
         sidebarVisible: window.innerWidth >= 768 && localStorage.getItem('unir_sidebar_visible') !== 'false',
         
+        // Usuario y Autenticación
+        usuarioActual: null,
+        adminUsuarios: [],
+        adminCargando: false,
+        adminPendientesCount: 0,
+
         // Sistema de Pestañas Multi-tarea
         pestanasAbiertas: [
           { id: 'sec-dashboard', titulo: 'Inicio', icono: 'fa-house', tipo: 'seccion', seccion: 'dashboard', url: '/?tab=dashboard' }
@@ -3453,6 +3769,7 @@ def dashboard_html():
           await this.cargarAgenda();
           await this.cargarFlashcards();
           await this.cargarModelosIa();
+          await this.cargarUsuarioActual();
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
         },
@@ -3609,6 +3926,8 @@ def dashboard_html():
             this.modalVisorPdf = false;
             if (p.seccion === 'tutor') {
               this.cargarHistorialParaAsignatura(this.chatAsignatura || '');
+            } else if (p.seccion === 'admin') {
+              this.cargarAdminUsuarios();
             }
           } else if (p.tipo === 'asignatura') {
             this.tab = 'asignaturas';
@@ -3704,7 +4023,8 @@ def dashboard_html():
             tutor: 'Tutor NOVA',
             agenda: 'Agenda & PACs',
             flashcards: 'Flashcards',
-            progreso: 'Calificaciones'
+            progreso: 'Calificaciones',
+            admin: 'Panel Admin'
           };
           const iconos = {
             dashboard: 'fa-house',
@@ -3713,10 +4033,14 @@ def dashboard_html():
             tutor: 'fa-robot',
             agenda: 'fa-calendar-check',
             flashcards: 'fa-clone',
-            progreso: 'fa-trophy'
+            progreso: 'fa-trophy',
+            admin: 'fa-shield-halved'
           };
           this.tab = sec;
           this.asigSeleccionada = null;
+          if (sec === 'admin') {
+            this.cargarAdminUsuarios();
+          }
           this.abrirOPestana({
             id: 'sec-' + sec,
             titulo: titulos[sec] || sec,
@@ -3725,6 +4049,67 @@ def dashboard_html():
             seccion: sec,
             url: '/?tab=' + encodeURIComponent(sec)
           });
+        },
+
+        async cargarUsuarioActual() {
+          try {
+            const res = await fetch('/api/usuario/actual');
+            const data = await res.json();
+            this.usuarioActual = data;
+            if (this.usuarioActual && this.usuarioActual.es_admin) {
+              await this.cargarAdminUsuarios();
+            }
+          } catch(e) { console.error('Error al cargar usuario actual', e); }
+        },
+
+        async cargarAdminUsuarios() {
+          if (!this.usuarioActual?.es_admin) return;
+          this.adminCargando = true;
+          try {
+            const res = await fetch('/api/admin/usuarios');
+            const data = await res.json();
+            this.adminUsuarios = data.usuarios || [];
+            this.adminPendientesCount = data.pendientes || 0;
+          } catch(e) {
+            console.error('Error al cargar usuarios admin', e);
+          } finally {
+            this.adminCargando = false;
+          }
+        },
+
+        async cambiarEstadoUsuario(userId, nuevoEstado) {
+          try {
+            const res = await fetch('/api/admin/usuario/estado', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user_id: userId, activo: nuevoEstado })
+            });
+            if (res.ok) {
+              await this.cargarAdminUsuarios();
+            } else {
+              alert('No se pudo actualizar el estado del usuario');
+            }
+          } catch(e) { alert('Error de conexión'); }
+        },
+
+        async eliminarUsuario(userId, username) {
+          if (!confirm(`¿Estás seguro de que quieres eliminar la cuenta de "${username}"?`)) return;
+          try {
+            const res = await fetch(`/api/admin/usuario/${userId}`, { method: 'DELETE' });
+            if (res.ok) {
+              await this.cargarAdminUsuarios();
+            } else {
+              alert('No se pudo eliminar el usuario');
+            }
+          } catch(e) { alert('Error de conexión'); }
+        },
+
+        async cerrarSesionUsuario() {
+          if (!confirm('¿Cerrar sesión en UNIR Study Hub?')) return;
+          try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+          } catch(e) {}
+          window.location.reload();
         },
 
         async procesarUrlInicial() {

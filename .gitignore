@@ -12,6 +12,10 @@ auth/*.json
 .env
 .env.*
 secrets/
+*.db
+*.db-journal
+*.sqlite3
+data/usuarios.db*
 
 # 3. Material docente y datos temporales de la UNIR (Privacidad y Copyright)
 data/downloads/

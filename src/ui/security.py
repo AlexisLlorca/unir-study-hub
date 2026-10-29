@@ -210,15 +210,247 @@ def _limpiar_intentos_exitosos(ip: str) -> None:
     _BLOQUEOS_HASTA.pop(ip, None)
 
 
-_PAGINA_TOKEN = """<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>UNIR Study Hub · Acceso</title>
-<style>body{background:#0b1120;color:#e5e7eb;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
-.c{background:#111827;border:1px solid #1f2937;border-radius:20px;padding:28px;max-width:360px;width:90%}
-h1{font-size:18px;margin:0 0 8px}p{font-size:13px;color:#9ca3af}input{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #374151;background:#030712;color:#fff;margin:12px 0}
-button{width:100%;padding:12px;border:0;border-radius:12px;background:linear-gradient(90deg,#06b6d4,#4f46e5);color:#fff;font-weight:600}</style></head>
-<body><form class="c" method="get" action="/"><h1>🔒 Acceso a UNIR Study Hub</h1>
-<p>Introduce tu código de acceso privado para entrar a la plataforma en la nube o red local.</p>
-<input name="token" type="password" placeholder="Código de acceso" autocomplete="off" required><button>Entrar</button></form></body></html>"""
+_PAGINA_TOKEN = """<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UNIR Study Hub · Acceso y Registro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { background-color: #0b1120; font-family: system-ui, -apple-system, sans-serif; }
+    .glass { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 text-gray-200">
+  <div class="glass w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+    <!-- Luz ambiental de fondo -->
+    <div class="absolute -top-24 -left-24 w-48 h-48 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- Encabezado / Logo -->
+    <div class="text-center mb-6 relative">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/25 mb-3 text-2xl">
+        <i class="fa-solid fa-graduation-cap"></i>
+      </div>
+      <h1 class="text-2xl font-black text-white tracking-tight">UNIR Study Hub</h1>
+      <p class="text-xs text-gray-400 mt-1">Plataforma académica privada y tutor inteligente</p>
+    </div>
+
+    <!-- Pestañas Login / Registro -->
+    <div class="flex border-b border-gray-800 mb-6 text-sm font-semibold">
+      <button id="btnTabLogin" onclick="mostrarTab('login')" class="flex-1 pb-3 text-cyan-400 border-b-2 border-cyan-400 transition flex items-center justify-center gap-2">
+        <i class="fa-solid fa-right-to-bracket text-xs"></i>
+        <span>Iniciar Sesión</span>
+      </button>
+      <button id="btnTabRegistro" onclick="mostrarTab('registro')" class="flex-1 pb-3 text-gray-400 hover:text-gray-200 border-b-2 border-transparent transition flex items-center justify-center gap-2">
+        <i class="fa-solid fa-user-plus text-xs"></i>
+        <span>Crear Cuenta</span>
+      </button>
+    </div>
+
+    <!-- Mensaje de estado dinámico -->
+    <div id="mensajeAlerta" class="hidden mb-4 p-3.5 rounded-xl text-xs font-medium border flex items-start gap-2.5">
+      <i id="alertaIcono" class="fa-solid text-sm mt-0.5 shrink-0"></i>
+      <span id="alertaTexto" class="flex-1"></span>
+    </div>
+
+    <!-- 1. FORMULARIO DE INICIO DE SESIÓN -->
+    <form id="formLogin" onsubmit="enviarLogin(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-300 mb-1.5">Usuario o Administrador</label>
+        <div class="relative">
+          <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+          <input id="loginUsuario" type="text" required placeholder="admin o tu usuario" autocomplete="username"
+                 class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-300 mb-1.5">Contraseña</label>
+        <div class="relative">
+          <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+          <input id="loginPassword" type="password" required placeholder="••••••••" autocomplete="current-password"
+                 class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition">
+        </div>
+      </div>
+
+      <button id="btnLoginSubmit" type="submit"
+              class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-sm shadow-lg shadow-cyan-500/20 transition active:scale-[0.98]">
+        Entrar a la Plataforma
+      </button>
+
+      <div class="pt-2 text-center">
+        <button type="button" onclick="mostrarModalToken()" class="text-xs text-gray-400 hover:text-cyan-400 transition">
+          ¿Tienes un código de acceso directo? <span class="underline">Pulsa aquí</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- 2. FORMULARIO DE REGISTRO DE CUENTA -->
+    <form id="formRegistro" onsubmit="enviarRegistro(event)" class="space-y-3.5 hidden">
+      <div>
+        <label class="block text-xs font-medium text-gray-300 mb-1">Nombre y Apellidos</label>
+        <div class="relative">
+          <i class="fa-solid fa-id-card absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+          <input id="regNombre" type="text" required placeholder="Ej: Carlos Gómez"
+                 class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-300 mb-1">Nombre de usuario (para login)</label>
+        <div class="relative">
+          <i class="fa-solid fa-at absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+          <input id="regUsuario" type="text" required placeholder="ej: carlosg" autocomplete="username"
+                 class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-gray-300 mb-1">Contraseña</label>
+        <div class="relative">
+          <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+          <input id="regPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password"
+                 class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition">
+        </div>
+      </div>
+
+      <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-300/90 leading-relaxed">
+        <i class="fa-solid fa-shield-halved mr-1 text-amber-400"></i>
+        <strong>Aprobación manual:</strong> Tu cuenta quedará registrada y el administrador la activará para permitirte el acceso.
+      </div>
+
+      <button id="btnRegSubmit" type="submit"
+              class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 transition active:scale-[0.98]">
+        Solicitar Cuenta
+      </button>
+    </form>
+  </div>
+
+  <script>
+    function mostrarTab(tab) {
+      ocultarAlerta();
+      const loginTab = document.getElementById('btnTabLogin');
+      const regTab = document.getElementById('btnTabRegistro');
+      const formLogin = document.getElementById('formLogin');
+      const formReg = document.getElementById('formRegistro');
+
+      if (tab === 'login') {
+        loginTab.className = "flex-1 pb-3 text-cyan-400 border-b-2 border-cyan-400 transition flex items-center justify-center gap-2";
+        regTab.className = "flex-1 pb-3 text-gray-400 hover:text-gray-200 border-b-2 border-transparent transition flex items-center justify-center gap-2";
+        formLogin.classList.remove('hidden');
+        formReg.classList.add('hidden');
+      } else {
+        regTab.className = "flex-1 pb-3 text-emerald-400 border-b-2 border-emerald-400 transition flex items-center justify-center gap-2";
+        loginTab.className = "flex-1 pb-3 text-gray-400 hover:text-gray-200 border-b-2 border-transparent transition flex items-center justify-center gap-2";
+        formReg.classList.remove('hidden');
+        formLogin.classList.add('hidden');
+      }
+    }
+
+    function mostrarAlerta(tipo, mensaje) {
+      const box = document.getElementById('mensajeAlerta');
+      const icono = document.getElementById('alertaIcono');
+      const texto = document.getElementById('alertaTexto');
+
+      box.classList.remove('hidden', 'bg-rose-500/10', 'border-rose-500/30', 'text-rose-300',
+                         'bg-emerald-500/10', 'border-emerald-500/30', 'text-emerald-300',
+                         'bg-amber-500/10', 'border-amber-500/30', 'text-amber-300');
+
+      if (tipo === 'error') {
+        box.classList.add('bg-rose-500/10', 'border-rose-500/30', 'text-rose-300');
+        icono.className = 'fa-solid fa-triangle-exclamation text-rose-400 mt-0.5 shrink-0';
+      } else if (tipo === 'ok') {
+        box.classList.add('bg-emerald-500/10', 'border-emerald-500/30', 'text-emerald-300');
+        icono.className = 'fa-solid fa-circle-check text-emerald-400 mt-0.5 shrink-0';
+      } else {
+        box.classList.add('bg-amber-500/10', 'border-amber-500/30', 'text-amber-300');
+        icono.className = 'fa-solid fa-clock text-amber-400 mt-0.5 shrink-0';
+      }
+      texto.innerText = mensaje;
+    }
+
+    function ocultarAlerta() {
+      document.getElementById('mensajeAlerta').classList.add('hidden');
+    }
+
+    async function enviarLogin(e) {
+      e.preventDefault();
+      ocultarAlerta();
+      const btn = document.getElementById('btnLoginSubmit');
+      btn.disabled = true;
+      btn.innerText = 'Verificando...';
+
+      const username = document.getElementById('loginUsuario').value.trim();
+      const password = document.getElementById('loginPassword').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          mostrarAlerta('ok', 'Acceso correcto. Entrando al Hub...');
+          setTimeout(() => { window.location.href = '/'; }, 600);
+        } else {
+          const msg = data.detail || 'Usuario o contraseña no válidos';
+          const tipo = msg.includes('pendiente') ? 'info' : 'error';
+          mostrarAlerta(tipo, msg);
+        }
+      } catch (err) {
+        mostrarAlerta('error', 'Error al conectar con el servidor.');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Entrar a la Plataforma';
+      }
+    }
+
+    async function enviarRegistro(e) {
+      e.preventDefault();
+      ocultarAlerta();
+      const btn = document.getElementById('btnRegSubmit');
+      btn.disabled = true;
+      btn.innerText = 'Registrando...';
+
+      const nombre = document.getElementById('regNombre').value.trim();
+      const username = document.getElementById('regUsuario').value.trim();
+      const password = document.getElementById('regPassword').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/registro', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, username, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          mostrarAlerta('info', '¡Cuenta creada! El administrador (Alex) la activará para permitirte el acceso.');
+          document.getElementById('formRegistro').reset();
+          setTimeout(() => { mostrarTab('login'); }, 4000);
+        } else {
+          mostrarAlerta('error', data.detail || 'No se pudo completar el registro.');
+        }
+      } catch (err) {
+        mostrarAlerta('error', 'Error al procesar el registro.');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Solicitar Cuenta';
+      }
+    }
+
+    function mostrarModalToken() {
+      const code = prompt('Introduce tu código o token de acceso directo:');
+      if (code) {
+        window.location.href = '/?token=' + encodeURIComponent(code.trim());
+      }
+    }
+  </script>
+</body>
+</html>"""
 
 
 class AccesoSeguroMiddleware(BaseHTTPMiddleware):
@@ -274,14 +506,43 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         es_nube_o_proxy = bool(request.headers.get("x-forwarded-for")) or any(
             host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS
         )
-        if request.url.path in ("/ping", "/health"):
-            return _aplicar_cabeceras_seguridad(JSONResponse({"status": "ok", "app": "unir-study-hub"}, status_code=200))
-
-        if _es_loopback(cliente) and not es_nube_o_proxy:
+        if request.url.path in ("/ping", "/health") or request.url.path.startswith("/api/auth/"):
             resp = await call_next(request)
             return _aplicar_cabeceras_seguridad(resp)
 
-        # 1. Comprobar bloqueo anti-fuerza bruta por IP
+        # 1. Comprobar sesión de usuario registrada (SQLite)
+        cookie_token = request.cookies.get(COOKIE_TOKEN)
+        from src.core.auth import obtener_usuario_por_sesion
+        usuario_sesion = obtener_usuario_por_sesion(cookie_token)
+        if usuario_sesion:
+            request.state.usuario = usuario_sesion
+            resp = await call_next(request)
+            return _aplicar_cabeceras_seguridad(resp)
+
+        # 2. Comprobar token maestro directo en cookie
+        if self._token_valido(cookie_token):
+            request.state.usuario = {
+                "id": 1,
+                "username": "admin",
+                "nombre": "Alex (Administrador)",
+                "rol": "admin",
+                "activo": 1
+            }
+            resp = await call_next(request)
+            return _aplicar_cabeceras_seguridad(resp)
+
+        if _es_loopback(cliente) and not es_nube_o_proxy:
+            request.state.usuario = {
+                "id": 1,
+                "username": "admin",
+                "nombre": "Alex (Administrador)",
+                "rol": "admin",
+                "activo": 1
+            }
+            resp = await call_next(request)
+            return _aplicar_cabeceras_seguridad(resp)
+
+        # 3. Comprobar bloqueo anti-fuerza bruta por IP
         bloqueada, restantes = _esta_ip_bloqueada(ip_cliente)
         if bloqueada:
             minutos = max(1, restantes // 60)
@@ -294,7 +555,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
                 )
             )
 
-        # 2. Dispositivo de la red o acceso en la nube: token por parámetro (?token=...)
+        # 4. Dispositivo de la red o acceso en la nube: token por parámetro (?token=...)
         token_query = request.query_params.get("token")
         if token_query:
             if self._token_valido(token_query):
@@ -322,22 +583,16 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
                     )
                 return _aplicar_cabeceras_seguridad(
                     HTMLResponse(
-                        _PAGINA_TOKEN.replace("</form>", "<p style='color:#f87171;margin-top:12px;font-size:12px'>❌ Código de acceso no válido.</p></form>"),
+                        _PAGINA_TOKEN,
                         status_code=401,
                     )
                 )
-
-        # 3. Acceso con Cookie de sesión existente
-        cookie_token = request.cookies.get(COOKIE_TOKEN)
-        if self._token_valido(cookie_token):
-            resp = await call_next(request)
-            return _aplicar_cabeceras_seguridad(resp)
 
         if cookie_token:
             _registrar_intento_fallido(ip_cliente)
 
         if request.url.path.startswith("/api/"):
             return _aplicar_cabeceras_seguridad(
-                JSONResponse({"detail": "Se necesita el código de acceso"}, status_code=401)
+                JSONResponse({"detail": "Se necesita iniciar sesión en la plataforma"}, status_code=401)
             )
         return _aplicar_cabeceras_seguridad(HTMLResponse(_PAGINA_TOKEN, status_code=401))
