@@ -65,23 +65,25 @@ def inicializar_bd_usuarios() -> None:
         )
         conn.commit()
 
-        # Si no hay ningún usuario creado, crear el usuario admin inicial
+        # Si no hay ningún usuario creado y hay variables de entorno, crear admin inicial
         cursor.execute("SELECT COUNT(*) FROM usuarios")
         count = cursor.fetchone()[0]
         if count == 0:
-            admin_pass = os.getenv("HUB_ADMIN_PASSWORD", "").strip() or "AdminUNIR2026!"
-            salt = secrets.token_hex(16)
-            pwd_hash = _hash_password(admin_pass, salt)
-            ahora = time.strftime("%Y-%m-%d %H:%M:%S")
-            cursor.execute(
-                """
-                INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
-                VALUES (?, ?, ?, ?, 'admin', 1, ?)
-                """,
-                ("admin", "Alex (Administrador)", pwd_hash, salt, ahora),
-            )
-            conn.commit()
-            _notificar_respaldo_nube()
+            admin_user = os.getenv("HUB_ADMIN_USER", "").strip().lower()
+            admin_pass = os.getenv("HUB_ADMIN_PASSWORD", "").strip()
+            if admin_user and admin_pass:
+                salt = secrets.token_hex(16)
+                pwd_hash = _hash_password(admin_pass, salt)
+                ahora = time.strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute(
+                    """
+                    INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
+                    VALUES (?, ?, ?, ?, 'admin', 1, ?)
+                    """,
+                    (admin_user, "Administrador", pwd_hash, salt, ahora),
+                )
+                conn.commit()
+                _notificar_respaldo_nube()
 
 
 def _hash_password(password: str, salt: str) -> str:
@@ -130,6 +132,11 @@ def registrar_usuario(
         if cursor.fetchone():
             return False, "Ese nombre de usuario ya está registrado."
 
+        cursor.execute("SELECT COUNT(*) FROM usuarios")
+        if cursor.fetchone()[0] == 0:
+            rol = "admin"
+            activo = 1
+
         salt = secrets.token_hex(16)
         pwd_hash = _hash_password(password, salt)
         ahora = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -158,17 +165,17 @@ def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], st
     if not username or not password:
         return None, "Introduce usuario y contraseña."
 
-    # Soporte para token maestro directo o clave inicial de admin
+    # Soporte para token maestro directo como llave maestra
     master_token = os.getenv("HUB_ACCESS_TOKEN", "").strip()
-    if username == "admin":
-        if (master_token and hmac.compare_digest(password, master_token)) or password == "AdminUNIR2026!":
-            return {
-                "id": 1,
-                "username": "admin",
-                "nombre": "Alex (Administrador)",
-                "rol": "admin",
-                "activo": 1
-            }, "ok"
+    admin_user = os.getenv("HUB_ADMIN_USER", "").strip().lower()
+    if admin_user and username == admin_user and master_token and hmac.compare_digest(password, master_token):
+        return {
+            "id": 1,
+            "username": admin_user,
+            "nombre": "Administrador",
+            "rol": "admin",
+            "activo": 1
+        }, "ok"
 
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
@@ -319,10 +326,10 @@ def eliminar_usuario(user_id: int) -> bool:
     """Elimina permanentemente a un usuario y sus sesiones asociadas."""
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT username FROM usuarios WHERE id = ?", (user_id,))
+        cursor.execute("SELECT username, rol FROM usuarios WHERE id = ?", (user_id,))
         row = cursor.fetchone()
-        if not row or row["username"] == "admin":
-            # No permitir borrar el admin principal
+        if not row or row["rol"] == "admin":
+            # No permitir borrar a un administrador
             return False
         cursor.execute("DELETE FROM sesiones WHERE username = ?", (row["username"],))
         cursor.execute("DELETE FROM usuarios WHERE id = ?", (user_id,))

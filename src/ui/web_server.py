@@ -2777,14 +2777,14 @@ def dashboard_html():
                       </button>
 
                       <!-- Botón Bloquear -->
-                      <button x-show="u.activo === 1 && u.username !== 'admin'" @click="cambiarEstadoUsuario(u.id, -1)"
+                      <button x-show="u.activo === 1 && u.rol !== 'admin'" @click="cambiarEstadoUsuario(u.id, -1)"
                               title="Bloquear acceso"
                               class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 border border-gray-700 hover:border-rose-500/30 transition">
                         <i class="fa-solid fa-ban text-[10px]"></i>
                       </button>
 
                       <!-- Botón Eliminar -->
-                      <button x-show="u.username !== 'admin'" @click="eliminarUsuario(u.id, u.username)"
+                      <button x-show="u.rol !== 'admin'" @click="eliminarUsuario(u.id, u.username)"
                               title="Eliminar usuario"
                               class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-rose-600/30 text-gray-400 hover:text-rose-300 border border-gray-700 hover:border-rose-600/40 transition">
                         <i class="fa-solid fa-trash text-[10px]"></i>

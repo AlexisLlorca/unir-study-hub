@@ -259,10 +259,10 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
     <!-- 1. FORMULARIO DE INICIO DE SESIÓN -->
     <form id="formLogin" onsubmit="enviarLogin(event)" class="space-y-4">
       <div>
-        <label class="block text-xs font-medium text-gray-300 mb-1.5">Usuario o Administrador</label>
+        <label class="block text-xs font-medium text-gray-300 mb-1.5">Usuario</label>
         <div class="relative">
           <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
-          <input id="loginUsuario" type="text" required placeholder="admin o tu usuario" autocomplete="username"
+          <input id="loginUsuario" type="text" required placeholder="Tu nombre de usuario" autocomplete="username"
                  class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition">
         </div>
       </div>
@@ -428,7 +428,7 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-          mostrarAlerta('info', '¡Cuenta creada! El administrador (Alex) la activará para permitirte el acceso.');
+          mostrarAlerta('info', '¡Cuenta creada! El administrador revisará y activará tu cuenta.');
           document.getElementById('formRegistro').reset();
           setTimeout(() => { mostrarTab('login'); }, 4000);
         } else {
