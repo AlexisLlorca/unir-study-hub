@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional, List
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Response
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -160,6 +160,16 @@ def api_auth_logout(request: Request, response: Response):
         eliminar_sesion(token)
     response.delete_cookie(COOKIE_TOKEN)
     return {"status": "ok"}
+
+
+@app.get("/logout")
+def ruta_logout_directo(request: Request):
+    token = request.cookies.get(COOKIE_TOKEN)
+    if token:
+        eliminar_sesion(token)
+    resp = RedirectResponse(url="/", status_code=303)
+    resp.delete_cookie(COOKIE_TOKEN)
+    return resp
 
 
 @app.get("/api/usuario/actual")

@@ -506,7 +506,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         es_nube_o_proxy = bool(request.headers.get("x-forwarded-for")) or any(
             host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS
         )
-        if request.url.path in ("/ping", "/health") or request.url.path.startswith("/api/auth/"):
+        if request.url.path in ("/ping", "/health", "/logout") or request.url.path.startswith("/api/auth/"):
             resp = await call_next(request)
             return _aplicar_cabeceras_seguridad(resp)
 
