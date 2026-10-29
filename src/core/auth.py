@@ -36,6 +36,13 @@ def _notificar_respaldo_nube():
 
 def inicializar_bd_usuarios() -> None:
     """Crea las tablas de usuarios y sesiones si no existen, y asegura el usuario administrador."""
+    if not DB_PATH.exists():
+        try:
+            from src.core.cloud_sync import _descargar_archivo_hf_directo
+            _descargar_archivo_hf_directo("data/usuarios.db", DB_PATH)
+        except Exception:
+            pass
+
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
         cursor.execute(
