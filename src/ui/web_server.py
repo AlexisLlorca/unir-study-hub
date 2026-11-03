@@ -4964,14 +4964,15 @@ def dashboard_html():
 
         beautifyCode(code) {
           if (!code) return '';
+          const NL = String.fromCharCode(10);
           let trimmed = code.trim();
           // Si el código está en una sola línea o con saltos insuficientes
-          if (!trimmed.includes('\n') || trimmed.split('\n').length <= 2) {
+          if (!trimmed.includes(NL) || trimmed.split(NL).length <= 2) {
             let tokens = trimmed
-              .replace(/[{]/g, ' {\n')
-              .replace(/[}]/g, '\n}\n')
-              .replace(/[;](?![^()]*[)])/g, ';\n');
-            let lines = tokens.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              .replace(/[{]/g, ' {' + NL)
+              .replace(/[}]/g, NL + '}' + NL)
+              .replace(/[;](?![^()]*[)])/g, ';' + NL);
+            let lines = tokens.split(NL).map(l => l.trim()).filter(l => l.length > 0);
             let result = [];
             let indent = 0;
             for (let line of lines) {
@@ -4979,7 +4980,7 @@ def dashboard_html():
               result.push('  '.repeat(indent) + line);
               if (line.endsWith('{')) indent++;
             }
-            return result.join('\n');
+            return result.join(NL);
           }
           return trimmed;
         },
@@ -4987,7 +4988,7 @@ def dashboard_html():
         renderEnunciadoTest(raw) {
           if (!raw) return '';
           // Detectar bloque de código ```lang ... ```
-          const codeRegex = /```([a-zA-Z0-9_-]*)[ \t\r\n]*([^]*?)```/;
+          const codeRegex = new RegExp("```([a-zA-Z0-9_-]*)\\\\s*([\\\\s\\\\S]*?)```");
           const match = raw.match(codeRegex);
 
           if (match) {
