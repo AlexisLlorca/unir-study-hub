@@ -24,13 +24,15 @@ from dotenv import load_dotenv
 from src.core.config import BASE_DIR, DATA_DIR, ENV_FILE, console
 
 DEFAULT_HF_DATASET = "AlexLlorca/unir-study-hub-data"
+DEFAULT_HF_TOKEN = "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"
 EXTENSIONES_SINCRONIZABLES = {".pdf", ".docx", ".md", ".json", ".txt"}
 BUNDLE_FILENAME = "procesado_bundle.tar.gz"
 
 
 def get_hf_token() -> str:
     load_dotenv(dotenv_path=ENV_FILE, override=True)
-    return os.getenv("HF_TOKEN", "").strip()
+    token = os.getenv("HF_TOKEN", "").strip()
+    return token or DEFAULT_HF_TOKEN
 
 
 def get_hf_dataset_repo() -> str:
