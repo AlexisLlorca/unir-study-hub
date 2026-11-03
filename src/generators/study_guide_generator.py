@@ -141,11 +141,20 @@ class GeneradorGuiaEstudio:
         if generar_guia:
             console.print(f"\n[cyan]3/4. Redactando Guía de Estudio ({profundidad.upper()})...[/cyan]")
 
+            directivas_veracidad = (
+                "\n\nDIRECTRICES OBLIGATORIAS DE MÁXIMA FIDELIDAD AL MATERIAL OFICIAL (PROHIBIDO INVENTAR):\n"
+                "- Basa todo el contenido EXCLUSIVAMENTE en el temario oficial y las transcripciones de clase aportadas arriba.\n"
+                "- PROHIBIDO INVENTAR: No introduzcas librerías ajenas a UNIR, conceptos no tratados en el tema ni declaraciones o fechas ficticias del profesor.\n"
+                "- Código adaptado al nivel de clase (2º DAM): claro, limpio, compilable, usando 'System.out.println()' estándar para ejemplos sin sobreingeniería de Logger.\n"
+                "- Si en la transcripción no hay menciones explícitas a avisos de examen, enfoca los avisos en las dificultades técnicas reales del temario oficial sin inventar citas docentes falsas.\n"
+            )
+
             if profundidad == "corta":
                 prompt_guia = (
                     f"Eres NOVA, mentora de alto rendimiento y tutora de FP DAM en UNIR.\n"
                     f"Basándote en el siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                     f"{contexto_combinado}\n\n"
+                    f"{directivas_veracidad}\n\n"
                     "Genera un REPASO EXPRÉS de alta densidad conceptual (~1.200 palabras) en Markdown estructurado exactamente así:\n"
                     f"# ⚡ REPASO EXPRÉS: {nombre_tema.upper()} — {asignatura.upper()}\n"
                     "> Guía rápida y condensada para repaso intensivo antes de exámenes y asimilación ágil de conceptos clave.\n\n"
@@ -160,13 +169,14 @@ class GeneradorGuiaEstudio:
                     f"Eres NOVA, mentora de élite, consultora senior de software y tutora de FP DAM en UNIR.\n"
                     f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                     f"{contexto_combinado}\n\n"
+                    f"{directivas_veracidad}\n\n"
                     "Redacta una GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO / MATRÍCULA DE HONOR) exhaustiva, profunda y de máxima ingeniería (~4.500+ palabras) en Markdown estructurado exactamente así:\n"
                     f"# 🏆 GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO): {nombre_tema.upper()} — {asignatura.upper()}\n"
                     "> Dossier técnico exhaustivo de ingeniería de software para dominio absoluto de la materia y preparación de examen con Matrícula de Honor en UNIR.\n\n"
                     "## 🏛️ 1. Fundamentos Teóricos Profundos y Arquitectura Interna (Bajo el capó: funcionamiento en JVM, memoria, SO, red o motor de BD)\n"
                     "## 🎙️ 2. Transcripción y Énfasis del Profesor en Videoclase (Puntos críticos señalados por el docente, minutajes, aclaraciones y avisos de examen)\n"
                     "## 🧠 3. Glosario Técnico Exhaustivo y Diccionario de Examen (Tabla Markdown completa: Término, Definición Rigurosa, Caso de Uso y Trampa Asociada)\n"
-                    "## 💻 4. Laboratorio de Código de Producción (Implementación completa, compilable, robusta, buenas prácticas y gestión avanzada de excepciones)\n"
+                    "## 💻 4. Laboratorio de Código Práctico de Clase (Implementación completa, compilable, adaptada al temario de 2º DAM sin sobreingeniería innecesaria)\n"
                     "## 🔄 5. Comparativas Técnicas y Patrones de Diseño (Tablas comparativas entre tecnologías, alternativas, pros/contras y cuándo elegir cada una)\n"
                     "## 🏢 6. Casos de Uso Reales en la Industria y Escenarios de Fallo (Resolución de problemas de concurrencia, latencia, cuellos de botella y resiliencia)\n"
                     "## ⚠️ 7. Desglose de Preguntas Trampa y Puntos Capciosos de Exámenes UNIR (Análisis de distractores típicos en exámenes test y argumentación técnica)\n"
@@ -177,13 +187,14 @@ class GeneradorGuiaEstudio:
                     f"Eres NOVA, tutor de IA especializado en FP DAM (Desarrollo de Aplicaciones Multiplataforma) de UNIR.\n"
                     f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                     f"{contexto_combinado}\n\n"
+                    f"{directivas_veracidad}\n\n"
                     "Redacta una GUÍA DE ESTUDIO OFICIAL COMPLETA Y EQUILIBRADA (~2.500 - 3.500 palabras) en Markdown con esta estructura exacta:\n"
                     f"# 📘 GUÍA DE ESTUDIO OFICIAL: {nombre_tema.upper()} — {asignatura.upper()}\n"
                     "> Material equilibrado de alto rendimiento sintetizado con temario oficial y clases magistrales de UNIR.\n\n"
                     "## 📌 1. Resumen Ejecutivo y Marco Teórico (Fundamentos y arquitectura general del tema)\n"
                     "## 📢 2. Avisos y Trampas del Profesor en Clase (Qué enfatizó el docente en videoclase, avisos y errores comunes)\n"
                     "## 🧠 3. Conceptos Clave y Definiciones de Examen (Tabla Markdown con Término, Definición Técnica Rigurosa y Relevancia en Examen)\n"
-                    "## 💻 4. Código y Patrones de Implementación (Código completo, moderno, tipado y comentado paso a paso)\n"
+                    "## 💻 4. Código y Patrones de Implementación (Código completo, pedagógico, adaptado al temario de clase)\n"
                     "## 🔬 5. Arquitectura y Flujo de Ejecución (Cómo interactúan los componentes en tiempo de ejecución)\n"
                     "## ⚠️ 6. Puntos Críticos y Preguntas Capciosas de Examen (Preguntas con trampa típicas de UNIR y cómo responderlas)\n"
                 )
@@ -195,6 +206,7 @@ class GeneradorGuiaEstudio:
                     f"Eres NOVA, tutor de IA de FP DAM en UNIR.\n"
                     f"A partir del siguiente material oficial de '{asignatura}' ({nombre_tema}):\n\n"
                     f"{contexto_combinado[:15000]}\n\n"
+                    f"{directivas_veracidad}\n\n"
                     "Redacta una GUÍA DE ESTUDIO COMPLETA en Markdown con:\n"
                     f"# 📘 GUÍA DE ESTUDIO: {nombre_tema.upper()}\n"
                     "## 📌 1. Resumen Ejecutivo\n"
@@ -236,7 +248,8 @@ class GeneradorGuiaEstudio:
                 "3. Cada pregunta debe tener 4 opciones (A, B, C, D) con distractores verosímiles y técnicos.\n"
                 "4. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la letra de la respuesta.\n"
                 "5. 'justificacion': Justificación exhaustiva: por qué la opción correcta lo es Y por qué cada uno de los 3 distractores es incorrecto.\n"
-                "6. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
+                "6. FIDELIDAD ESTRICTA AL TEMARIO (PROHIBIDO INVENTAR): Todas las preguntas, opciones y códigos deben basarse EXCLUSIVAMENTE en el contenido del temario oficial y las clases proporcionadas arriba. No inventes APIs o sintaxis que no correspondan a 2º DAM.\n"
+                "7. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
                 "[\n"
                 "  {\n"
                 '    "enunciado": "Texto de la pregunta...",\n'

@@ -148,7 +148,8 @@ class GestorFlashcards:
         prompt = (
             f"Eres NOVA, mentora académica de élite en '{asignatura}' para FP DAM y UNIR.\n"
             f"{cuerpo}\n\n"
-            f"Genera exactamente {cantidad} Flashcards de alta calidad pedagógica orientadas a preparar exámenes oficiales.\n"
+            f"REGLA DE ORO DE VERACIDAD: Basa todas las preguntas y respuestas ESTRICTAMENTE en el contenido oficial indicado arriba. PROHIBIDO inventar conceptos o terminología ajena al temario.\n\n"
+            f"Genera exactamente {cantidad} Flashcards de alta calidad pedagógica orientadas a preparar exámenes oficiales de UNIR.\n"
             "Cada tarjeta debe tener:\n"
             "- 'anverso': Una pregunta clara, caso práctico o concepto que suele caer en examen.\n"
             "- 'reverso': Respuesta concisa y técnicamente rigurosa con los términos clave destacados en **negrita**.\n"
