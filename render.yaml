@@ -3,7 +3,7 @@ services:
     name: unir-study-hub
     runtime: python
     plan: free
-    buildCommand: pip install --no-cache-dir fastapi uvicorn pydantic python-dotenv rich pypdf google-genai requests beautifulsoup4 huggingface_hub
+    buildCommand: pip install --no-cache-dir fastapi uvicorn pydantic python-dotenv rich pypdf google-genai requests beautifulsoup4 huggingface_hub edge-tts
     startCommand: python main.py --web
     envVars:
       - key: PYTHON_VERSION

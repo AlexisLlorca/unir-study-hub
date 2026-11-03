@@ -1442,6 +1442,40 @@ def api_chat_stream(msg: ChatMessage, request: Request):
     )
 
 
+class TtsRequest(BaseModel):
+    texto: str
+    voz: Optional[str] = "es-ES-ElviraNeural"
+
+
+@app.post("/api/tts")
+async def api_tts(req: TtsRequest):
+    """Genera audio MP3 natural y de alta fidelidad con Edge-TTS para cualquier navegador."""
+    raw_text = req.texto.strip()
+    if not raw_text:
+        raise HTTPException(status_code=400, detail="Texto vacío")
+
+    # Limitar para evitar saturación de memoria
+    if len(raw_text) > 4000:
+        raw_text = raw_text[:4000]
+
+    try:
+        import edge_tts
+        communicate = edge_tts.Communicate(raw_text, req.voz or "es-ES-ElviraNeural")
+        
+        async def audio_stream():
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
+
+        return StreamingResponse(
+            audio_stream(),
+            media_type="audio/mpeg",
+            headers={"Cache-Control": "no-cache"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando audio: {e}")
+
+
 # --- FRONTEND HTML SPA CON SIDEBAR DE SECCIONES ---
 
 @app.get("/", response_class=HTMLResponse)
@@ -3696,9 +3730,10 @@ def dashboard_html():
         apiKeyMensajeError: '',
         apiKeyMensajeExito: '',
 
-        // Lectura por voz de NOVA (Web Speech Synthesis)
+        // Lectura por voz de NOVA (Audio Real Neuronal Edge-TTS)
         autoVozActiva: localStorage.getItem('unir_auto_voz') === 'true',
         vozMensajeActivoIdx: null,
+        reproductorAudio: null,
 
         // Test Web
         modalTest: false,
@@ -5133,18 +5168,17 @@ def dashboard_html():
         },
 
         detenerVoz() {
+          if (this.reproductorAudio) {
+            this.reproductorAudio.pause();
+            this.reproductorAudio = null;
+          }
           if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
           }
           this.vozMensajeActivoIdx = null;
         },
 
-        alternarVozMensaje(idx, texto) {
-          if (!('speechSynthesis' in window)) {
-            alert('Tu navegador no soporta síntesis de voz (Web Speech API).');
-            return;
-          }
-
+        async alternarVozMensaje(idx, texto) {
           if (this.vozMensajeActivoIdx === idx) {
             this.detenerVoz();
             return;
@@ -5154,56 +5188,50 @@ def dashboard_html():
           const textoLimpio = this.limpiarTextoParaVoz(texto);
           if (!textoLimpio) return;
 
-          // Dividir en fragmentos si el texto es muy largo para evitar el bug de Chrome/Brave
-          const fragmentos = textoLimpio.match(/[^.!?]+[.!?]+|[\\s]*[^.!?]+$/g) || [textoLimpio];
-          let fragmentoActual = 0;
-
-          const hablarSiguienteFragmento = () => {
-            if (this.vozMensajeActivoIdx !== idx || fragmentoActual >= fragmentos.length) {
-              this.vozMensajeActivoIdx = null;
-              return;
-            }
-
-            const fr = fragmentos[fragmentoActual].trim();
-            if (!fr) {
-              fragmentoActual++;
-              hablarSiguienteFragmento();
-              return;
-            }
-
-            const utterance = new SpeechSynthesisUtterance(fr);
-            utterance.lang = 'es-ES';
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-
-            const voces = window.speechSynthesis.getVoices();
-            const vozEs = voces.find(v => v.lang && (v.lang.startsWith('es') || v.lang.includes('es-')));
-            if (vozEs) {
-              utterance.voice = vozEs;
-            }
-
-            utterance.onend = () => {
-              fragmentoActual++;
-              hablarSiguienteFragmento();
-            };
-
-            utterance.onerror = (e) => {
-              console.warn('Error en speech synthesis:', e);
-              fragmentoActual++;
-              hablarSiguienteFragmento();
-            };
-
-            window.speechSynthesis.speak(utterance);
-          };
-
           this.vozMensajeActivoIdx = idx;
-          // Si las voces no se habían cargado aún, esperar al evento
-          if (window.speechSynthesis.getVoices().length === 0) {
-            window.speechSynthesis.onvoiceschanged = () => {
-              hablarSiguienteFragmento();
-            };
+
+          // 1. Intentar reproducción con audio neuronal en streaming de Edge-TTS (calidad de locutor profesional)
+          try {
+            const res = await fetch('/api/tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ texto: textoLimpio.slice(0, 3500) })
+            });
+
+            if (res.ok) {
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const audio = new Audio(url);
+              this.reproductorAudio = audio;
+
+              audio.onended = () => {
+                if (this.vozMensajeActivoIdx === idx) {
+                  this.vozMensajeActivoIdx = null;
+                }
+                URL.revokeObjectURL(url);
+              };
+
+              audio.onerror = () => {
+                this.vozMensajeActivoIdx = null;
+                URL.revokeObjectURL(url);
+              };
+
+              await audio.play();
+              return;
+            }
+          } catch(err) {
+            console.warn('Fallback a síntesis local de navegador:', err);
+          }
+
+          // 2. Fallback de emergencia si falla la red: Web Speech API nativo
+          if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(textoLimpio.slice(0, 500));
+            utterance.lang = 'es-ES';
+            utterance.onend = () => { if (this.vozMensajeActivoIdx === idx) this.vozMensajeActivoIdx = null; };
+            utterance.onerror = () => { this.vozMensajeActivoIdx = null; };
+            window.speechSynthesis.speak(utterance);
           } else {
-            hablarSiguienteFragmento();
+            this.vozMensajeActivoIdx = null;
           }
         },
 
