@@ -2523,6 +2523,15 @@ def dashboard_html():
               </button>
             </div>
 
+            <!-- BOTÓN AUTO-LECTURA DE VOZ ON/OFF -->
+            <button @click="autoVozActiva = !autoVozActiva; localStorage.setItem('unir_auto_voz', autoVozActiva)"
+                    :class="autoVozActiva ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'"
+                    class="text-xs px-2.5 py-1.5 rounded-xl border transition flex items-center space-x-1.5 shadow-sm"
+                    :title="autoVozActiva ? 'Lectura por voz activada: NOVA leerá sus respuestas automáticamente (haz clic para desactivar)' : 'Activar lectura por voz automática de las respuestas de NOVA'">
+              <i class="fa-solid text-[11px]" :class="autoVozActiva ? 'fa-volume-high text-cyan-400' : 'fa-volume-xmark text-gray-500'"></i>
+              <span class="hidden sm:inline font-medium" x-text="autoVozActiva ? 'Voz: ON' : 'Voz: OFF'"></span>
+            </button>
+
             <!-- BOTÓN BYOK (BRING YOUR OWN KEY) PARA USAR TOKENS PROPIOS DE GEMINI -->
             <button @click="abrirModalApiKey()"
                     :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
@@ -2555,6 +2564,14 @@ def dashboard_html():
                   <p class="text-xs font-bold opacity-75" x-text="msg.rol === 'user' ? 'Tú' : 'NOVA'"></p>
                   <!-- Botones de acción para respuestas de NOVA -->
                   <div x-show="msg.rol !== 'user'" class="flex items-center space-x-1.5 opacity-60 group-hover/msg:opacity-100 transition text-[11px]">
+                    <!-- BOTÓN REPRODUCIR / DETENER VOZ -->
+                    <button @click="alternarVozMensaje(idx, msg.texto)"
+                            class="px-2 py-0.5 rounded-lg transition flex items-center space-x-1"
+                            :class="vozMensajeActivoIdx === idx ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 animate-pulse' : 'bg-gray-700/60 hover:bg-gray-700 text-gray-300'"
+                            :title="vozMensajeActivoIdx === idx ? 'Detener lectura en voz alta' : 'Escuchar respuesta de NOVA en voz alta'">
+                      <i :class="vozMensajeActivoIdx === idx ? 'fa-solid fa-square text-[9px] text-cyan-400' : 'fa-solid fa-volume-high text-[10px]'"></i>
+                      <span class="text-[10px]" x-text="vozMensajeActivoIdx === idx ? 'Detener' : 'Escuchar'"></span>
+                    </button>
                     <button @click="copiarTexto(msg.texto)" class="px-2 py-0.5 rounded-lg bg-gray-700/60 hover:bg-gray-700 text-gray-300 transition flex items-center space-x-1" title="Copiar texto">
                       <i class="fa-regular fa-copy text-[10px]"></i>
                       <span class="text-[10px]">Copiar</span>
@@ -3678,6 +3695,10 @@ def dashboard_html():
         apiKeyValidando: false,
         apiKeyMensajeError: '',
         apiKeyMensajeExito: '',
+
+        // Lectura por voz de NOVA (Web Speech Synthesis)
+        autoVozActiva: localStorage.getItem('unir_auto_voz') === 'true',
+        vozMensajeActivoIdx: null,
 
         // Test Web
         modalTest: false,
@@ -5089,6 +5110,71 @@ def dashboard_html():
           });
         },
 
+        limpiarTextoParaVoz(md) {
+          if (!md) return '';
+          return md
+            .replace(/```[\\s\\S]*?```/g, ' [Bloque de código omitido] ')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/#+\\s+/g, '')
+            .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
+            .replace(/\\*([^*]+)\\*/g, '$1')
+            .replace(/!\\[.*?\\]\\(.*?\\)/g, '')
+            .replace(/\\[(.*?)\\]\\(.*?\\)/g, '$1')
+            .replace(/>\\s+/g, '')
+            .replace(/[-*+]\\s+/g, '')
+            .replace(/\\|.*?\\|/g, '')
+            .replace(/\\n{2,}/g, '. ')
+            .trim();
+        },
+
+        detenerVoz() {
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+          }
+          this.vozMensajeActivoIdx = null;
+        },
+
+        alternarVozMensaje(idx, texto) {
+          if (!('speechSynthesis' in window)) {
+            alert('Tu navegador no soporta síntesis de voz (Web Speech API).');
+            return;
+          }
+
+          if (this.vozMensajeActivoIdx === idx) {
+            this.detenerVoz();
+            return;
+          }
+
+          this.detenerVoz();
+          const textoLimpio = this.limpiarTextoParaVoz(texto);
+          if (!textoLimpio) return;
+
+          const utterance = new SpeechSynthesisUtterance(textoLimpio);
+          utterance.lang = 'es-ES';
+          utterance.rate = 1.05;
+          utterance.pitch = 1.0;
+
+          // Seleccionar una voz en español si está disponible
+          const voces = window.speechSynthesis.getVoices();
+          const vozEs = voces.find(v => v.lang.startsWith('es') || v.lang.includes('es-ES'));
+          if (vozEs) {
+            utterance.voice = vozEs;
+          }
+
+          utterance.onend = () => {
+            if (this.vozMensajeActivoIdx === idx) {
+              this.vozMensajeActivoIdx = null;
+            }
+          };
+
+          utterance.onerror = () => {
+            this.vozMensajeActivoIdx = null;
+          };
+
+          this.vozMensajeActivoIdx = idx;
+          window.speechSynthesis.speak(utterance);
+        },
+
         async guardarRespuestaComoGuia(texto) {
           if (!texto) return;
           const asig = this.chatAsignatura || (this.asigSeleccionada ? this.asigSeleccionada.nombre : '');
@@ -5276,6 +5362,13 @@ def dashboard_html():
             this.$nextTick(() => {
               const el = document.getElementById('chatBox');
               if (el) el.scrollTop = el.scrollHeight;
+              if (this.autoVozActiva && this.chatHistorial.length > 0) {
+                const ultimoIdx = this.chatHistorial.length - 1;
+                const ultMsg = this.chatHistorial[ultimoIdx];
+                if (ultMsg && ultMsg.rol === 'model' && ultMsg.texto) {
+                  this.alternarVozMensaje(ultimoIdx, ultMsg.texto);
+                }
+              }
             });
           }
         }
