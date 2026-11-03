@@ -5112,19 +5112,24 @@ def dashboard_html():
 
         limpiarTextoParaVoz(md) {
           if (!md) return '';
-          return md
-            .replace(/```[\\s\\S]*?```/g, ' [Bloque de código omitido] ')
-            .replace(/`([^`]+)`/g, '$1')
-            .replace(/#+\\s+/g, '')
-            .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
-            .replace(/\\*([^*]+)\\*/g, '$1')
-            .replace(/!\\[.*?\\]\\(.*?\\)/g, '')
-            .replace(/\\[(.*?)\\]\\(.*?\\)/g, '$1')
-            .replace(/>\\s+/g, '')
-            .replace(/[-*+]\\s+/g, '')
-            .replace(/\\|.*?\\|/g, '')
-            .replace(/\\n{2,}/g, '. ')
-            .trim();
+          let t = md;
+          t = t.replace(/```[\\s\\S]*?```/g, ' [Bloque de código omitido]. ');
+          t = t.replace(/`[^`]+`/g, ' ');
+          t = t.replace(/#{1,6}\\s+/g, '');
+          t = t.replace(/\\*\\*([^*]+)\\*\\*/g, '$1');
+          t = t.replace(/\\*([^*]+)\\*/g, '$1');
+          t = t.replace(/__([^_]+)__/g, '$1');
+          t = t.replace(/_([^_]+)_/g, '$1');
+          t = t.replace(/!\\[.*?\\]\\(.*?\\)/g, '');
+          t = t.replace(/\\[(.*?)\\]\\(.*?\\)/g, '$1');
+          t = t.replace(/^>\\s+/gm, '');
+          t = t.replace(/^[-*+]\\s+/gm, '');
+          t = t.replace(/^\\d+\\.\\s+/gm, '');
+          t = t.replace(/\\|.*?\\|/g, '');
+          t = t.replace(/[-:]{2,}/g, '');
+          t = t.replace(/\\n+/g, '. ');
+          t = t.replace(/\\s{2,}/g, ' ');
+          return t.trim();
         },
 
         detenerVoz() {
@@ -5149,30 +5154,57 @@ def dashboard_html():
           const textoLimpio = this.limpiarTextoParaVoz(texto);
           if (!textoLimpio) return;
 
-          const utterance = new SpeechSynthesisUtterance(textoLimpio);
-          utterance.lang = 'es-ES';
-          utterance.rate = 1.05;
-          utterance.pitch = 1.0;
+          // Dividir en fragmentos si el texto es muy largo para evitar el bug de Chrome/Brave
+          const fragmentos = textoLimpio.match(/[^.!?]+[.!?]+|[\\s]*[^.!?]+$/g) || [textoLimpio];
+          let fragmentoActual = 0;
 
-          // Seleccionar una voz en español si está disponible
-          const voces = window.speechSynthesis.getVoices();
-          const vozEs = voces.find(v => v.lang.startsWith('es') || v.lang.includes('es-ES'));
-          if (vozEs) {
-            utterance.voice = vozEs;
-          }
-
-          utterance.onend = () => {
-            if (this.vozMensajeActivoIdx === idx) {
+          const hablarSiguienteFragmento = () => {
+            if (this.vozMensajeActivoIdx !== idx || fragmentoActual >= fragmentos.length) {
               this.vozMensajeActivoIdx = null;
+              return;
             }
-          };
 
-          utterance.onerror = () => {
-            this.vozMensajeActivoIdx = null;
+            const fr = fragmentos[fragmentoActual].trim();
+            if (!fr) {
+              fragmentoActual++;
+              hablarSiguienteFragmento();
+              return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(fr);
+            utterance.lang = 'es-ES';
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+
+            const voces = window.speechSynthesis.getVoices();
+            const vozEs = voces.find(v => v.lang && (v.lang.startsWith('es') || v.lang.includes('es-')));
+            if (vozEs) {
+              utterance.voice = vozEs;
+            }
+
+            utterance.onend = () => {
+              fragmentoActual++;
+              hablarSiguienteFragmento();
+            };
+
+            utterance.onerror = (e) => {
+              console.warn('Error en speech synthesis:', e);
+              fragmentoActual++;
+              hablarSiguienteFragmento();
+            };
+
+            window.speechSynthesis.speak(utterance);
           };
 
           this.vozMensajeActivoIdx = idx;
-          window.speechSynthesis.speak(utterance);
+          // Si las voces no se habían cargado aún, esperar al evento
+          if (window.speechSynthesis.getVoices().length === 0) {
+            window.speechSynthesis.onvoiceschanged = () => {
+              hablarSiguienteFragmento();
+            };
+          } else {
+            hablarSiguienteFragmento();
+          }
         },
 
         async guardarRespuestaComoGuia(texto) {
