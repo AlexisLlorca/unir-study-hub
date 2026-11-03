@@ -1453,33 +1453,84 @@ class TtsRequest(BaseModel):
     voz: Optional[str] = "es-ES-ElviraNeural"
 
 
+def _generar_audio_google_tts(texto: str) -> bytes:
+    """Fallback garantizado 100% nativo usando el motor TTS de Google sin dependencias."""
+    import urllib.request
+    import urllib.parse
+    import re
+    oraciones = re.split(r"(?<=[.!?,\n])\s+", texto)
+    bloques = []
+    bloque_actual = ""
+    for o in oraciones:
+        if len(bloque_actual) + len(o) < 180:
+            bloque_actual += (" " if bloque_actual else "") + o
+        else:
+            if bloque_actual:
+                bloques.append(bloque_actual)
+            bloque_actual = o[:180]
+    if bloque_actual:
+        bloques.append(bloque_actual)
+
+    resultado = bytearray()
+    for b in bloques[:25]:
+        if not b.strip():
+            continue
+        url = "https://translate.google.com/translate_tts?ie=UTF-8&tl=es&client=tw-ob&q=" + urllib.parse.quote(b.strip())
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                resultado.extend(resp.read())
+        except Exception:
+            continue
+    return bytes(resultado)
+
+
 @app.post("/api/tts")
 async def api_tts(req: TtsRequest):
-    """Genera audio MP3 natural y de alta fidelidad con Edge-TTS para cualquier navegador."""
+    """Genera audio MP3 natural con Edge-TTS y redundancia automática con Google TTS."""
     raw_text = req.texto.strip()
     if not raw_text:
         raise HTTPException(status_code=400, detail="Texto vacío")
 
-    # Limitar para evitar saturación de memoria
-    if len(raw_text) > 4000:
-        raw_text = raw_text[:4000]
+    if len(raw_text) > 3500:
+        raw_text = raw_text[:3500]
 
+    # 1. Intentar Edge-TTS (Voz neuronal hiperrealista)
     try:
         import edge_tts
         communicate = edge_tts.Communicate(raw_text, req.voz or "es-ES-ElviraNeural")
-        
-        async def audio_stream():
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    yield chunk["data"]
-
-        return StreamingResponse(
-            audio_stream(),
-            media_type="audio/mpeg",
-            headers={"Cache-Control": "no-cache"}
-        )
+        buf = bytearray()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.extend(chunk["data"])
+        if len(buf) > 500:
+            return Response(
+                content=bytes(buf),
+                media_type="audio/mpeg",
+                headers={
+                    "Cache-Control": "public, max-age=86400",
+                    "Content-Disposition": 'inline; filename="voz_nova.mp3"',
+                }
+            )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generando audio: {e}")
+        console.print(f"[yellow]⚠ Edge-TTS no disponible ({e}). Activando fallback Google TTS...[/yellow]")
+
+    # 2. Fallback de alta disponibilidad con Google TTS
+    try:
+        audio_google = _generar_audio_google_tts(raw_text)
+        if len(audio_google) > 500:
+            return Response(
+                content=audio_google,
+                media_type="audio/mpeg",
+                headers={
+                    "Cache-Control": "public, max-age=86400",
+                    "Content-Disposition": 'inline; filename="voz_nova.mp3"',
+                }
+            )
+    except Exception as e:
+        console.print(f"[red]❌ Error en fallback Google TTS:[/red] {e}")
+
+    raise HTTPException(status_code=500, detail="No se pudo generar el audio")
 
 
 # --- FRONTEND HTML SPA CON SIDEBAR DE SECCIONES ---
@@ -5196,49 +5247,68 @@ def dashboard_html():
 
           this.vozMensajeActivoIdx = idx;
 
-          // 1. Intentar reproducción con audio neuronal en streaming de Edge-TTS (calidad de locutor profesional)
+          // 1. Solicitar audio MP3 de alta fidelidad al servidor
           try {
             const res = await fetch('/api/tts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ texto: textoLimpio.slice(0, 3500) })
+              body: JSON.stringify({ texto: textoLimpio.slice(0, 3000) })
             });
 
             if (res.ok) {
               const blob = await res.blob();
-              const url = URL.createObjectURL(blob);
-              const audio = new Audio(url);
-              this.reproductorAudio = audio;
+              if (blob && blob.size > 200) {
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio();
+                audio.src = url;
+                this.reproductorAudio = audio;
 
-              audio.onended = () => {
-                if (this.vozMensajeActivoIdx === idx) {
+                audio.onended = () => {
+                  if (this.vozMensajeActivoIdx === idx) {
+                    this.vozMensajeActivoIdx = null;
+                  }
+                  URL.revokeObjectURL(url);
+                };
+
+                audio.onerror = (e) => {
+                  console.warn('Error en elemento de audio:', e);
+                  if (this.vozMensajeActivoIdx === idx) {
+                    this.vozMensajeActivoIdx = null;
+                  }
+                  URL.revokeObjectURL(url);
+                };
+
+                try {
+                  await audio.play();
+                  return;
+                } catch (playErr) {
+                  console.warn('Error al iniciar audio.play():', playErr);
                   this.vozMensajeActivoIdx = null;
+                  URL.revokeObjectURL(url);
+                  return;
                 }
-                URL.revokeObjectURL(url);
-              };
-
-              audio.onerror = () => {
-                this.vozMensajeActivoIdx = null;
-                URL.revokeObjectURL(url);
-              };
-
-              await audio.play();
-              return;
+              }
             }
           } catch(err) {
-            console.warn('Fallback a síntesis local de navegador:', err);
+            console.warn('Error conectando con /api/tts:', err);
           }
 
-          // 2. Fallback de emergencia si falla la red: Web Speech API nativo
-          if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(textoLimpio.slice(0, 500));
-            utterance.lang = 'es-ES';
-            utterance.onend = () => { if (this.vozMensajeActivoIdx === idx) this.vozMensajeActivoIdx = null; };
-            utterance.onerror = () => { this.vozMensajeActivoIdx = null; };
-            window.speechSynthesis.speak(utterance);
-          } else {
-            this.vozMensajeActivoIdx = null;
+          // 2. Si falló el servidor, probar síntesis del navegador si está disponible
+          if ('speechSynthesis' in window && window.speechSynthesis.getVoices().length > 0) {
+            try {
+              const utterance = new SpeechSynthesisUtterance(textoLimpio.slice(0, 500));
+              utterance.lang = 'es-ES';
+              utterance.onend = () => { if (this.vozMensajeActivoIdx === idx) this.vozMensajeActivoIdx = null; };
+              utterance.onerror = () => { this.vozMensajeActivoIdx = null; };
+              window.speechSynthesis.speak(utterance);
+              return;
+            } catch(e) {
+              console.warn('SpeechSynthesis error:', e);
+            }
           }
+
+          // Si nada funcionó, resetear el estado del botón
+          this.vozMensajeActivoIdx = null;
         },
 
         async guardarRespuestaComoGuia(texto) {

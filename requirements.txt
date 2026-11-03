@@ -25,3 +25,6 @@ pydantic>=2.9.0
 
 # 8. Almacenamiento y Sincronización Cloud (Hugging Face Datasets)
 huggingface_hub>=0.25.0
+
+# 9. Síntesis de Voz Neuronal en Español
+edge-tts>=7.0.0
