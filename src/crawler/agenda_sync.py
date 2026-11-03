@@ -200,18 +200,16 @@ def cargar_agenda_cache() -> List[Dict[str, Any]]:
     items = []
     archivo_origen = None
 
+    # En la nube (Render) o si no existe caché local, descargar siempre la versión fresca desde HF
+    try:
+        from src.core.cloud_sync import _descargar_archivo_hf_directo
+        _descargar_archivo_hf_directo("data/procesado/agenda_cache.json", AGENDA_CACHE_FILE)
+    except Exception:
+        pass
+
     if AGENDA_CACHE_FILE.exists() and AGENDA_CACHE_FILE.stat().st_size > 10:
         archivo_origen = AGENDA_CACHE_FILE
-    else:
-        # Intentar descargar desde HF si estamos en la nube
-        try:
-            from src.core.cloud_sync import _descargar_archivo_hf_directo
-            if _descargar_archivo_hf_directo("data/procesado/agenda_cache.json", AGENDA_CACHE_FILE):
-                archivo_origen = AGENDA_CACHE_FILE
-        except Exception:
-            pass
-
-    if not archivo_origen and AGENDA_BACKUP_FILE.exists() and AGENDA_BACKUP_FILE.stat().st_size > 10:
+    elif AGENDA_BACKUP_FILE.exists() and AGENDA_BACKUP_FILE.stat().st_size > 10:
         archivo_origen = AGENDA_BACKUP_FILE
 
     if archivo_origen:
