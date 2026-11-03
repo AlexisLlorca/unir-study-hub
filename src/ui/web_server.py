@@ -332,10 +332,25 @@ def api_archivo_raw(ruta: str):
 
 @app.get("/api/test/{asignatura}/{test_name}")
 def api_obtener_test(asignatura: str, test_name: str):
-    """Devuelve las preguntas de un test en JSON."""
+    """Devuelve las preguntas de un test en JSON de forma tolerante a tildes y caracteres."""
+    import unicodedata
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     stem = nombre_seguro(test_name.replace(".json", ""), "test")
     archivo = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
+    
+    if not archivo.exists() or not archivo.is_file():
+        # Fallback tolerante con normalización de acentos y caracteres
+        def norm(s):
+            return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("_", " ").strip()
+        
+        dir_asig = EXAMENES_DIR / asig_limpia
+        if dir_asig.exists():
+            stem_norm = norm(stem)
+            for f in dir_asig.glob("*.json"):
+                if norm(f.stem) == stem_norm:
+                    archivo = f
+                    break
+
     if not archivo.exists() or not archivo.is_file():
         raise HTTPException(status_code=404, detail="Test no encontrado")
 
@@ -4850,7 +4865,19 @@ def dashboard_html():
         async iniciarTestWeb(asignatura, testNombre) {
           try {
             const res = await fetch(`/api/test/${encodeURIComponent(asignatura)}/${encodeURIComponent(testNombre)}`);
-            this.testPreguntas = await res.json();
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              alert(err.detail || 'No se pudo cargar el test solicitado');
+              this.modalTest = false;
+              return;
+            }
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) {
+              alert('El test está vacío o no contiene preguntas válidas');
+              this.modalTest = false;
+              return;
+            }
+            this.testPreguntas = data;
             this.testActivoAsig = asignatura;
             this.testActivoNombre = testNombre;
             this.testIndice = 0;
@@ -4869,7 +4896,11 @@ def dashboard_html():
               data: { asignatura, testNombre },
               url: '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura)
             });
-          } catch(e) { alert('No se pudo cargar el test'); }
+          } catch(e) {
+            console.error('Error al cargar test:', e);
+            alert('Error de red al cargar el simulacro');
+            this.modalTest = false;
+          }
         },
 
         seleccionarOpcion(letra) {
