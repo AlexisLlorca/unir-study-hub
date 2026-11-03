@@ -1230,8 +1230,8 @@ def api_configurar_proveedores_ia(req: ConfigurarProveedoresReq):
     return tutor_ia.client.obtener_estado_modelos()
 
 
-def _preparar_contexto_chat(msg: ChatMessage):
-    """Prepara las instrucciones de sistema especializadas y el historial con inyección RAG local."""
+def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudiante"):
+    """Prepara las instrucciones de sistema especializadas y el historial con inyección RAG inteligente y selectiva."""
     from src.ai.transcription_search import formatear_contexto_para_tutor
     from src.ai.materials_search import buscar_en_materiales
 
@@ -1271,43 +1271,73 @@ def _preparar_contexto_chat(msg: ChatMessage):
             "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot, JDBC, XML/DOM y patrones de arquitectura limpia. "
         )
 
-    # Inyección RAG con minutaje exacto de videoclases, transcripciones completas y temarios/actividades
-    contexto_citas = formatear_contexto_para_tutor(msg.mensaje, msg.asignatura)
-    contexto_trans_general = obtener_contexto_inteligente_clases(msg.mensaje, msg.asignatura, historial=msg.historial)
-    contexto_materiales = buscar_en_materiales(msg.mensaje, msg.asignatura)
+    # Detección inteligente de preguntas de seguimiento conversacional
+    q_limpia = msg.mensaje.strip().lower()
+    palabras_pregunta = [w for w in re.findall(r"\b\w+\b", q_limpia) if len(w) > 2]
+    
+    patrones_seguimiento = [
+        "y como", "y cómo", "como se hace", "cómo se hace", "ponme un ejemplo",
+        "dame un ejemplo", "explica", "explícamelo", "no lo entiendo", "no entiendo",
+        "continua", "continúa", "sigue", "por qué", "porque", "diferencia entre",
+        "que significa", "qué significa", "como sería", "cómo sería", "hazlo", "muestramelo"
+    ]
+    es_pregunta_seguimiento = (len(palabras_pregunta) <= 5 and any(p in q_limpia for p in patrones_seguimiento)) or (len(palabras_pregunta) <= 3)
+
+    peticion_clase_explicita = any(kw in q_limpia for kw in [
+        "clase", "videoclase", "profesor", "minuto", "sesion", "sesión", "borja",
+        "doc", "pdf", "actividad", "tarea", "enunciado", "temario", "examen"
+    ])
+
+    bloques_contexto = []
+    # Solo inyectar búsqueda documental pesada si no es un simple seguimiento o si se piden materiales explícitamente
+    if peticion_clase_explicita or not es_pregunta_seguimiento:
+        contexto_citas = formatear_contexto_para_tutor(msg.mensaje, msg.asignatura)
+        contexto_trans_general = obtener_contexto_inteligente_clases(msg.mensaje, msg.asignatura, historial=msg.historial)
+        contexto_materiales = buscar_en_materiales(msg.mensaje, msg.asignatura)
+
+        if contexto_citas:
+            bloques_contexto.append(contexto_citas)
+        if contexto_trans_general:
+            bloques_contexto.append(contexto_trans_general)
+        if contexto_materiales:
+            bloques_contexto.append(contexto_materiales)
+
     contexto_asig = f"\n[Asignatura / Módulo activo: {msg.asignatura}]" if msg.asignatura else ""
 
+    nombre_alumno_fmt = nombre_estudiante.strip().capitalize() if nombre_estudiante else "estudiante"
     instrucciones_base = (
-        "\nINSTRUCCIONES CLAVE DE MÁXIMA ROBUSTEZ PARA NOVA:\n"
-        "1. Eres NOVA, la mentora de élite y copiloto académica personal del alumno Alex en UNIR Study Hub.\n"
-        "2. ROBUSTEZ Y RIGOR TÉCNICO: Desarrolla respuestas profundas, completas y fundamentadas en ingeniería de software y arquitectura. Explica el porqué de cada concepto bajo el capó (JVM, memoria, hilos, SO, red, base de datos). Prohibidas las respuestas telegráficas o superficiales.\n"
-        "3. CÓDIGO DE PRODUCCIÓN: Cuando aportes ejemplos de código, proporciona implementaciones completas, tipadas, compilables y modernas (Java 17/21, Kotlin actual, SQL estándar), con manejo riguroso de excepciones y comentarios técnicos en puntos críticos.\n"
-        "4. TRAMPAS DE EXAMEN UNIR: Advierte proactivamente sobre preguntas capciosas de examen tipo test, errores conceptuales habituales, casos límite y excepciones típicas del temario.\n"
-        "5. ACCESO LOCAL COMPLETO: Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios y actividades. NUNCA digas que no tienes acceso al campus o a los materiales.\n"
-        "6. CITAS EXACTAS: Si el alumno te pregunta qué dijo un profesor o sobre lo tratado en una clase, menciona siempre el minuto exacto [MM:SS] o [HH:MM:SS], el profesor que habló y citas textuales relevantes.\n"
-        "7. MEMORIA CONVERSACIONAL: Mantén siempre en cuenta los turnos anteriores para dar continuidad fluida a dudas complejas o refactorizaciones de código.\n"
-        "8. FORMATO: Emplea Markdown enriquecido con títulos jerárquicos, negritas para conceptos clave, listas didácticas y tablas comparativas para conceptos confusos.\n"
+        f"\nINSTRUCCIONES CLAVE DE MÁXIMA ROBUSTEZ Y NATURALIDAD PARA NOVA:\n"
+        f"1. Eres NOVA, la mentora de élite y copiloto académica personal del alumno {nombre_alumno_fmt} en UNIR Study Hub.\n"
+        "2. FLUJO CONVERSACIONAL NATURAL (CRUCIAL): NO saludes en cada turno con 'Hola' o presentándote repetidamente. "
+        "Ve DIRECTO al grano respondiendo con calidez y rigor, como en una conversación fluida en tiempo real.\n"
+        "3. MEMORIA CONVERSACIONAL ACTIVA: Recuerda y apóyate siempre en lo que habéis discutido en los mensajes anteriores. "
+        "Si el alumno hace una pregunta de seguimiento ('¿y cómo se hace?', 'ponme un ejemplo', 'explícame el paso 2'), "
+        "responde enlazando directamente con el tema previo sin desviar la conversación ni reiniciar el contexto.\n"
+        "4. ROBUSTEZ Y RIGOR TÉCNICO: Desarrolla respuestas profundas, completas y fundamentadas en ingeniería de software y arquitectura. "
+        "Explica el porqué bajo el capó (JVM, memoria, hilos, SO, red, base de datos). Prohibidas las respuestas telegráficas o superficiales.\n"
+        "5. CÓDIGO DE PRODUCCIÓN: Cuando aportes ejemplos de código, proporciona implementaciones completas, tipadas, compilables y modernas (Java 17/21, Kotlin actual, SQL estándar), con manejo riguroso de excepciones y comentarios en puntos críticos.\n"
+        "6. TRAMPAS DE EXAMEN UNIR: Advierte proactivamente sobre preguntas capciosas de examen tipo test, errores conceptuales habituales, casos límite y excepciones típicas del temario.\n"
+        "7. ACCESO LOCAL COMPLETO: Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios y actividades. NUNCA digas que no tienes acceso al campus o a los materiales.\n"
+        "8. FORMATO: Emplea Markdown enriquecido con títulos jerárquicos, negritas para conceptos clave, listas didácticas y tablas comparativas.\n"
     )
 
     system_instruction_completo = f"{contexto_rol}\n{instrucciones_base}\n{contexto_asig}".strip()
 
-    bloques_contexto = []
-    if contexto_citas:
-        bloques_contexto.append(contexto_citas)
-    if contexto_trans_general:
-        bloques_contexto.append(contexto_trans_general)
-    if contexto_materiales:
-        bloques_contexto.append(contexto_materiales)
-
     contexto_inyectado = "\n\n".join(bloques_contexto)
     if contexto_inyectado:
-        mensaje_actual_con_contexto = f"{contexto_inyectado}\n\nPregunta / Mensaje del alumno: {msg.mensaje}"
+        # Si hay contexto RAG, acotarlo claramente para no canibalizar la pregunta
+        mensaje_actual_con_contexto = (
+            f"[CONTEXTO DE REFERENCIA OFICIAL UNIR (Usa esto si es relevante para responder)]:\n"
+            f"{contexto_inyectado}\n\n"
+            f"---\n"
+            f"Mensaje del alumno ({nombre_alumno_fmt}): {msg.mensaje}"
+        )
     else:
         mensaje_actual_con_contexto = msg.mensaje
 
     mensajes_chat = []
     if msg.historial:
-        for item in msg.historial[-8:]:
+        for item in msg.historial[-16:]:
             rol = "user" if item.rol in ["user", "alumno", "usuario"] else "model"
             if item.texto and item.texto.strip():
                 mensajes_chat.append({"role": rol, "text": item.texto.strip()})
@@ -1335,7 +1365,9 @@ def api_validar_gemini_key(req: dict):
 def api_chat(msg: ChatMessage, request: Request):
     """Responde preguntas mediante NOVA con rol especializado, memoria multi-turno e inyección RAG completa."""
     user_key = (msg.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
-    system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg)
+    usuario_req = getattr(request.state, "usuario", {}) or {}
+    nombre_user = usuario_req.get("nombre") or usuario_req.get("username") or "estudiante"
+    system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg, nombre_user)
 
     respuesta = tutor_ia.client.generar_chat(
         mensajes=mensajes_chat,
@@ -1364,7 +1396,9 @@ def api_chat(msg: ChatMessage, request: Request):
 def api_chat_stream(msg: ChatMessage, request: Request):
     """Emite la respuesta de NOVA en tiempo real mediante Server-Sent Events (SSE)."""
     user_key = (msg.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
-    system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg)
+    usuario_req = getattr(request.state, "usuario", {}) or {}
+    nombre_user = usuario_req.get("nombre") or usuario_req.get("username") or "estudiante"
+    system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg, nombre_user)
 
     def event_generator():
         emitido = False
@@ -4484,24 +4518,28 @@ def dashboard_html():
         },
 
         obtenerMensajeBienvenida(asig) {
+          const nombreUsuario = (this.usuarioActual && (this.usuarioActual.nombre || this.usuarioActual.username))
+            ? (this.usuarioActual.nombre || this.usuarioActual.username).split(' ')[0]
+            : 'Alex';
+
           if (asig && asig.trim()) {
-            return `¡Hola Alex! Soy **NOVA**, tu mentora y copiloto académica en **${asig}**. ¿Qué tema, videoclase o duda técnica quieres que trabajemos hoy?`;
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu mentora y copiloto académica en **${asig}**. ¿Qué tema, videoclase o duda técnica quieres que trabajemos hoy?`;
           }
           const p = this.programaActual;
           if (p?.id === 'ciber') {
-            return '¡Hola Alex! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Malware o Hacking Ético) repasamos hoy?';
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu copiloto en **Ciberseguridad y Auditorías**. ¿Qué módulo o temática (OWASP, SIEM, Forense, Malware o Hacking Ético) repasamos hoy?`;
           } else if (p?.id === 'pfu' || p?.id === 'grado') {
-            return '¡Hola Alex! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño formal.';
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu mentora en **Ingeniería del Software & PFU**. Lista para resolver dudas de algoritmia, estructuras de datos o diseño formal.`;
           } else if (p?.id === 'bootcamp') {
-            return '¡Hola Alex! Soy **NOVA**, tu mentora en **Gestión Ágil y Habilidades Digitales**. ¿Repasamos Scrum, Kanban o transformación digital?';
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu mentora en **Gestión Ágil y Habilidades Digitales**. ¿Repasamos Scrum, Kanban o transformación digital?`;
           } else if (p?.id === 'python') {
-            return '¡Hola Alex! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio de ESIT ponemos a prueba hoy?';
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio de ESIT ponemos a prueba hoy?`;
           } else if (p?.id === 'aws') {
-            return '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **AWS Cloud Practitioner (CLF-C02)**. ¿Hacemos un test rápido o repasamos servicios de AWS?';
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu instructora para la certificación **AWS Cloud Practitioner (CLF-C02)**. ¿Hacemos un test rápido o repasamos servicios de AWS?`;
           } else if (p?.id === 'azure') {
-            return '¡Hola Alex! Soy **NOVA**, tu instructora para la certificación **Microsoft Azure Fundamentals (AZ-900)**. ¿Repasamos modelos cloud, seguridad o preguntas de examen?';
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu instructora para la certificación **Microsoft Azure Fundamentals (AZ-900)**. ¿Repasamos modelos cloud, seguridad o preguntas de examen?`;
           }
-          return '¡Hola Alex! Soy **NOVA**, tu copiloto para **FP DAM**. ¿Qué duda de examen o de código quieres que resolvamos hoy?';
+          return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu copiloto para **FP DAM**. ¿Qué duda de examen o de código quieres que resolvamos hoy?`;
         },
 
         cargarHistorialParaAsignatura(asig) {
@@ -5029,9 +5067,13 @@ def dashboard_html():
           } catch(e) {}
           delete this.chatHistorialesPorAsignatura[clave];
 
+          const nombreUsuario = (this.usuarioActual && (this.usuarioActual.nombre || this.usuarioActual.username))
+            ? (this.usuarioActual.nombre || this.usuarioActual.username).split(' ')[0]
+            : 'Alex';
+
           const bienvenida = [{
             rol: 'model',
-            texto: `¡Memoria reiniciada para ${asig || 'NOVA'}! Hola Alex, ¿en qué nos enfocamos ahora?`
+            texto: `¡Memoria reiniciada para ${asig || 'NOVA'}! Hola ${nombreUsuario}, ¿en qué nos enfocamos ahora?`
           }];
           this.chatHistorialesPorAsignatura[clave] = bienvenida;
           this.chatHistorial = bienvenida;
@@ -5101,11 +5143,11 @@ def dashboard_html():
           const programaOrigen = this.programaActivoId;
           const claveOrigen = this.obtenerClaveChat(asigOrigen);
 
-          // Capturar historial previo antes de registrar el nuevo mensaje en pantalla
+          // Capturar historial previo completo (hasta 16 turnos) para mantener contexto
           const historialPrevio = this.chatHistorial.map(m => ({
             rol: m.rol,
             texto: m.texto
-          })).slice(-8);
+          })).slice(-16);
 
           this.chatHistorial.push({ rol: 'user', texto });
           this.guardarHistorialActual();
