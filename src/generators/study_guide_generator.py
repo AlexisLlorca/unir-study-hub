@@ -249,7 +249,8 @@ class GeneradorGuiaEstudio:
                 "4. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la letra de la respuesta.\n"
                 "5. 'justificacion': Justificación exhaustiva: por qué la opción correcta lo es Y por qué cada uno de los 3 distractores es incorrecto.\n"
                 "6. FIDELIDAD ESTRICTA AL TEMARIO (PROHIBIDO INVENTAR): Todas las preguntas, opciones y códigos deben basarse EXCLUSIVAMENTE en el contenido del temario oficial y las clases proporcionadas arriba. No inventes APIs o sintaxis que no correspondan a 2º DAM.\n"
-                "7. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
+                "7. FORMATO VISUAL DEL CÓDIGO (CRUCIAL): Si la pregunta incluye un fragmento de código, NUNCA lo comprimas en una sola línea. Escribe el código con saltos de línea e indentación de 2 o 4 espacios dentro del bloque ```java ... ```. Separa claramente el texto introductorio, el bloque de código, y la pregunta final al final en un párrafo aparte.\n"
+                "8. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
                 "[\n"
                 "  {\n"
                 '    "enunciado": "Texto de la pregunta...",\n'

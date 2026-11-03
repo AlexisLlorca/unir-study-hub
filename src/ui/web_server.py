@@ -3207,7 +3207,7 @@ def dashboard_html():
       <!-- CUERPO PREGUNTA Y OPCIONES -->
       <div class="flex-1 p-6 overflow-y-auto space-y-4" x-show="!testFinalizado && testPreguntas.length > 0">
         <!-- ENUNCIADO -->
-        <h3 class="text-base font-bold text-white leading-snug" x-text="testPreguntas[testIndice]?.enunciado"></h3>
+        <div class="test-enunciado-container" x-html="renderEnunciadoTest(testPreguntas[testIndice]?.enunciado)"></div>
 
         <!-- PISTA CONCEPTUAL DESPLEGABLE -->
         <div>
@@ -3228,7 +3228,7 @@ def dashboard_html():
             </div>
             <div class="flex-1">
               <span class="font-bold text-amber-300 block mb-0.5">Pista para razonar la respuesta:</span>
-              <p class="text-amber-100/90 text-xs" x-text="obtenerPistaPregunta(testPreguntas[testIndice])"></p>
+              <p class="text-amber-100/90 text-xs leading-relaxed" x-html="renderTextoOpcion(obtenerPistaPregunta(testPreguntas[testIndice]))"></p>
             </div>
           </div>
         </div>
@@ -3263,7 +3263,7 @@ def dashboard_html():
                           !testRespuestasUsuario[testIndice] || testModo !== 'notebook'
                       }"
                       x-text="letra"></span>
-                <span class="text-sm font-medium leading-relaxed pt-0.5" x-text="texto"></span>
+                <span class="text-sm font-medium leading-relaxed pt-0.5" x-html="renderTextoOpcion(texto)"></span>
               </div>
 
               <!-- Indicador de acierto / fallo -->
@@ -3317,7 +3317,7 @@ def dashboard_html():
               <i class="fa-solid fa-graduation-cap text-[11px]"></i>
               <span>¿Por qué? Justificación técnica oficial:</span>
             </div>
-            <p class="text-xs text-gray-200 leading-relaxed font-sans" x-text="testPreguntas[testIndice]?.justificacion"></p>
+            <div class="text-xs text-gray-200 leading-relaxed font-sans" x-html="renderTextoOpcion(testPreguntas[testIndice]?.justificacion)"></div>
           </div>
         </div>
       </div>
@@ -4914,6 +4914,92 @@ def dashboard_html():
             }
           }
           return 'Recuerda los conceptos y definiciones clave tratados en el temario oficial de UNIR.';
+        },
+
+        escapeHtml(str) {
+          if (!str) return '';
+          return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        },
+
+        formatInlineCode(str) {
+          if (!str) return '';
+          return str.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 mx-0.5 rounded bg-gray-900 border border-cyan-500/30 text-cyan-300 font-mono text-xs">$1</code>');
+        },
+
+        beautifyCode(code) {
+          if (!code) return '';
+          let trimmed = code.trim();
+          // Si el código está en una sola línea o con saltos insuficientes
+          if (!trimmed.includes('\n') || trimmed.split('\n').length <= 2) {
+            let tokens = trimmed
+              .replace(/[{]/g, ' {\n')
+              .replace(/[}]/g, '\n}\n')
+              .replace(/[;](?![^()]*[)])/g, ';\n');
+            let lines = tokens.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            let result = [];
+            let indent = 0;
+            for (let line of lines) {
+              if (line.startsWith('}')) indent = Math.max(0, indent - 1);
+              result.push('  '.repeat(indent) + line);
+              if (line.endsWith('{')) indent++;
+            }
+            return result.join('\n');
+          }
+          return trimmed;
+        },
+
+        renderEnunciadoTest(raw) {
+          if (!raw) return '';
+          // Detectar bloque de código ```lang ... ```
+          const codeRegex = /```([a-zA-Z0-9_-]*)[ \t\r\n]*([^]*?)```/;
+          const match = raw.match(codeRegex);
+
+          if (match) {
+            const antes = raw.substring(0, match.index).trim();
+            const lang = (match[1] || 'código').toLowerCase().trim();
+            const rawCode = match[2];
+            const despues = raw.substring(match.index + match[0].length).trim();
+
+            const formattedCode = this.escapeHtml(this.beautifyCode(rawCode));
+
+            let html = '';
+            if (antes) {
+              html += `<p class="text-sm text-gray-200 font-medium leading-relaxed mb-3">${this.formatInlineCode(this.escapeHtml(antes))}</p>`;
+            }
+
+            html += `
+              <div class="my-3 rounded-2xl overflow-hidden border border-gray-700/80 bg-gray-950 shadow-xl">
+                <div class="flex items-center justify-between px-3.5 py-2 bg-gray-900/90 border-b border-gray-800 text-xs">
+                  <div class="flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block"></span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block"></span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block"></span>
+                    <span class="font-mono text-[11px] font-bold text-cyan-300 uppercase ml-1.5 tracking-wider">${lang}</span>
+                  </div>
+                  <span class="text-[10px] text-gray-400 font-mono">Fragmento de código</span>
+                </div>
+                <pre class="p-4 text-xs font-mono text-emerald-300 bg-gray-950 overflow-x-auto leading-relaxed selection:bg-cyan-900 selection:text-white"><code>${formattedCode}</code></pre>
+              </div>
+            `;
+
+            if (despues) {
+              html += `<div class="text-base font-bold text-white pt-2 leading-snug">${this.formatInlineCode(this.escapeHtml(despues))}</div>`;
+            }
+
+            return html;
+          }
+
+          return `<div class="text-base font-bold text-white leading-snug">${this.formatInlineCode(this.escapeHtml(raw))}</div>`;
+        },
+
+        renderTextoOpcion(str) {
+          if (!str) return '';
+          return this.formatInlineCode(this.escapeHtml(str));
         },
 
         contarAciertosVivos() {

@@ -154,6 +154,7 @@ class TutorIA:
             "- Solo 1 opción correcta.\n"
             "- Incluye la solución y la justificación técnica detallada dentro de una etiqueta HTML <details><summary>Ver respuesta</summary>...</details>.\n"
             "- Distribuye preguntas teóricas de concepto y preguntas prácticas con fragmentos de código donde haya que deducir la salida o el error.\n"
+            "- Si incluyes código, escribe los fragmentos bien indentados y con saltos de línea legibles dentro de bloques de código Markdown ```java ... ``` (nunca comprimido en una sola línea).\n"
         )
         return self.client.generar_contenido(prompt, temperatura=0.3)
 
