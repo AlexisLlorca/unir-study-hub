@@ -35,19 +35,20 @@ def calcular_dias_restantes(fecha_iso: Optional[str]) -> tuple[int, str]:
         limite = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
         ahora = datetime.now(timezone.utc)
         diff = limite - ahora
-        dias = diff.days
-        horas = diff.seconds // 3600
+        total_secs = diff.total_seconds()
+        dias_reales = int(total_secs // 86400)
+        horas = int(diff.seconds // 3600)
 
-        if diff.total_seconds() < 0:
-            return -1, "Vencida"
-        elif dias == 0:
+        if total_secs < 0:
+            return dias_reales, "Vencida"
+        elif dias_reales == 0:
             return 0, f"¡Hoy! (en {horas}h)"
-        elif dias == 1:
+        elif dias_reales == 1:
             return 1, "Mañana"
-        elif dias <= 7:
-            return dias, f"En {dias} días"
+        elif dias_reales <= 7:
+            return dias_reales, f"En {dias_reales} días"
         else:
-            return dias, f"En {dias} días ({limite.strftime('%d/%m')})"
+            return dias_reales, f"En {dias_reales} días ({limite.strftime('%d/%m')})"
     except Exception:
         return 999, "Fecha no disponible"
 
@@ -224,8 +225,9 @@ def cargar_agenda_cache() -> List[Dict[str, Any]]:
         for ev in items:
             fecha_iso = ev.get("fecha_iso")
             dias_restantes, plazo_texto = calcular_dias_restantes(fecha_iso)
-            # Omitir eventos finalizados hace más de 1 día para mantener la agenda limpia
-            if dias_restantes < -1:
+            # Omitir eventos finalizados (vencidos hace más de 12 horas o fecha pasada) para mantener la agenda limpia
+            # Las clases en directo pasadas o PACs expiradas no deben estorbar
+            if dias_restantes < 0:
                 continue
 
             if dias_restantes < 0:
