@@ -87,12 +87,8 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                 "id": "pfu",
                 "nombre": "Plan de Formación Universitaria",
                 "asignaturas": [
-                    "Aula de Información General (PFU)",
                     "PFU - Ingeniería del Software",
                     "PFU - Bases de Datos Avanzadas",
-                    "PFU - Estructura de Datos y Algoritmos",
-                    "PFU - Arquitectura de Computadores",
-                    "PFU - Matemáticas y Lógica Computacional",
                 ],
             }
         },
@@ -111,8 +107,6 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                 "nombre": "Módulos del Bootcamp",
                 "asignaturas": [
                     "Bootcamp - Habilidades Digitales y Gestión Ágil",
-                    "Bootcamp - Metodologías Ágiles (Scrum & Kanban)",
-                    "Bootcamp - Transformación Digital e Innovación",
                 ],
             }
         },
@@ -131,7 +125,6 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                 "nombre": "Temario y Prácticas Python",
                 "asignaturas": [
                     "Curso de Programación en Python",
-                    "Python - Ejercicios y Casos Prácticos",
                 ],
             }
         },
@@ -150,7 +143,6 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                 "nombre": "Preparación Examen Oficial AWS",
                 "asignaturas": [
                     "Curso de Preparación Certificación AWS Cloud Practitioner",
-                    "AWS - Simulacros y Exámenes de Prueba",
                 ],
             }
         },
@@ -169,7 +161,6 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
                 "nombre": "Preparación Examen Oficial Azure",
                 "asignaturas": [
                     "Curso de Preparación Certificación AZ-900 (Azure)",
-                    "AZ-900 - Simulacros y Cuestionarios",
                 ],
             }
         },
