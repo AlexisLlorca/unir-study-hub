@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: unir-study-hub
+    name: nova-study-hub
     runtime: python
     plan: free
     buildCommand: pip install --no-cache-dir fastapi uvicorn pydantic python-dotenv rich pypdf google-genai requests beautifulsoup4 huggingface_hub edge-tts
