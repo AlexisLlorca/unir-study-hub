@@ -118,13 +118,12 @@ def inicializar_bd_usuarios() -> None:
             (admin_user,),
         )
 
-        # 3. Invalidar sesiones de cualquier otro usuario para exigir aprobación de Alex
+        # 3. Invalidar sesiones únicamente de usuarios inactivos o bloqueados (los alumnos aprobados conservan su sesión)
         cursor.execute(
             """
             DELETE FROM sesiones 
-            WHERE username != ?
-            """,
-            (admin_user,),
+            WHERE username IN (SELECT username FROM usuarios WHERE activo != 1)
+            """
         )
 
         conn.commit()
