@@ -298,6 +298,23 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
     return True
 
 
+_bundle_lock = threading.Lock()
+
+
+def _actualizar_bundle_seguro(token: str) -> None:
+    """Actualiza y sube procesado_bundle.tar.gz de forma segura evitando colisiones entre hilos."""
+    if not _bundle_lock.acquire(blocking=False):
+        # Si otro hilo ya está empaquetando el bundle, este incluirá los archivos escritos en disco
+        return
+    try:
+        time.sleep(2)  # Agrupar archivos si se generaron guía + test JSON a la vez
+        crear_y_subir_bundle_rapido(token=token)
+    except Exception:
+        pass
+    finally:
+        _bundle_lock.release()
+
+
 def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
     """
     Sube en segundo plano un archivo recién generado (guía, test JSON, progreso o flashcards)
@@ -323,7 +340,7 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
                 repo_type="dataset",
                 commit_message=f"auto-backup: {rel_to_base.name}",
             )
-            crear_y_subir_bundle_rapido(token=hf_token)
+            _actualizar_bundle_seguro(hf_token)
         except Exception:
             pass
 
