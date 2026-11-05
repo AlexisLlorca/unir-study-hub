@@ -1918,6 +1918,16 @@ def dashboard_html():
           <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">Consultar </span><span>NOVA</span>
         </button>
 
+        <!-- BOTÓN MI KEY / TOKENS PRIVADOS (BYOK) -->
+        <button @click="abrirModalApiKey()" 
+                :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
+                class="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
+                :title="userGeminiKey ? 'Usando tu clave privada de Gemini' : 'Configurar mi propia clave gratuita de Gemini (BYOK)'">
+          <span class="h-2 w-2 rounded-full" :class="userGeminiKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+          <i class="fa-solid fa-key text-[10px]" :class="userGeminiKey ? 'text-emerald-400' : 'text-amber-400'"></i>
+          <span class="hidden sm:inline font-medium" x-text="userGeminiKey ? 'Mi Key' : 'Mi Key'"></span>
+        </button>
+
         <!-- USUARIO ACTIVO Y BOTÓN CERRAR SESIÓN -->
         <div x-show="usuarioActual && usuarioActual.autenticado" class="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-gray-800 shrink-0">
           <div class="text-right hidden sm:block">
@@ -3083,13 +3093,10 @@ def dashboard_html():
           <!-- Opción Robusta (Recomendada por defecto) -->
           <div @click="generadorProfundidad = 'robusta'; generadorNumPreguntas = 15"
                :class="generadorProfundidad === 'robusta' ? 'border-purple-500 bg-purple-500/15 ring-2 ring-purple-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
-               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1 relative order-first sm:order-last">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-purple-400 flex items-center space-x-1.5">
-                <i class="fa-solid fa-crown text-amber-400"></i>
-                <span>Robusta (Recomendada)</span>
-              </span>
-              <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-500/25 text-purple-300 border border-purple-500/30">Nivel Examen</span>
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1.5 order-first sm:order-last">
+            <div class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-crown text-amber-400 text-xs"></i>
+              <span class="text-xs font-bold text-purple-400">Robusta</span>
             </div>
             <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Cornell & Active Recall)</p>
             <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, cajas interactivas de autoevaluación, chuleta de firmas/métodos, trampas UNIR y 15 preguntas.</p>
@@ -3098,13 +3105,10 @@ def dashboard_html():
           <!-- Opción Media -->
           <div @click="generadorProfundidad = 'media'; generadorNumPreguntas = 10"
                :class="generadorProfundidad === 'media' ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
-               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-blue-400 flex items-center space-x-1.5">
-                <i class="fa-solid fa-book-open"></i>
-                <span>Media</span>
-              </span>
-              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Estándar</span>
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1.5">
+            <div class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-book-open text-blue-400 text-xs"></i>
+              <span class="text-xs font-bold text-blue-400">Media</span>
             </div>
             <p class="text-[11px] text-gray-300 font-medium">Equilibrada</p>
             <p class="text-[10px] text-gray-400 leading-tight">~3.000 palabras, resumen ejecutivo, tabla de métodos clave, avisos docentes y 10 preguntas.</p>
@@ -3113,13 +3117,10 @@ def dashboard_html():
           <!-- Opción Corta -->
           <div @click="generadorProfundidad = 'corta'; generadorNumPreguntas = 5"
                :class="generadorProfundidad === 'corta' ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
-               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
-                <i class="fa-solid fa-bolt"></i>
-                <span>Corta</span>
-              </span>
-              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Exprés</span>
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1.5">
+            <div class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-bolt text-emerald-400 text-xs"></i>
+              <span class="text-xs font-bold text-emerald-400">Corta</span>
             </div>
             <p class="text-[11px] text-gray-300 font-medium">Repaso Rápido</p>
             <p class="text-[10px] text-gray-400 leading-tight">~1.500 palabras, chuleta rápida de sintaxis y test de 5 preguntas de última hora.</p>
@@ -3158,6 +3159,17 @@ def dashboard_html():
           <div class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full transition-all duration-500"
                :style="'width: ' + (generandoIaPaso === 1 ? '33%' : (generandoIaPaso === 2 ? '68%' : '95%'))"></div>
         </div>
+      </div>
+
+      <!-- AVISO DE CLAVE / TOKENS BYOK -->
+      <div class="flex items-center justify-between bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 text-xs">
+        <div class="flex items-center space-x-2">
+          <span class="h-2 w-2 rounded-full shrink-0" :class="userGeminiKey ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+          <span class="text-gray-300 text-[11px]" x-text="userGeminiKey ? 'Generando con tu API Key privada de Gemini' : 'Generando con la cuota compartida del Hub'"></span>
+        </div>
+        <button type="button" @click="abrirModalApiKey()" class="text-cyan-400 hover:text-cyan-300 text-[11px] font-semibold underline shrink-0 ml-2">
+          <span x-text="userGeminiKey ? 'Cambiar mi key' : 'Poner mi clave gratis'"></span>
+        </button>
       </div>
 
       <div class="pt-2 flex justify-end space-x-3">
