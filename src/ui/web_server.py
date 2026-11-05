@@ -62,6 +62,14 @@ from src.core.auth import (
     eliminar_usuario,
     contar_pendientes,
 )
+from src.core.feedback import (
+    inicializar_bd_feedback,
+    crear_reporte,
+    listar_reportes,
+    actualizar_estado_reporte,
+    eliminar_reporte,
+    contar_feedback_pendientes,
+)
 from src.ui.security import (
     AccesoSeguroMiddleware,
     COOKIE_TOKEN,
@@ -84,6 +92,7 @@ IP_LOCAL = obtener_ip_red_local()
 app.add_middleware(AccesoSeguroMiddleware, token=HUB_ACCESS_TOKEN, ip_local=IP_LOCAL)
 
 inicializar_bd_usuarios()
+inicializar_bd_feedback()
 
 tracker = GestorProgreso()
 tutor_ia = TutorIA()
@@ -112,6 +121,17 @@ class CambiarRolRequest(BaseModel):
 
 class ActualizarKeyRequest(BaseModel):
     api_key: str
+
+class CrearFeedbackRequest(BaseModel):
+    tipo: str = "fallo"  # 'fallo' o 'mejora'
+    titulo: str
+    descripcion: str
+    asignatura: Optional[str] = ""
+
+class ActualizarFeedbackRequest(BaseModel):
+    feedback_id: int
+    estado: str  # 'pendiente', 'en_proceso', 'resuelto', 'descartado'
+    respuesta_admin: Optional[str] = None
 
 def _verificar_es_admin(request: Request):
     u = getattr(request.state, "usuario", None)
@@ -267,6 +287,60 @@ def api_admin_usuario_eliminar(user_id: int, request: Request):
     ok = eliminar_usuario(user_id)
     if not ok:
         raise HTTPException(status_code=400, detail="No se puede eliminar la cuenta del administrador principal.")
+    return {"status": "ok"}
+
+
+# --- API FEEDBACK / INCIDENCIAS Y MEJORAS ---
+
+@app.get("/api/feedback")
+def api_feedback_listar():
+    """Retorna la lista de incidencias y propuestas de mejora con contador de pendientes."""
+    return {
+        "reportes": listar_reportes(),
+        "pendientes": contar_feedback_pendientes(),
+    }
+
+
+@app.post("/api/feedback")
+def api_feedback_crear(req: CrearFeedbackRequest, request: Request):
+    """Crea una nueva incidencia o propuesta de mejora enviada por un alumno o admin."""
+    u = getattr(request.state, "usuario", None) or {}
+    username = u.get("username") or "anonimo"
+    nombre = u.get("nombre") or username
+    try:
+        rep = crear_reporte(
+            username=username,
+            nombre=nombre,
+            tipo=req.tipo,
+            titulo=req.titulo,
+            descripcion=req.descripcion,
+            asignatura=req.asignatura or "",
+        )
+        return {"status": "ok", "reporte": rep}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/admin/feedback/estado")
+def api_admin_feedback_estado(req: ActualizarFeedbackRequest, request: Request):
+    """Permite al administrador cambiar el estado de un reporte y añadir respuesta."""
+    _verificar_es_admin(request)
+    try:
+        ok = actualizar_estado_reporte(req.feedback_id, req.estado, req.respuesta_admin)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Reporte no encontrado")
+        return {"status": "ok"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/admin/feedback/{feedback_id}")
+def api_admin_feedback_eliminar(feedback_id: int, request: Request):
+    """Permite al administrador eliminar un reporte."""
+    _verificar_es_admin(request)
+    ok = eliminar_reporte(feedback_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
     return {"status": "ok"}
 
 
@@ -1854,18 +1928,6 @@ def dashboard_html():
           </div>
 
           <div class="flex items-center group/item">
-            <button @click="irASeccion('asignaturas')"
-                    :class="tab === 'asignaturas' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-              <i class="fa-solid fa-book-bookmark w-4 text-center"></i>
-              <span>Temarios y Asignaturas</span>
-            </button>
-            <a href="/?tab=asignaturas" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
-
-          <div class="flex items-center group/item">
             <button @click="irASeccion('clases')"
                     :class="tab === 'clases' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
                     class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
@@ -1873,18 +1935,6 @@ def dashboard_html():
               <span>Videoclases y Transcripciones</span>
             </button>
             <a href="/?tab=clases" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
-
-          <div class="flex items-center group/item">
-            <button @click="irASeccion('tutor')"
-                    :class="tab === 'tutor' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-              <i class="fa-solid fa-robot w-4 text-center text-cyan-400"></i>
-              <span>Tutor Inteligente NOVA</span>
-            </button>
-            <a href="/?tab=tutor" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
@@ -1924,6 +1974,22 @@ def dashboard_html():
               <span>Expediente y Calificaciones</span>
             </button>
             <a href="/?tab=progreso" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <!-- BUZÓN DE INCIDENCIAS Y MEJORAS -->
+          <div class="flex items-center group/item">
+            <button @click="irASeccion('feedback')"
+                    :class="tab === 'feedback' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <i class="fa-solid fa-bullhorn w-4 text-center text-amber-400"></i>
+                <span>Buzón y Mejoras</span>
+              </div>
+              <span x-show="feedbackPendientesCount > 0" class="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-bold" x-text="feedbackPendientesCount"></span>
+            </button>
+            <a href="/?tab=feedback" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
@@ -2958,7 +3024,7 @@ def dashboard_html():
         </div>
 
         <!-- TARJETAS DE MÉTRICAS -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="glass p-5 rounded-2xl border border-gray-800 flex items-center justify-between">
             <div>
               <p class="text-xs text-gray-400 font-medium">Total Usuarios</p>
@@ -2981,11 +3047,21 @@ def dashboard_html():
 
           <div class="glass p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 flex items-center justify-between">
             <div>
-              <p class="text-xs text-amber-400 font-medium">Pendientes de Aprobación</p>
+              <p class="text-xs text-amber-400 font-medium">Pendientes Acceso</p>
               <h3 class="text-2xl font-black text-amber-300 mt-1" x-text="adminPendientesCount"></h3>
             </div>
             <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-base border border-amber-500/20">
               <i class="fa-solid fa-user-clock"></i>
+            </div>
+          </div>
+
+          <div @click="irASeccion('feedback')" class="glass p-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 flex items-center justify-between cursor-pointer hover:border-cyan-500/50 hover:bg-cyan-500/10 transition">
+            <div>
+              <p class="text-xs text-cyan-400 font-medium">Buzón Incidencias</p>
+              <h3 class="text-2xl font-black text-cyan-300 mt-1" x-text="feedbackPendientesCount + ' pendientes'"></h3>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-base border border-cyan-500/20">
+              <i class="fa-solid fa-bullhorn"></i>
             </div>
           </div>
         </div>
@@ -3078,6 +3154,249 @@ def dashboard_html():
                 </template>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== BUZÓN DE INCIDENCIAS Y MEJORAS ==================== -->
+      <div x-show="tab === 'feedback'" x-transition class="space-y-6">
+        <!-- HEADER -->
+        <div class="glass p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent">
+          <div class="flex items-center space-x-4">
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl shadow-lg shadow-amber-500/10">
+              <i class="fa-solid fa-bullhorn"></i>
+            </div>
+            <div>
+              <h2 class="text-2xl font-black text-white">Buzón de Incidencias y Mejoras</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Reporta fallos o propón mejoras para UNIR Study Hub. La administración revisa y actualiza cada reporte.</p>
+            </div>
+          </div>
+          <button @click="cargarFeedback()" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center space-x-2 transition border border-gray-700">
+            <i class="fa-solid fa-rotate" :class="feedbackCargando ? 'fa-spin text-amber-400' : ''"></i>
+            <span>Actualizar</span>
+          </button>
+        </div>
+
+        <!-- FORMULARIO NUEVO REPORTE -->
+        <div class="glass p-6 rounded-3xl border border-gray-800 space-y-4">
+          <div class="flex items-center justify-between border-b border-gray-800/80 pb-3">
+            <h3 class="font-bold text-white text-sm flex items-center space-x-2">
+              <i class="fa-solid fa-pen-to-square text-amber-400"></i>
+              <span>Enviar un Reporte o Sugerencia</span>
+            </h3>
+            <span class="text-[11px] text-gray-400">Tu usuario: <strong class="text-gray-200" x-text="usuarioActual?.nombre || usuarioActual?.username || 'Estudiante'"></strong></span>
+          </div>
+
+          <!-- Selector de tipo (Fallo vs Mejora) -->
+          <div class="flex gap-3">
+            <button type="button" @click="feedbackNuevoTipo = 'fallo'"
+                    :class="feedbackNuevoTipo === 'fallo' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold' : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-gray-200'"
+                    class="flex-1 py-2.5 px-4 rounded-xl border text-xs flex items-center justify-center space-x-2 transition">
+              <i class="fa-solid fa-bug text-rose-400"></i>
+              <span>Reportar un Fallo / Error</span>
+            </button>
+            <button type="button" @click="feedbackNuevoTipo = 'mejora'"
+                    :class="feedbackNuevoTipo === 'mejora' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 font-bold' : 'bg-gray-900/60 text-gray-400 border-gray-800 hover:text-gray-200'"
+                    class="flex-1 py-2.5 px-4 rounded-xl border text-xs flex items-center justify-center space-x-2 transition">
+              <i class="fa-solid fa-lightbulb text-cyan-400"></i>
+              <span>Proponer una Mejora / Idea</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-gray-300 mb-1.5">Título del reporte *</label>
+              <input type="text" x-model="feedbackNuevoTitulo"
+                     :placeholder="feedbackNuevoTipo === 'fallo' ? 'Ej: Error al reproducir audio en videoclase' : 'Ej: Añadir temporizador Pomodoro para tests'"
+                     class="w-full bg-gray-900/90 text-gray-100 text-xs px-3.5 py-2.5 rounded-xl border border-gray-700 focus:outline-none focus:border-amber-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 mb-1.5">Materia / Módulo (Opcional)</label>
+              <select x-model="feedbackNuevoAsig" class="w-full bg-gray-900/90 text-gray-200 text-xs px-3 py-2.5 rounded-xl border border-gray-700 focus:outline-none focus:border-amber-500">
+                <option value="">General / Todo el Hub</option>
+                <template x-for="item in catalogoTotal" :key="item.nombre">
+                  <option :value="item.nombre" x-text="item.nombre"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1.5">Descripción detallada *</label>
+            <textarea x-model="feedbackNuevoDesc" rows="3"
+                      :placeholder="feedbackNuevoTipo === 'fallo' ? 'Explica qué ocurrió, qué botón pulsaste o qué esperabas...' : 'Describe cómo te imaginas esta nueva función o cambio...'"
+                      class="w-full bg-gray-900/90 text-gray-100 text-xs p-3 rounded-xl border border-gray-700 focus:outline-none focus:border-amber-500 leading-relaxed"></textarea>
+          </div>
+
+          <!-- Mensajes de feedback -->
+          <div x-show="feedbackMensajeExito" x-transition class="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center space-x-2">
+            <i class="fa-solid fa-circle-check text-emerald-400"></i>
+            <span x-text="feedbackMensajeExito"></span>
+          </div>
+          <div x-show="feedbackMensajeError" x-transition class="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center space-x-2">
+            <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+            <span x-text="feedbackMensajeError"></span>
+          </div>
+
+          <div class="flex justify-end pt-1">
+            <button @click="enviarFeedback()" :disabled="feedbackEnviando"
+                    class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs font-bold flex items-center space-x-2 shadow-lg shadow-amber-500/20 transition disabled:opacity-50">
+              <i class="fa-solid fa-paper-plane" :class="feedbackEnviando ? 'fa-bounce' : ''"></i>
+              <span x-text="feedbackEnviando ? 'Enviando reporte...' : 'Publicar en el Buzón'"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- BARRA DE FILTROS Y RESUMEN -->
+        <div class="glass p-4 rounded-2xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
+          <!-- Filtros de Tipo -->
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="text-gray-400 font-semibold mr-1">Tipo:</span>
+            <button @click="feedbackFiltroTipo = 'todos'"
+                    :class="feedbackFiltroTipo === 'todos' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 font-bold' : 'text-gray-400 hover:text-gray-200 border-transparent'"
+                    class="px-3 py-1.5 rounded-lg border transition">Todos</button>
+            <button @click="feedbackFiltroTipo = 'fallo'"
+                    :class="feedbackFiltroTipo === 'fallo' ? 'bg-rose-500/20 text-rose-300 border-rose-500/30 font-bold' : 'text-gray-400 hover:text-gray-200 border-transparent'"
+                    class="px-3 py-1.5 rounded-lg border transition flex items-center space-x-1.5">
+              <i class="fa-solid fa-bug text-rose-400 text-[10px]"></i>
+              <span>Fallos</span>
+            </button>
+            <button @click="feedbackFiltroTipo = 'mejora'"
+                    :class="feedbackFiltroTipo === 'mejora' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30 font-bold' : 'text-gray-400 hover:text-gray-200 border-transparent'"
+                    class="px-3 py-1.5 rounded-lg border transition flex items-center space-x-1.5">
+              <i class="fa-solid fa-lightbulb text-cyan-400 text-[10px]"></i>
+              <span>Mejoras</span>
+            </button>
+          </div>
+
+          <!-- Filtros de Estado -->
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="text-gray-400 font-semibold mr-1">Estado:</span>
+            <select x-model="feedbackFiltroEstado" class="bg-gray-900 text-gray-200 text-xs px-3 py-1.5 rounded-lg border border-gray-700 outline-none focus:border-amber-500">
+              <option value="todos">Todos los estados</option>
+              <option value="pendiente">🟡 Pendientes</option>
+              <option value="en_proceso">🔵 En Proceso</option>
+              <option value="resuelto">🟢 Resueltos</option>
+              <option value="descartado">⚪ Descartados</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- LISTA DE REPORTES -->
+        <div class="space-y-4">
+          <template x-for="rep in feedbackFiltrado()" :key="rep.id">
+            <div class="glass p-5 rounded-2xl border transition hover:border-gray-700 space-y-3.5"
+                 :class="rep.tipo === 'fallo' ? 'border-rose-500/20 bg-rose-500/[0.02]' : 'border-cyan-500/20 bg-cyan-500/[0.02]'">
+              <!-- HEADER DE LA TARJETA -->
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center space-x-2">
+                  <!-- Badge Tipo -->
+                  <span x-show="rep.tipo === 'fallo'" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center space-x-1">
+                    <i class="fa-solid fa-bug text-[9px]"></i>
+                    <span>Fallo Técnico</span>
+                  </span>
+                  <span x-show="rep.tipo === 'mejora'" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center space-x-1">
+                    <i class="fa-solid fa-lightbulb text-[9px]"></i>
+                    <span>Propuesta de Mejora</span>
+                  </span>
+
+                  <!-- Badge Estado -->
+                  <span x-show="rep.estado === 'pendiente'" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                    <i class="fa-solid fa-clock text-[9px]"></i>
+                    <span>Pendiente de revisión</span>
+                  </span>
+                  <span x-show="rep.estado === 'en_proceso'" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center space-x-1">
+                    <i class="fa-solid fa-spinner fa-spin text-[9px]"></i>
+                    <span>En desarrollo</span>
+                  </span>
+                  <span x-show="rep.estado === 'resuelto'" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
+                    <i class="fa-solid fa-check text-[9px]"></i>
+                    <span>Resuelto</span>
+                  </span>
+                  <span x-show="rep.estado === 'descartado'" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-700/50 text-gray-400 border border-gray-600/50 flex items-center space-x-1">
+                    <i class="fa-solid fa-xmark text-[9px]"></i>
+                    <span>Descartado</span>
+                  </span>
+
+                  <!-- Asignatura opcional -->
+                  <span x-show="rep.asignatura" class="px-2 py-0.5 rounded-full text-[10px] bg-gray-800 text-gray-300 border border-gray-700" x-text="rep.asignatura"></span>
+                </div>
+
+                <!-- Autor y Fecha -->
+                <div class="text-[11px] text-gray-400 flex items-center space-x-2">
+                  <span>Por <strong class="text-gray-200" x-text="rep.nombre || rep.username"></strong></span>
+                  <span>•</span>
+                  <span x-text="rep.creado_en"></span>
+                </div>
+              </div>
+
+              <!-- CONTENIDO -->
+              <div>
+                <h4 class="font-bold text-white text-sm" x-text="rep.titulo"></h4>
+                <p class="text-xs text-gray-300 mt-1.5 leading-relaxed whitespace-pre-line" x-text="rep.descripcion"></p>
+              </div>
+
+              <!-- RESPUESTA OFICIAL DE ALEX / ADMIN -->
+              <div x-show="rep.respuesta_admin" class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-1">
+                <div class="flex items-center space-x-2 text-[11px] font-bold text-amber-300">
+                  <i class="fa-solid fa-shield-halved text-amber-400"></i>
+                  <span>Respuesta Oficial de la Administración:</span>
+                </div>
+                <p class="text-xs text-amber-100/90 leading-relaxed whitespace-pre-line" x-text="rep.respuesta_admin"></p>
+              </div>
+
+              <!-- ACCIONES DE ADMINISTRADOR (SOLO ALEX / ADMIN) -->
+              <div x-show="usuarioActual?.es_admin" class="pt-2 border-t border-gray-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                  <span class="text-gray-400 text-[11px] font-semibold mr-1">Cambiar Estado:</span>
+                  <button @click="adminCambiarEstadoFeedback(rep.id, 'pendiente')"
+                          class="px-2 py-1 rounded-md text-[10px] font-semibold transition"
+                          :class="rep.estado === 'pendiente' ? 'bg-amber-500 text-black font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'">Pendiente</button>
+                  <button @click="adminCambiarEstadoFeedback(rep.id, 'en_proceso')"
+                          class="px-2 py-1 rounded-md text-[10px] font-semibold transition"
+                          :class="rep.estado === 'en_proceso' ? 'bg-cyan-500 text-black font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'">En Proceso</button>
+                  <button @click="adminCambiarEstadoFeedback(rep.id, 'resuelto')"
+                          class="px-2 py-1 rounded-md text-[10px] font-semibold transition"
+                          :class="rep.estado === 'resuelto' ? 'bg-emerald-500 text-black font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'">Resuelto</button>
+                  <button @click="adminCambiarEstadoFeedback(rep.id, 'descartado')"
+                          class="px-2 py-1 rounded-md text-[10px] font-semibold transition"
+                          :class="rep.estado === 'descartado' ? 'bg-gray-600 text-white font-bold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'">Descartado</button>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                  <button @click="feedbackEditandoRespId = (feedbackEditandoRespId === rep.id ? null : rep.id); feedbackTextoRespTemp = rep.respuesta_admin || ''"
+                          class="px-2.5 py-1 rounded-md bg-gray-800 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-gray-700 text-[11px] font-medium flex items-center space-x-1 transition">
+                    <i class="fa-solid fa-reply text-[10px]"></i>
+                    <span x-text="rep.respuesta_admin ? 'Editar respuesta' : 'Responder'"></span>
+                  </button>
+                  <button @click="adminEliminarFeedback(rep.id)"
+                          class="px-2 py-1 rounded-md bg-gray-800 hover:bg-rose-500/20 text-gray-400 hover:text-rose-400 border border-gray-700 text-[11px] transition" title="Eliminar reporte">
+                    <i class="fa-solid fa-trash text-[10px]"></i>
+                  </button>
+                </div>
+
+                <!-- Input para redactar respuesta admin -->
+                <div x-show="feedbackEditandoRespId === rep.id" x-transition class="w-full mt-2 pt-2 border-t border-gray-800 space-y-2">
+                  <label class="block text-[11px] font-bold text-amber-300">Respuesta oficial del Administrador:</label>
+                  <textarea x-model="feedbackTextoRespTemp" rows="2" placeholder="Escribe tu respuesta para el estudiante..."
+                            class="w-full bg-gray-900 text-gray-200 text-xs p-2.5 rounded-xl border border-amber-500/40 focus:outline-none focus:border-amber-400"></textarea>
+                  <div class="flex justify-end space-x-2">
+                    <button @click="feedbackEditandoRespId = null" class="px-3 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-gray-200 text-xs">Cancelar</button>
+                    <button @click="adminGuardarRespuestaFeedback(rep.id, rep.estado)"
+                            class="px-3.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center space-x-1">
+                      <i class="fa-solid fa-check text-[10px]"></i>
+                      <span>Guardar Respuesta</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="feedbackFiltrado().length === 0" class="text-center py-16 text-gray-500 text-xs glass rounded-2xl border border-gray-800">
+            <i class="fa-solid fa-clipboard-check text-3xl mb-3 opacity-30 text-amber-400"></i>
+            <p class="text-sm font-semibold text-gray-400">No hay reportes ni propuestas en esta categoría.</p>
+            <p class="text-xs text-gray-500 mt-1">¡Sé el primero en proponer una idea o reportar cualquier detalle!</p>
           </div>
         </div>
       </div>
@@ -3980,6 +4299,34 @@ def dashboard_html():
         nuevaCardCantidad: 4,
         generandoFlashcards: false,
 
+        // Buzón de Incidencias y Mejoras
+        feedbackLista: [],
+        feedbackCargando: false,
+        feedbackPendientesCount: 0,
+        feedbackFiltroTipo: 'todos',
+        feedbackFiltroEstado: 'todos',
+        feedbackNuevoTipo: 'fallo',
+        feedbackNuevoAsig: '',
+        feedbackNuevoTitulo: '',
+        feedbackNuevoDesc: '',
+        feedbackEnviando: false,
+        feedbackMensajeExito: '',
+        feedbackMensajeError: '',
+        feedbackEditandoRespId: null,
+        feedbackTextoRespTemp: '',
+
+        feedbackFiltrado() {
+          return (this.feedbackLista || []).filter(item => {
+            if (this.feedbackFiltroTipo !== 'todos' && item.tipo !== this.feedbackFiltroTipo) {
+              return false;
+            }
+            if (this.feedbackFiltroEstado !== 'todos' && item.estado !== this.feedbackFiltroEstado) {
+              return false;
+            }
+            return true;
+          });
+        },
+
         get programaActual() {
           return this.programas.find(p => p.id === this.programaActivoId) || this.programas[0];
         },
@@ -4059,6 +4406,7 @@ def dashboard_html():
           await this.cargarVideoclases();
           await this.cargarAgenda();
           await this.cargarFlashcards();
+          await this.cargarFeedback();
           await this.cargarModelosIa();
           await this.cargarUsuarioActual();
           this.actualizarMensajeBienvenidaChat();
@@ -4337,6 +4685,7 @@ def dashboard_html():
             agenda: 'Agenda & PACs',
             flashcards: 'Flashcards',
             progreso: 'Calificaciones',
+            feedback: 'Buzón y Mejoras',
             admin: 'Panel Admin'
           };
           const iconos = {
@@ -4347,12 +4696,17 @@ def dashboard_html():
             agenda: 'fa-calendar-check',
             flashcards: 'fa-clone',
             progreso: 'fa-trophy',
+            feedback: 'fa-bullhorn',
             admin: 'fa-shield-halved'
           };
           this.tab = sec;
           this.asigSeleccionada = null;
           if (sec === 'admin') {
             this.cargarAdminUsuarios();
+            this.cargarFeedback();
+          }
+          if (sec === 'feedback') {
+            this.cargarFeedback();
           }
           this.abrirOPestana({
             id: 'sec-' + sec,
@@ -4424,6 +4778,106 @@ def dashboard_html():
               alert('No se pudo eliminar el usuario');
             }
           } catch(e) { alert('Error de conexión'); }
+        },
+
+        // --- MÉTODOS DE BUZÓN Y GESTIÓN DE INCIDENCIAS ---
+
+        async cargarFeedback() {
+          this.feedbackCargando = true;
+          try {
+            const res = await fetch('/api/feedback');
+            if (res.ok) {
+              const data = await res.json();
+              this.feedbackLista = data.reportes || [];
+              this.feedbackPendientesCount = data.pendientes || 0;
+            }
+          } catch(e) {
+            console.error('Error al cargar feedback', e);
+          } finally {
+            this.feedbackCargando = false;
+          }
+        },
+
+        async enviarFeedback() {
+          if (!this.feedbackNuevoTitulo.trim() || !this.feedbackNuevoDesc.trim()) {
+            this.feedbackMensajeError = 'Por favor completa el título y la descripción del reporte.';
+            return;
+          }
+          this.feedbackEnviando = true;
+          this.feedbackMensajeError = '';
+          this.feedbackMensajeExito = '';
+          try {
+            const res = await fetch('/api/feedback', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipo: this.feedbackNuevoTipo,
+                asignatura: this.feedbackNuevoAsig,
+                titulo: this.feedbackNuevoTitulo,
+                descripcion: this.feedbackNuevoDesc
+              })
+            });
+            if (res.ok) {
+              this.feedbackNuevoTitulo = '';
+              this.feedbackNuevoDesc = '';
+              this.feedbackNuevoAsig = '';
+              this.feedbackMensajeExito = '¡Gracias! Tu reporte o sugerencia se ha registrado con éxito en el buzón.';
+              await this.cargarFeedback();
+              setTimeout(() => { this.feedbackMensajeExito = ''; }, 6000);
+            } else {
+              const err = await res.json();
+              this.feedbackMensajeError = err.detail || 'Error al enviar el reporte.';
+            }
+          } catch(e) {
+            this.feedbackMensajeError = 'Error de conexión con el servidor.';
+          } finally {
+            this.feedbackEnviando = false;
+          }
+        },
+
+        async adminCambiarEstadoFeedback(reporteId, nuevoEstado, respuesta = null) {
+          try {
+            const payload = {
+              feedback_id: reporteId,
+              estado: nuevoEstado
+            };
+            if (respuesta !== null) {
+              payload.respuesta_admin = respuesta;
+            }
+            const res = await fetch('/api/admin/feedback/estado', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              await this.cargarFeedback();
+            } else {
+              alert('Error al actualizar el reporte.');
+            }
+          } catch(e) {
+            alert('Error de conexión');
+          }
+        },
+
+        async adminGuardarRespuestaFeedback(reporteId, estadoActual) {
+          if (this.feedbackTextoRespTemp === null) return;
+          await this.adminCambiarEstadoFeedback(reporteId, estadoActual, this.feedbackTextoRespTemp);
+          this.feedbackEditandoRespId = null;
+          this.feedbackTextoRespTemp = '';
+        },
+
+        async adminEliminarFeedback(reporteId) {
+          if (!confirm('¿Seguro que deseas eliminar este reporte de incidencia o propuesta?')) return;
+          try {
+            const res = await fetch(`/api/admin/feedback/${reporteId}`, { method: 'DELETE' });
+            if (res.ok) {
+              await this.cargarFeedback();
+            } else {
+              alert('No se pudo eliminar el reporte.');
+            }
+          } catch(e) {
+            alert('Error de conexión');
+          }
         },
 
         async cerrarSesionUsuario() {
