@@ -143,6 +143,13 @@ def _obtener_user_key_o_exigir(request: Request, key_override: Optional[str] = N
 
 # --- API ENDPOINTS ---
 
+@app.get("/ping")
+@app.get("/health")
+def api_health_check():
+    """Endpoint público y ultraligero para monitorización y pinger keep-alive 24/7."""
+    return {"status": "ok", "app": "unir-study-hub", "uptime": "active"}
+
+
 @app.post("/api/auth/login")
 def api_auth_login(req: LoginRequest, request: Request, response: Response):
     ip = _obtener_ip_cliente(request)
