@@ -242,6 +242,7 @@ class LLMClient:
     def _obtener_lista_modelos(self, modelo_preferido: Optional[str] = None) -> List[str]:
         """Devuelve la cadena de modelos gratuitos priorizando el elegido y los que tienen cuota activa."""
         candidatos_base = [
+            "gemini-3.8-flash",
             "gemini-3-flash-preview",
             "gemini-3.5-flash-lite",
             "gemini-flash-lite-latest",
@@ -249,7 +250,6 @@ class LLMClient:
             "gemma-4-31b-it",
             self.model_name,
             "gemini-3.5-flash",
-            "gemini-3.8-flash",
             "gemini-3.1-flash-lite",
             "gemini-3.7-flash",
         ]

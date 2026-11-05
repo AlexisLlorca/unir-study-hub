@@ -1376,8 +1376,24 @@ def api_validar_gemini_key(req: dict):
     try:
         from google import genai
         c = genai.Client(api_key=key)
-        r = c.models.generate_content(model="gemini-2.5-flash", contents="hola")
-        return {"valida": True, "mensaje": "Clave de Gemini verificada y operativa."}
+        # Probar con los modelos admitidos oficialmente para cuentas nuevas
+        modelos_test = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3-flash-preview"]
+        ultimo_error = None
+        for mod in modelos_test:
+            try:
+                r = c.models.generate_content(model=mod, contents="hola")
+                if r and r.text:
+                    return {"valida": True, "mensaje": "Clave de Gemini verificada y operativa."}
+            except Exception as e:
+                ultimo_error = e
+                err_str = str(e)
+                if "API_KEY_INVALID" in err_str or "API key not valid" in err_str:
+                    return {"valida": False, "error": "La clave de API no es válida o está mal copiada."}
+                continue
+
+        if ultimo_error:
+            return {"valida": False, "error": str(ultimo_error)}
+        return {"valida": False, "error": "No se pudo validar con los modelos disponibles."}
     except Exception as e:
         return {"valida": False, "error": str(e)}
 
