@@ -141,7 +141,14 @@ class GestorFlashcards:
                     return t
         return {}
 
-    def generar_flashcards_con_ia(self, texto_tema: str, asignatura: str, programa_id: str = "dam", cantidad: int = 4) -> List[Dict[str, Any]]:
+    def generar_flashcards_con_ia(
+        self,
+        texto_tema: str,
+        asignatura: str,
+        programa_id: str = "dam",
+        cantidad: int = 4,
+        api_key_override: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Genera tarjetas de estudio a partir del texto de un tema mediante Gemini."""
         tutor = TutorIA()
         cuerpo = f"Tema o concepto clave a reforzar: '{texto_tema}' de la asignatura '{asignatura}'." if len(texto_tema.strip()) < 150 else f"A partir del siguiente contenido académico de '{asignatura}':\n\n{texto_tema[:20000]}"
@@ -168,6 +175,7 @@ class GestorFlashcards:
                 prompt,
                 temperatura=0.3,
                 response_mime_type="application/json",
+                api_key_override=api_key_override,
             )
             if resp:
                 limpio = resp.strip()

@@ -158,9 +158,9 @@ _SUFIJOS_NUBE_PERMITIDOS = (
 
 _INTENTOS_FALLIDOS: Dict[str, List[float]] = {}
 _BLOQUEOS_HASTA: Dict[str, float] = {}
-MAX_INTENTOS_FALLIDOS = 5
+MAX_INTENTOS_FALLIDOS = 15
 VENTANA_INTENTOS_SEG = 60
-DURACION_BLOQUEO_SEG = 900  # 15 minutos
+DURACION_BLOQUEO_SEG = 300  # 5 minutos (evita bloqueos accidentales a estudiantes)
 
 
 def _aplicar_cabeceras_seguridad(response: Response) -> Response:
@@ -317,6 +317,22 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
         </div>
       </div>
 
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-xs font-medium text-gray-300">Clave API de Gemini (Google AI Studio) <span class="text-rose-400">*</span></label>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-[11px] text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-1">
+            <span>Obtener gratis</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+          </a>
+        </div>
+        <div class="relative">
+          <i class="fa-solid fa-key absolute left-3.5 top-3.5 text-gray-500 text-xs"></i>
+          <input id="regApiKey" type="password" required placeholder="AIzaSy..." autocomplete="off"
+                 class="w-full bg-gray-900/80 border border-gray-800 rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition font-mono">
+        </div>
+        <p class="text-[10px] text-gray-400 mt-1">Obligatoria para estudiantes (BYOK). Tu cuota personal de Google es gratuita y te da generaciones ilimitadas.</p>
+      </div>
+
       <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-300/90 leading-relaxed">
         <i class="fa-solid fa-shield-halved mr-1 text-amber-400"></i>
         <strong>Aprobación manual:</strong> Tu cuenta quedará registrada y el administrador la activará para permitirte el acceso.
@@ -394,6 +410,9 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
+          if (data.usuario && data.usuario.gemini_api_key) {
+            try { localStorage.setItem('unir_user_gemini_key', data.usuario.gemini_api_key); } catch(e) {}
+          }
           mostrarAlerta('ok', 'Acceso correcto. Entrando al Hub...');
           setTimeout(() => { window.location.href = '/'; }, 600);
         } else {
@@ -414,21 +433,47 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
       ocultarAlerta();
       const btn = document.getElementById('btnRegSubmit');
       btn.disabled = true;
-      btn.innerText = 'Registrando...';
 
       const nombre = document.getElementById('regNombre').value.trim();
       const username = document.getElementById('regUsuario').value.trim();
       const password = document.getElementById('regPassword').value.trim();
+      const apiKey = (document.getElementById('regApiKey').value || '').trim();
 
+      if (!apiKey) {
+        mostrarAlerta('error', 'Es obligatorio proporcionar tu clave gratuita de Google AI Studio (Gemini).');
+        btn.disabled = false;
+        return;
+      }
+
+      btn.innerText = 'Validando clave Gemini...';
+      try {
+        const valRes = await fetch('/api/validar-gemini-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey })
+        });
+        const valData = await valRes.json();
+        if (!valData.valida) {
+          mostrarAlerta('error', 'La clave de Gemini no es válida: ' + (valData.error || 'Verifica la clave copiada en Google AI Studio.'));
+          btn.disabled = false;
+          btn.innerText = 'Solicitar Cuenta';
+          return;
+        }
+      } catch (err) {
+        // Si hay error puntual de validación de red, continuar
+      }
+
+      btn.innerText = 'Registrando...';
       try {
         const res = await fetch('/api/auth/registro', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, username, password })
+          body: JSON.stringify({ nombre, username, password, api_key: apiKey })
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-          mostrarAlerta('info', '¡Cuenta creada! El administrador revisará y activará tu cuenta.');
+          try { localStorage.setItem('unir_user_gemini_key', apiKey); } catch(e) {}
+          mostrarAlerta('info', '¡Cuenta creada con éxito! El administrador revisará y activará tu cuenta.');
           document.getElementById('formRegistro').reset();
           setTimeout(() => { mostrarTab('login'); }, 4000);
         } else {
@@ -506,7 +551,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         es_nube_o_proxy = bool(request.headers.get("x-forwarded-for")) or any(
             host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS
         )
-        if request.url.path in ("/ping", "/health", "/logout") or request.url.path.startswith("/api/auth/"):
+        if request.url.path in ("/ping", "/health", "/logout", "/api/validar-gemini-key") or request.url.path.startswith("/api/auth/"):
             resp = await call_next(request)
             return _aplicar_cabeceras_seguridad(resp)
 

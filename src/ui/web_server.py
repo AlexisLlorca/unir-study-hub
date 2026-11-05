@@ -53,6 +53,7 @@ from src.core.auth import (
     inicializar_bd_usuarios,
     autenticar_usuario,
     registrar_usuario,
+    actualizar_api_key_usuario,
     crear_sesion,
     eliminar_sesion,
     listar_usuarios,
@@ -99,6 +100,7 @@ class RegistroRequest(BaseModel):
     nombre: str
     username: str
     password: str
+    api_key: Optional[str] = None
 
 class CambiarEstadoRequest(BaseModel):
     user_id: int
@@ -108,10 +110,35 @@ class CambiarRolRequest(BaseModel):
     user_id: int
     rol: str
 
+class ActualizarKeyRequest(BaseModel):
+    api_key: str
+
 def _verificar_es_admin(request: Request):
     u = getattr(request.state, "usuario", None)
     if not u or u.get("rol") != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado: se requieren permisos de administrador.")
+
+def _obtener_user_key_o_exigir(request: Request, key_override: Optional[str] = None) -> Optional[str]:
+    """
+    Obtiene la clave de Gemini del usuario:
+    1. Si se pasa en key_override (payload JSON)
+    2. Si se pasa en cabecera 'x-user-gemini-key'
+    3. Si está en el perfil de sesión del usuario (request.state.usuario)
+    
+    Si el usuario no es admin y no dispone de clave propia:
+    Lanza HTTPException(400) exigiendo BYOK para proteger la cuota personal del administrador.
+    
+    Si el usuario es admin y no proporciona clave, retorna None (usa la clave del servidor).
+    """
+    u = getattr(request.state, "usuario", None) or {}
+    es_admin = u.get("rol") == "admin"
+    user_key = (key_override or request.headers.get("x-user-gemini-key") or u.get("gemini_api_key") or "").strip() or None
+    if not es_admin and not user_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Es obligatorio configurar tu propia clave gratuita de Gemini (BYOK). Pulsa en 'Mi Key' arriba para introducir tu clave de Google AI Studio.",
+        )
+    return user_key
 
 
 # --- API ENDPOINTS ---
@@ -147,10 +174,25 @@ def api_auth_login(req: LoginRequest, request: Request, response: Response):
 
 @app.post("/api/auth/registro")
 def api_auth_registro(req: RegistroRequest):
-    ok, msg = registrar_usuario(req.username, req.nombre, req.password, rol="estudiante", activo=0)
+    key = (req.api_key or "").strip()
+    if not key:
+        raise HTTPException(
+            status_code=400,
+            detail="Es obligatorio indicar tu clave gratuita de Google AI Studio (Gemini) para crear una cuenta de estudiante.",
+        )
+    ok, msg = registrar_usuario(req.username, req.nombre, req.password, rol="estudiante", activo=0, gemini_api_key=key)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"status": "ok", "message": "Cuenta registrada con éxito. Pendiente de activación por el administrador."}
+
+
+@app.post("/api/usuario/guardar-key")
+def api_usuario_guardar_key(req: ActualizarKeyRequest, request: Request):
+    u = getattr(request.state, "usuario", None)
+    if not u or not u.get("username"):
+        raise HTTPException(status_code=401, detail="No autenticado")
+    actualizar_api_key_usuario(u["username"], req.api_key)
+    return {"status": "ok"}
 
 
 @app.post("/api/auth/logout")
@@ -184,7 +226,8 @@ def api_usuario_actual(request: Request):
         "nombre": u.get("nombre"),
         "rol": u.get("rol"),
         "activo": u.get("activo"),
-        "es_admin": u.get("rol") == "admin"
+        "es_admin": u.get("rol") == "admin",
+        "gemini_api_key": u.get("gemini_api_key", ""),
     }
 
 
@@ -501,7 +544,7 @@ def _buscar_transcripcion_relevante(dir_trans: Path, nombre_tema: str) -> Option
 @app.post("/api/generar-guia")
 def api_generar_guia(req: GenerarGuiaRequest, request: Request):
     """Genera una guía de estudio y/o test interactivo con IA desde la web."""
-    user_key = (req.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
+    user_key = _obtener_user_key_o_exigir(request, req.api_key)
     asig_limpia = nombre_seguro(req.asignatura, "asignatura")
     ruta_pdf = None
     if req.archivo_pdf:
@@ -1038,11 +1081,13 @@ class ResumenClaseRequest(BaseModel):
     asignatura: str
     nombre_archivo: str
     forzar: Optional[bool] = False
+    api_key: Optional[str] = None
 
 
 @app.post("/api/resumen-clase")
-def api_resumen_clase(req: ResumenClaseRequest):
+def api_resumen_clase(req: ResumenClaseRequest, request: Request):
     """Genera o recupera de caché un informe exhaustivo de una videoclase oficial."""
+    user_key = _obtener_user_key_o_exigir(request, req.api_key)
     from src.core.config import RESUMENES_CLASES_DIR
     asig_limpia = nombre_seguro(req.asignatura, "asignatura")
     stem = nombre_seguro(
@@ -1089,7 +1134,8 @@ def api_resumen_clase(req: ResumenClaseRequest):
     resumen = tutor_ia.generar_resumen_clase_magistral(
         texto_transcripcion=texto_transcripcion,
         asignatura=req.asignatura,
-        nombre_clase=nombre_clase
+        nombre_clase=nombre_clase,
+        api_key_override=user_key,
     )
 
     if not resumen:
@@ -1145,17 +1191,20 @@ class GenerarCardsReq(BaseModel):
     programa: str
     texto: str
     cantidad: Optional[int] = 4
+    api_key: Optional[str] = None
 
 
 @app.post("/api/flashcards/generar")
-def api_generar_flashcards(req: GenerarCardsReq):
+def api_generar_flashcards(req: GenerarCardsReq, request: Request):
+    user_key = _obtener_user_key_o_exigir(request, req.api_key)
     from src.ai.flashcards import GestorFlashcards
     gestor = GestorFlashcards()
     nuevas = gestor.generar_flashcards_con_ia(
         texto_tema=req.texto,
         asignatura=req.asignatura,
         programa_id=req.programa,
-        cantidad=req.cantidad or 4
+        cantidad=req.cantidad or 4,
+        api_key_override=user_key,
     )
     return {"status": "ok", "creadas": len(nuevas), "tarjetas": nuevas}
 
@@ -1401,7 +1450,7 @@ def api_validar_gemini_key(req: dict):
 @app.post("/api/chat")
 def api_chat(msg: ChatMessage, request: Request):
     """Responde preguntas mediante NOVA con rol especializado, memoria multi-turno e inyección RAG completa."""
-    user_key = (msg.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
+    user_key = _obtener_user_key_o_exigir(request, msg.api_key)
     usuario_req = getattr(request.state, "usuario", {}) or {}
     nombre_user = usuario_req.get("nombre") or usuario_req.get("username") or "estudiante"
     system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg, nombre_user)
@@ -1432,7 +1481,7 @@ def api_chat(msg: ChatMessage, request: Request):
 @app.post("/api/chat-stream")
 def api_chat_stream(msg: ChatMessage, request: Request):
     """Emite la respuesta de NOVA en tiempo real mediante Server-Sent Events (SSE)."""
-    user_key = (msg.api_key or request.headers.get("x-user-gemini-key") or "").strip() or None
+    user_key = _obtener_user_key_o_exigir(request, msg.api_key)
     usuario_req = getattr(request.state, "usuario", {}) or {}
     nombre_user = usuario_req.get("nombre") or usuario_req.get("username") or "estudiante"
     system_instruction_completo, mensajes_chat, mensaje_actual_con_contexto = _preparar_contexto_chat(msg, nombre_user)
@@ -2977,6 +3026,9 @@ def dashboard_html():
                       <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
                             :class="u.rol === 'admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'"
                             x-text="u.rol"></span>
+                      <span x-show="u.tiene_key" class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" title="Tiene su propia API Key configurada">
+                        <i class="fa-solid fa-key text-[8px]"></i> BYOK
+                      </span>
                     </td>
                     <td class="py-3 px-4">
                       <span x-show="u.activo === 1" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -4071,6 +4123,13 @@ def dashboard_html():
           if (!keyLimpia) {
             this.userGeminiKey = '';
             try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
+            try {
+              fetch('/api/usuario/guardar-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: '' })
+              });
+            } catch(e) {}
             this.modalApiKey = false;
             return;
           }
@@ -4089,7 +4148,15 @@ def dashboard_html():
             if (data.valida) {
               this.userGeminiKey = keyLimpia;
               try { localStorage.setItem('unir_user_gemini_key', keyLimpia); } catch(e) {}
-              this.apiKeyMensajeExito = '¡Clave de Gemini verificada y guardada en tu navegador!';
+              // Respaldar también en la base de datos de su cuenta
+              try {
+                fetch('/api/usuario/guardar-key', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ api_key: keyLimpia })
+                });
+              } catch(e) {}
+              this.apiKeyMensajeExito = '¡Clave de Gemini verificada y guardada en tu cuenta!';
               setTimeout(() => { this.modalApiKey = false; }, 1200);
             } else {
               this.apiKeyMensajeError = data.error || 'La clave no es válida.';
@@ -4105,6 +4172,13 @@ def dashboard_html():
           this.userGeminiKey = '';
           this.inputApiKeyTemp = '';
           try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
+          try {
+            fetch('/api/usuario/guardar-key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ api_key: '' })
+            });
+          } catch(e) {}
           this.modalApiKey = false;
         },
 
@@ -4288,8 +4362,17 @@ def dashboard_html():
             const res = await fetch('/api/usuario/actual');
             const data = await res.json();
             this.usuarioActual = data;
+            if (this.usuarioActual?.gemini_api_key && !this.userGeminiKey) {
+              this.userGeminiKey = this.usuarioActual.gemini_api_key;
+              try { localStorage.setItem('unir_user_gemini_key', this.userGeminiKey); } catch(e) {}
+            }
             if (this.usuarioActual && this.usuarioActual.es_admin) {
               await this.cargarAdminUsuarios();
+            } else if (this.usuarioActual?.autenticado && !this.usuarioActual.es_admin && !this.userGeminiKey) {
+              // Estudiante sin API key: abrir modal obligatoriamente
+              setTimeout(() => {
+                this.abrirModalApiKey();
+              }, 700);
             }
           } catch(e) { console.error('Error al cargar usuario actual', e); }
         },
@@ -4519,6 +4602,10 @@ def dashboard_html():
         },
 
         async abrirResumenClase(clase) {
+          if (!clase.has_resumen && !this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+            this.abrirModalApiKey();
+            return;
+          }
           this.resumenClaseActual = clase;
           this.modalResumenClase = true;
           this.cargandoResumenClase = true;
@@ -4527,10 +4614,14 @@ def dashboard_html():
           try {
             const res = await fetch('/api/resumen-clase', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
               body: JSON.stringify({
                 asignatura: clase.asignatura,
-                nombre_archivo: clase.nombre_archivo
+                nombre_archivo: clase.nombre_archivo,
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -4551,16 +4642,25 @@ def dashboard_html():
 
         async regenerarResumenClase() {
           if (!this.resumenClaseActual || this.cargandoResumenClase) return;
+          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+            this.modalResumenClase = false;
+            this.abrirModalApiKey();
+            return;
+          }
           this.cargandoResumenClase = true;
           this.resumenClaseTexto = '';
           try {
             const res = await fetch('/api/resumen-clase', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
               body: JSON.stringify({
                 asignatura: this.resumenClaseActual.asignatura,
                 nombre_archivo: this.resumenClaseActual.nombre_archivo,
-                forzar: true
+                forzar: true,
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -4595,6 +4695,11 @@ def dashboard_html():
 
         async ejecutarGeneracionIa() {
           if (!this.asigSeleccionada || !this.generadorTemaNombre.trim()) return;
+          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+            this.modalGenerador = false;
+            this.abrirModalApiKey();
+            return;
+          }
           this.generandoIa = true;
           this.generandoIaPaso = 1;
           const timerPaso2 = setTimeout(() => { if (this.generandoIa) this.generandoIaPaso = 2; }, 3500);
@@ -5257,16 +5362,25 @@ def dashboard_html():
 
         async ejecutarGeneracionFlashcards() {
           if (!this.nuevaCardTema.trim() || this.generandoFlashcards) return;
+          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+            this.modalGenerarFlashcards = false;
+            this.abrirModalApiKey();
+            return;
+          }
           this.generandoFlashcards = true;
           try {
             const res = await fetch('/api/flashcards/generar', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
               body: JSON.stringify({
                 asignatura: this.nuevaCardAsig || (this.todasLasAsignaturasPrograma[0] || 'Acceso a Datos'),
                 programa: this.programaActivoId,
                 texto: this.nuevaCardTema.trim(),
-                cantidad: this.nuevaCardCantidad || 4
+                cantidad: this.nuevaCardCantidad || 4,
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -5538,6 +5652,10 @@ def dashboard_html():
 
         async enviarMensajeChat() {
           if (!this.chatInput.trim() || this.chatCargando) return;
+          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+            this.abrirModalApiKey();
+            return;
+          }
           const texto = this.chatInput.trim();
           const asigOrigen = this.chatAsignatura;
           const programaOrigen = this.programaActivoId;

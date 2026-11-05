@@ -34,9 +34,12 @@ def exportar_usuarios_a_json() -> None:
         with _obtener_conexion() as conn:
             cursor = conn.cursor()
             cursor.execute("PRAGMA wal_checkpoint(FULL);")
+            cursor.execute("PRAGMA table_info(usuarios);")
+            cols = [c[1] for c in cursor.fetchall()]
+            key_col = ", COALESCE(gemini_api_key, '') as gemini_api_key" if "gemini_api_key" in cols else ", '' as gemini_api_key"
             cursor.execute(
-                """
-                SELECT username, nombre, password_hash, salt, rol, activo, creado_en 
+                f"""
+                SELECT username, nombre, password_hash, salt, rol, activo, creado_en{key_col}
                 FROM usuarios
                 """
             )
@@ -70,16 +73,23 @@ def importar_usuarios_desde_json() -> None:
 
         with _obtener_conexion() as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(usuarios);")
+            cols = [c[1] for c in cursor.fetchall()]
+            if "gemini_api_key" not in cols:
+                cursor.execute("ALTER TABLE usuarios ADD COLUMN gemini_api_key TEXT DEFAULT '';")
+                conn.commit()
+
             for u in usuarios:
                 username = u.get("username", "").strip().lower()
                 if not username:
                     continue
-                cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
-                if not cursor.fetchone():
+                cursor.execute("SELECT id, gemini_api_key FROM usuarios WHERE username = ?", (username,))
+                row = cursor.fetchone()
+                if not row:
                     cursor.execute(
                         """
-                        INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en, gemini_api_key)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             username,
@@ -89,8 +99,12 @@ def importar_usuarios_desde_json() -> None:
                             u.get("rol", "estudiante"),
                             u.get("activo", 1),
                             u.get("creado_en", time.strftime("%Y-%m-%d %H:%M:%S")),
+                            u.get("gemini_api_key", ""),
                         ),
                     )
+                else:
+                    if u.get("gemini_api_key") and not row["gemini_api_key"]:
+                        cursor.execute("UPDATE usuarios SET gemini_api_key = ? WHERE id = ?", (u["gemini_api_key"], row["id"]))
             conn.commit()
             cursor.execute("PRAGMA wal_checkpoint(FULL);")
     except Exception:
@@ -129,7 +143,8 @@ def inicializar_bd_usuarios() -> None:
                 rol TEXT NOT NULL DEFAULT 'estudiante',
                 activo INTEGER NOT NULL DEFAULT 0,
                 creado_en TEXT NOT NULL,
-                ultimo_acceso TEXT
+                ultimo_acceso TEXT,
+                gemini_api_key TEXT DEFAULT ''
             )
             """
         )
@@ -144,6 +159,13 @@ def inicializar_bd_usuarios() -> None:
             """
         )
         conn.commit()
+
+        # Asegurar columna gemini_api_key si la tabla ya existía
+        cursor.execute("PRAGMA table_info(usuarios);")
+        cols = [c[1] for c in cursor.fetchall()]
+        if "gemini_api_key" not in cols:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN gemini_api_key TEXT DEFAULT '';")
+            conn.commit()
 
         # 1. Asegurar la cuenta de Administrador de Alex
         admin_user = (os.getenv("HUB_ADMIN_USER", "").strip() or "alexking44").lower()
@@ -229,7 +251,8 @@ def registrar_usuario(
     nombre: str,
     password: str,
     rol: str = "estudiante",
-    activo: int = 0
+    activo: int = 0,
+    gemini_api_key: str = "",
 ) -> Tuple[bool, str]:
     """
     Registra un nuevo usuario en la base de datos.
@@ -238,6 +261,7 @@ def registrar_usuario(
     username = (username or "").strip().lower()
     nombre = (nombre or "").strip()
     password = (password or "").strip()
+    gemini_api_key = (gemini_api_key or "").strip()
 
     if not username or not re.match(r"^[a-z0-9_.-]{3,30}$", username):
         return False, "El nombre de usuario debe tener entre 3 y 30 caracteres (solo letras, números, puntos y guiones)."
@@ -268,15 +292,33 @@ def registrar_usuario(
 
         cursor.execute(
             """
-            INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en, gemini_api_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (username, nombre, pwd_hash, salt, rol, activo, ahora),
+            (username, nombre, pwd_hash, salt, rol, activo, ahora, gemini_api_key),
         )
         conn.commit()
+        cursor.execute("PRAGMA wal_checkpoint(FULL);")
 
     _notificar_respaldo_nube()
     return True, "ok"
+
+
+def actualizar_api_key_usuario(username: str, api_key: str) -> bool:
+    """Actualiza la clave privada de Gemini (BYOK) para el usuario indicado y la respalda en la nube."""
+    username = (username or "").strip().lower()
+    api_key = (api_key or "").strip()
+    if not username:
+        return False
+
+    with _obtener_conexion() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE usuarios SET gemini_api_key = ? WHERE username = ?", (api_key, username))
+        conn.commit()
+        cursor.execute("PRAGMA wal_checkpoint(FULL);")
+
+    _notificar_respaldo_nube()
+    return True
 
 
 def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], str]:
@@ -299,13 +341,14 @@ def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], st
             "username": admin_user,
             "nombre": "Administrador",
             "rol": "admin",
-            "activo": 1
+            "activo": 1,
+            "gemini_api_key": ""
         }, "ok"
 
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, username, nombre, password_hash, salt, rol, activo FROM usuarios WHERE username = ?",
+            "SELECT id, username, nombre, password_hash, salt, rol, activo, COALESCE(gemini_api_key, '') as gemini_api_key FROM usuarios WHERE username = ?",
             (username,)
         )
         row = cursor.fetchone()
@@ -331,7 +374,8 @@ def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], st
             "username": row["username"],
             "nombre": row["nombre"],
             "rol": row["rol"],
-            "activo": row["activo"]
+            "activo": row["activo"],
+            "gemini_api_key": row["gemini_api_key"],
         }, "ok"
 
 
@@ -364,7 +408,7 @@ def obtener_usuario_por_sesion(token: Optional[str]) -> Optional[dict]:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT u.id, u.username, u.nombre, u.rol, u.activo
+            SELECT u.id, u.username, u.nombre, u.rol, u.activo, COALESCE(u.gemini_api_key, '') as gemini_api_key
             FROM sesiones s
             JOIN usuarios u ON s.username = u.username
             WHERE s.token = ? AND s.expira_en > ?
@@ -383,7 +427,8 @@ def obtener_usuario_por_sesion(token: Optional[str]) -> Optional[dict]:
             "username": row["username"],
             "nombre": row["nombre"],
             "rol": row["rol"],
-            "activo": row["activo"]
+            "activo": row["activo"],
+            "gemini_api_key": row["gemini_api_key"],
         }
 
 
@@ -405,7 +450,7 @@ def listar_usuarios() -> List[dict]:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, username, nombre, rol, activo, creado_en, ultimo_acceso
+            SELECT id, username, nombre, rol, activo, creado_en, ultimo_acceso, COALESCE(gemini_api_key, '') as gemini_api_key
             FROM usuarios
             ORDER BY creado_en DESC
             """
@@ -419,7 +464,8 @@ def listar_usuarios() -> List[dict]:
                 "rol": r["rol"],
                 "activo": r["activo"],
                 "creado_en": r["creado_en"],
-                "ultimo_acceso": r["ultimo_acceso"] or "Nunca"
+                "ultimo_acceso": r["ultimo_acceso"] or "Nunca",
+                "tiene_key": bool(r["gemini_api_key"]),
             }
             for r in filas
         ]

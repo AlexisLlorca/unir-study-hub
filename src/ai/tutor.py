@@ -107,7 +107,7 @@ class TutorIA:
                 self.historial.append({"rol": "Alumno", "texto": entrada})
                 self.historial.append({"rol": "NOVA", "texto": respuesta_acumulada})
 
-    def generar_resumen_avanzado(self, texto_tema: str, asignatura: str, tema: str) -> Optional[str]:
+    def generar_resumen_avanzado(self, texto_tema: str, asignatura: str, tema: str, api_key_override: Optional[str] = None) -> Optional[str]:
         """Solicita a la IA un resumen estructurado de alto rendimiento."""
         prompt = (
             f"Analiza el siguiente texto extraído del temario oficial de UNIR "
@@ -124,9 +124,9 @@ class TutorIA:
             "4. ## 💻 3. Código Vivo y Ejemplos de Implementación (código completo, compilable y con comentarios explicativos)\n"
             "5. ## ⚠️ 4. Trampas y Errores Habituales de Examen (preguntas capciosas típicas que suele poner UNIR)\n"
         )
-        return self.client.generar_contenido(prompt, temperatura=0.3)
+        return self.client.generar_contenido(prompt, temperatura=0.3, api_key_override=api_key_override)
 
-    def generar_ejercicios_practicos(self, texto_tema: str, asignatura: str, tema: str) -> Optional[str]:
+    def generar_ejercicios_practicos(self, texto_tema: str, asignatura: str, tema: str, api_key_override: Optional[str] = None) -> Optional[str]:
         """Genera un banco de ejercicios con soluciones paso a paso."""
         prompt = (
             f"A partir del siguiente temario de '{asignatura}' ({tema}) de UNIR:\n\n"
@@ -140,9 +140,9 @@ class TutorIA:
             "- Pistas para pensar antes de ver la solución.\n"
             "- Código de solución completo y explicado línea por línea.\n"
         )
-        return self.client.generar_contenido(prompt, temperatura=0.4)
+        return self.client.generar_contenido(prompt, temperatura=0.4, api_key_override=api_key_override)
 
-    def generar_examen_unir(self, texto_tema: str, asignatura: str, tema: str, num_preguntas: int = 5) -> Optional[str]:
+    def generar_examen_unir(self, texto_tema: str, asignatura: str, tema: str, num_preguntas: int = 5, api_key_override: Optional[str] = None) -> Optional[str]:
         """Genera un simulacro de examen tipo test UNIR con justificaciones ocultas."""
         prompt = (
             f"Basándote en el siguiente temario de '{asignatura}' ({tema}) de UNIR:\n\n"
@@ -156,9 +156,15 @@ class TutorIA:
             "- Distribuye preguntas teóricas de concepto y preguntas prácticas con fragmentos de código donde haya que deducir la salida o el error.\n"
             "- Si incluyes código, escribe los fragmentos bien indentados y con saltos de línea legibles dentro de bloques de código Markdown ```java ... ``` (nunca comprimido en una sola línea).\n"
         )
-        return self.client.generar_contenido(prompt, temperatura=0.3)
+        return self.client.generar_contenido(prompt, temperatura=0.3, api_key_override=api_key_override)
 
-    def generar_resumen_clase_magistral(self, texto_transcripcion: str, asignatura: str, nombre_clase: str) -> Optional[str]:
+    def generar_resumen_clase_magistral(
+        self,
+        texto_transcripcion: str,
+        asignatura: str,
+        nombre_clase: str,
+        api_key_override: Optional[str] = None,
+    ) -> Optional[str]:
         """Analiza la transcripción de una clase en directo y extrae avisos de examen, explicaciones de código y dudas de alumnos."""
         prompt = (
             f"Eres NOVA, copiloto y mentora académica de élite para un alumno de FP DAM y PFU en UNIR.\n"
@@ -186,5 +192,5 @@ class TutorIA:
             "## 🎯 6. 3 Preguntas de Examen sobre esta Sesión\n"
             "- Formato tipo test oficial UNIR (A, B, C, D) con la respuesta correcta y la justificación técnica oculta dentro de una etiqueta HTML `<details><summary>Ver solución y justificación</summary>...</details>`.\n"
         )
-        return self.client.generar_contenido(prompt, temperatura=0.3)
+        return self.client.generar_contenido(prompt, temperatura=0.3, api_key_override=api_key_override)
 

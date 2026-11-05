@@ -2,11 +2,12 @@
   {
     "username": "alexking44",
     "nombre": "Alex (Administrador)",
-    "password_hash": "c48d4f13154dcfb52f812926535949b03bd19db17084c083c004e6561ae2ef07",
-    "salt": "e9a90b868b5c8aa4ccf249c683d3b3ae",
+    "password_hash": "44b5488e75d4e7125a7b2b0812bb33109d6a48a05f2eea57b22aeea04e1f66a0",
+    "salt": "a18c5131b64f996a4b6d2b09375f5d8e",
     "rol": "admin",
     "activo": 1,
-    "creado_en": "2026-10-29 18:15:09"
+    "creado_en": "2026-10-29 18:15:09",
+    "gemini_api_key": ""
   },
   {
     "username": "fran",
@@ -15,6 +16,7 @@
     "salt": "35d208bd3da2e3969749f7b3a29077ae",
     "rol": "estudiante",
     "activo": 1,
-    "creado_en": "2026-11-05 14:17:24"
+    "creado_en": "2026-11-05 14:17:24",
+    "gemini_api_key": ""
   }
 ]
