@@ -1,0 +1,20 @@
+[
+  {
+    "username": "alexking44",
+    "nombre": "Alex (Administrador)",
+    "password_hash": "c48d4f13154dcfb52f812926535949b03bd19db17084c083c004e6561ae2ef07",
+    "salt": "e9a90b868b5c8aa4ccf249c683d3b3ae",
+    "rol": "admin",
+    "activo": 1,
+    "creado_en": "2026-10-29 18:15:09"
+  },
+  {
+    "username": "fran",
+    "nombre": "Francisco",
+    "password_hash": "7b6866156d3c59c008b2dcbcff361c5ec2e833eaa27c1d0ba1c4352cab911d02",
+    "salt": "35d208bd3da2e3969749f7b3a29077ae",
+    "rol": "estudiante",
+    "activo": 1,
+    "creado_en": "2026-11-05 14:17:24"
+  }
+]
