@@ -79,6 +79,12 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
 
         with tarfile.open(bundle_path, "w:gz") as tar:
             tar.add(str(manifest_path), arcname="data/catalogo_materiales.json")
+            usuarios_json = DATA_DIR / "usuarios.json"
+            if usuarios_json.exists():
+                tar.add(str(usuarios_json.resolve()), arcname="data/usuarios.json")
+            usuarios_db = DATA_DIR / "usuarios.db"
+            if usuarios_db.exists():
+                tar.add(str(usuarios_db.resolve()), arcname="data/usuarios.db")
             for sub in ("procesado", "clases_grabadas"):
                 sub_dir = DATA_DIR / sub
                 if sub_dir.exists():

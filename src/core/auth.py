@@ -6,6 +6,7 @@ y respaldo automático al dataset de Hugging Face.
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -17,6 +18,7 @@ from typing import Dict, List, Optional, Tuple
 from src.core.config import DATA_DIR
 
 DB_PATH = DATA_DIR / "usuarios.db"
+USERS_JSON_PATH = DATA_DIR / "usuarios.json"
 
 
 def _obtener_conexion() -> sqlite3.Connection:
@@ -26,9 +28,80 @@ def _obtener_conexion() -> sqlite3.Connection:
     return conn
 
 
+def exportar_usuarios_a_json() -> None:
+    """Exporta todos los usuarios a un archivo JSON seguro para persistencia definitiva en la nube."""
+    try:
+        with _obtener_conexion() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA wal_checkpoint(FULL);")
+            cursor.execute(
+                """
+                SELECT username, nombre, password_hash, salt, rol, activo, creado_en 
+                FROM usuarios
+                """
+            )
+            filas = cursor.fetchall()
+            usuarios = [dict(r) for r in filas]
+
+        USERS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(USERS_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(usuarios, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        pass
+
+
+def importar_usuarios_desde_json() -> None:
+    """Restaura usuarios desde el JSON persistente si no están en la BD SQLite."""
+    if not USERS_JSON_PATH.exists():
+        try:
+            from src.core.cloud_sync import _descargar_archivo_hf_directo
+            _descargar_archivo_hf_directo("data/usuarios.json", USERS_JSON_PATH)
+        except Exception:
+            pass
+
+    if not USERS_JSON_PATH.exists():
+        return
+
+    try:
+        with open(USERS_JSON_PATH, "r", encoding="utf-8") as f:
+            usuarios = json.load(f)
+        if not isinstance(usuarios, list):
+            return
+
+        with _obtener_conexion() as conn:
+            cursor = conn.cursor()
+            for u in usuarios:
+                username = u.get("username", "").strip().lower()
+                if not username:
+                    continue
+                cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
+                if not cursor.fetchone():
+                    cursor.execute(
+                        """
+                        INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            username,
+                            u.get("nombre", username),
+                            u.get("password_hash", ""),
+                            u.get("salt", ""),
+                            u.get("rol", "estudiante"),
+                            u.get("activo", 1),
+                            u.get("creado_en", time.strftime("%Y-%m-%d %H:%M:%S")),
+                        ),
+                    )
+            conn.commit()
+            cursor.execute("PRAGMA wal_checkpoint(FULL);")
+    except Exception:
+        pass
+
+
 def _notificar_respaldo_nube():
     try:
+        exportar_usuarios_a_json()
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
+        respaldar_archivo_en_hf_async(USERS_JSON_PATH)
         respaldar_archivo_en_hf_async(DB_PATH)
     except Exception:
         pass
@@ -127,7 +200,12 @@ def inicializar_bd_usuarios() -> None:
         )
 
         conn.commit()
-        _notificar_respaldo_nube()
+        cursor.execute("PRAGMA wal_checkpoint(FULL);")
+
+    # 4. Restaurar cualquier usuario registrado desde el JSON persistente
+    importar_usuarios_desde_json()
+    exportar_usuarios_a_json()
+    _notificar_respaldo_nube()
 
 
 def _hash_password(password: str, salt: str) -> str:
