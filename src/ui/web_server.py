@@ -2966,30 +2966,26 @@ def dashboard_html():
                 <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
               </div>
 
-                <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                  <button @click="abrirMinutero(clase)" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-amber-500/30 shadow-sm" title="Ver marcas de tiempo e intervenciones">
-                    <i class="fa-solid fa-clock text-[10px]"></i>
-                    <span>Minutero</span>
-                  </button>
-                  <button @click="abrirResumenClase(clase)"
-                          :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
-                          class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 border shadow-sm"
-                          title="Generar o consultar el informe pedagógico estructurado de la clase con IA">
-                    <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
-                    <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen IA'"></span>
-                  </button>
-                  <button @click="verContenidoArchivo(clase.archivo)" class="px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1" title="Ver transcripción literal en texto">
-                    <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
-                    <span>Texto</span>
-                  </button>
-                </div>
-                <div class="flex items-center space-x-1.5">
-                  <a x-show="clase.recording_url" :href="clase.recording_url" target="_blank" class="px-2.5 py-1.5 bg-gray-800/80 hover:bg-gray-700 text-cyan-400 rounded-xl text-xs transition flex items-center space-x-1" title="Ver en servidor UNIR">
-                    <i class="fa-solid fa-play text-[10px]"></i>
-                    <span>Vídeo</span>
-                  </a>
-                  <button @click="preguntarSobreClase(clase)" class="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1" title="Preguntar dudas a NOVA en el chat">
-                    <i class="fa-solid fa-robot"></i>
+                <div class="mt-4 pt-3 border-t border-gray-800/60 flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center space-x-1.5 flex-wrap gap-1.5">
+                    <button @click="abrirMinutero(clase)" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-amber-500/30 shadow-sm" title="Ver marcas de tiempo e intervenciones">
+                      <i class="fa-solid fa-clock text-[10px]"></i>
+                      <span>Minutero</span>
+                    </button>
+                    <button @click="abrirResumenClase(clase)"
+                            :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
+                            class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 border shadow-sm"
+                            title="Generar o consultar el informe pedagógico estructurado de la clase con IA">
+                      <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
+                      <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen IA'"></span>
+                    </button>
+                    <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1 border border-gray-700" title="Ver transcripción literal en texto">
+                      <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
+                      <span>Texto</span>
+                    </button>
+                  </div>
+                  <button @click="preguntarSobreClase(clase)" class="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm" title="Preguntar dudas a NOVA en el chat">
+                    <i class="fa-solid fa-robot text-xs"></i>
                     <span>NOVA</span>
                   </button>
                 </div>
@@ -3850,11 +3846,7 @@ def dashboard_html():
         </div>
 
         <div class="flex items-center space-x-2">
-          <a x-show="minuteroClase?.recording_url" :href="minuteroClase?.recording_url" target="_blank" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-amber-500/30">
-            <i class="fa-solid fa-play"></i>
-            <span>Grabación UNIR</span>
-          </a>
-          <button @click="modalMinutero = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
+          <button @click="modalMinutero = false" class="text-gray-400 hover:text-white p-2 rounded-lg transition hover:bg-gray-800">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
@@ -3873,12 +3865,11 @@ def dashboard_html():
           <div class="p-3.5 rounded-2xl bg-gray-900/60 border border-gray-800 hover:border-amber-500/30 transition flex flex-col md:flex-row md:items-start justify-between gap-3 group">
             <div class="flex-1 space-y-1">
               <div class="flex items-center space-x-2 text-xs">
-                <button @click="abrirGrabacionEnMinuto(minuteroClase, cue.start)"
-                        class="font-mono font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/25 px-2 py-0.5 rounded-lg border border-amber-500/30 text-[11px] transition flex items-center space-x-1"
-                        title="Abrir grabación en este minuto">
-                  <i class="fa-solid fa-play text-[9px]"></i>
+                <span class="font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/25 text-[11px] flex items-center space-x-1 shrink-0"
+                      title="Minuto de la intervención">
+                  <i class="fa-regular fa-clock text-[9px]"></i>
                   <span x-text="cue.start_str"></span>
-                </button>
+                </span>
                 <span class="font-bold text-gray-200" x-text="cue.speaker"></span>
               </div>
               <p class="text-xs text-gray-300 leading-relaxed pl-1" x-text="cue.text"></p>
@@ -3924,11 +3915,7 @@ def dashboard_html():
             <i class="fa-regular fa-copy"></i>
             <span>Copiar</span>
           </button>
-          <a x-show="resumenClaseActual?.recording_url" :href="resumenClaseActual?.recording_url" target="_blank" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-amber-500/30">
-            <i class="fa-solid fa-play"></i>
-            <span>Vídeo</span>
-          </a>
-          <button @click="modalResumenClase = false" class="text-gray-400 hover:text-white p-2 rounded-lg">
+          <button @click="modalResumenClase = false" class="text-gray-400 hover:text-white p-2 rounded-lg transition hover:bg-gray-800">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
