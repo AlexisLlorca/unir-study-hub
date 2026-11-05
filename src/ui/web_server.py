@@ -155,7 +155,7 @@ def api_auth_login(req: LoginRequest, request: Request, response: Response):
     if not usuario:
         bloqueada_ahora, duracion = _registrar_intento_fallido(ip)
         if bloqueada_ahora:
-            raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Acceso bloqueado durante 15 minutos.")
+            raise HTTPException(status_code=429, detail="Demasiados intentos fallidos. Acceso bloqueado durante 5 minutos.")
         raise HTTPException(status_code=401, detail=msg)
 
     _limpiar_intentos_exitosos(ip)

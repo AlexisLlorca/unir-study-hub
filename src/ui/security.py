@@ -158,9 +158,9 @@ _SUFIJOS_NUBE_PERMITIDOS = (
 
 _INTENTOS_FALLIDOS: Dict[str, List[float]] = {}
 _BLOQUEOS_HASTA: Dict[str, float] = {}
-MAX_INTENTOS_FALLIDOS = 15
+MAX_INTENTOS_FALLIDOS = 5
 VENTANA_INTENTOS_SEG = 60
-DURACION_BLOQUEO_SEG = 300  # 5 minutos (evita bloqueos accidentales a estudiantes)
+DURACION_BLOQUEO_SEG = 300  # 5 minutos de bloqueo temporal
 
 
 def _aplicar_cabeceras_seguridad(response: Response) -> Response:
@@ -622,7 +622,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
                 if bloqueada_ahora:
                     return _aplicar_cabeceras_seguridad(
                         JSONResponse(
-                            {"detail": "Demasiados intentos fallidos. Acceso bloqueado temporalmente durante 15 minutos."},
+                            {"detail": "Demasiados intentos fallidos. Acceso bloqueado temporalmente durante 5 minutos."},
                             status_code=429,
                         )
                     )
