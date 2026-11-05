@@ -428,8 +428,8 @@ class GenerarGuiaRequest(BaseModel):
     asignatura: str
     nombre_tema: str
     archivo_pdf: Optional[str] = None
-    profundidad: Optional[str] = "media"
-    num_preguntas: Optional[int] = 10
+    profundidad: Optional[str] = "robusta"
+    num_preguntas: Optional[int] = 15
     tipo_generacion: Optional[str] = "ambos"
     api_key: Optional[str] = None
 
@@ -1625,6 +1625,38 @@ def dashboard_html():
     }
     .markdown-content th, .markdown-content td { border: 1px solid #374151; padding: 0.5rem 0.75rem; text-align: left; word-break: break-word; }
     .markdown-content th { background: #1f2937; color: #e5e7eb; }
+
+    /* Cajas interactivas de Active Recall (Cornell Method) */
+    .markdown-content details {
+      background: rgba(17, 24, 39, 0.7);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 0.85rem;
+      padding: 0.85rem 1.15rem;
+      margin: 1.15rem 0;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    .markdown-content details[open] {
+      background: rgba(15, 23, 42, 0.95);
+      border-color: rgba(56, 189, 248, 0.5);
+    }
+    .markdown-content summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #38bdf8;
+      outline: none;
+      user-select: none;
+      padding: 0.2rem 0;
+    }
+    .markdown-content summary:hover {
+      color: #7dd3fc;
+    }
+    .markdown-content details[open] summary {
+      margin-bottom: 0.75rem;
+      border-bottom: 1px dashed rgba(56, 189, 248, 0.2);
+      padding-bottom: 0.5rem;
+    }
+
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0b0f19; }
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
@@ -3048,19 +3080,19 @@ def dashboard_html():
           <span x-text="generadorTipo === 'solo_test' ? 'Dificultad del Test:' : 'Profundidad y Rigor de la Guía:'"></span>
         </label>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          <!-- Opción Corta -->
-          <div @click="generadorProfundidad = 'corta'; generadorNumPreguntas = 5"
-               :class="generadorProfundidad === 'corta' ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
-               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
+          <!-- Opción Robusta (Recomendada por defecto) -->
+          <div @click="generadorProfundidad = 'robusta'; generadorNumPreguntas = 15"
+               :class="generadorProfundidad === 'robusta' ? 'border-purple-500 bg-purple-500/15 ring-2 ring-purple-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
+               class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1 relative order-first sm:order-last">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
-                <i class="fa-solid fa-bolt"></i>
-                <span>Corta</span>
+              <span class="text-xs font-bold text-purple-400 flex items-center space-x-1.5">
+                <i class="fa-solid fa-crown text-amber-400"></i>
+                <span>Robusta (Recomendada)</span>
               </span>
-              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Exprés</span>
+              <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-500/25 text-purple-300 border border-purple-500/30">Nivel Examen</span>
             </div>
-            <p class="text-[11px] text-gray-300 font-medium">Repaso Rápido</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~1.200 palabras, chuleta de sintaxis y test de 5 preguntas.</p>
+            <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Cornell & Active Recall)</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, cajas interactivas de autoevaluación, chuleta de firmas/métodos, trampas UNIR y 15 preguntas.</p>
           </div>
 
           <!-- Opción Media -->
@@ -3075,22 +3107,22 @@ def dashboard_html():
               <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Estándar</span>
             </div>
             <p class="text-[11px] text-gray-300 font-medium">Equilibrada</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~3.000 palabras, temario completo y test de 10 preguntas.</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~3.000 palabras, resumen ejecutivo, tabla de métodos clave, avisos docentes y 10 preguntas.</p>
           </div>
 
-          <!-- Opción Robusta -->
-          <div @click="generadorProfundidad = 'robusta'; generadorNumPreguntas = 15"
-               :class="generadorProfundidad === 'robusta' ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
+          <!-- Opción Corta -->
+          <div @click="generadorProfundidad = 'corta'; generadorNumPreguntas = 5"
+               :class="generadorProfundidad === 'corta' ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500' : 'border-gray-800 bg-gray-900/60 hover:border-gray-700'"
                class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-purple-400 flex items-center space-x-1.5">
-                <i class="fa-solid fa-brain"></i>
-                <span>Robusta</span>
+              <span class="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+                <i class="fa-solid fa-bolt"></i>
+                <span>Corta</span>
               </span>
-              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">Pro / 10</span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Exprés</span>
             </div>
-            <p class="text-[11px] text-gray-300 font-medium">Alto Rendimiento</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, código de producción, trampas UNIR y test de 15 preguntas.</p>
+            <p class="text-[11px] text-gray-300 font-medium">Repaso Rápido</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~1.500 palabras, chuleta rápida de sintaxis y test de 5 preguntas de última hora.</p>
           </div>
         </div>
       </div>
@@ -3773,8 +3805,8 @@ def dashboard_html():
         modalGenerador: false,
         generadorTemaNombre: '',
         generadorPdfSeleccionado: '',
-        generadorProfundidad: 'media',
-        generadorNumPreguntas: 10,
+        generadorProfundidad: 'robusta',
+        generadorNumPreguntas: 15,
         generadorTipo: 'ambos', // 'ambos', 'solo_guia', 'solo_test'
         generandoIa: false,
         generandoIaPaso: 1,
@@ -4527,8 +4559,8 @@ def dashboard_html():
         generarGuiaDesdePdf(pdfNombre) {
           this.generadorPdfSeleccionado = pdfNombre;
           this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
-          this.generadorProfundidad = 'media';
-          this.generadorNumPreguntas = 10;
+          this.generadorProfundidad = 'robusta';
+          this.generadorNumPreguntas = 15;
           this.generadorTipo = 'ambos';
           this.modalGenerador = true;
         },

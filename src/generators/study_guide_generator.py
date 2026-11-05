@@ -39,7 +39,7 @@ class GeneradorGuiaEstudio:
         nombre_tema: str,
         ruta_pdf: Optional[Path] = None,
         ruta_transcripcion: Optional[Path] = None,
-        profundidad: str = "media",
+        profundidad: str = "robusta",
         num_preguntas: Optional[int] = None,
         tipo_generacion: str = "ambos",
         api_key_override: Optional[str] = None,
@@ -51,9 +51,9 @@ class GeneradorGuiaEstudio:
         3. Permite elegir 'ambos', 'solo_guia' o 'solo_test'
         """
         slug_tema = re.sub(r'[\\/*?:"<>|]', "", nombre_tema).replace(" ", "_")
-        profundidad = (profundidad or "media").lower().strip()
+        profundidad = (profundidad or "robusta").lower().strip()
         if profundidad not in ("corta", "media", "robusta"):
-            profundidad = "media"
+            profundidad = "robusta"
 
         tipo_generacion = (tipo_generacion or "ambos").lower().strip()
         generar_guia = tipo_generacion in ("ambos", "solo_guia")
@@ -124,9 +124,9 @@ class GeneradorGuiaEstudio:
 
         contexto_combinado = ""
         if texto_pdf:
-            contexto_combinado += f"=== TEMARIO OFICIAL DEL TEMA ===\n{texto_pdf[:25000]}\n\n"
+            contexto_combinado += f"=== TEMARIO OFICIAL DEL TEMA ===\n{texto_pdf[:160000]}\n\n"
         if texto_clase:
-            contexto_combinado += f"=== LO QUE EXPLICÓ EL PROFESOR EN CLASE MAGISTRAL ===\n{texto_clase[:20000]}\n\n"
+            contexto_combinado += f"=== LO QUE EXPLICÓ EL PROFESOR EN CLASE MAGISTRAL ===\n{texto_clase[:60000]}\n\n"
 
         if not contexto_combinado:
             console.print("[red]❌ No se encontró texto de temario ni de transcripción para este tema.[/red]")
@@ -139,7 +139,7 @@ class GeneradorGuiaEstudio:
 
         # 3. Generar Guía de Estudio según la profundidad seleccionada
         if generar_guia:
-            console.print(f"\n[cyan]3/4. Redactando Guía de Estudio ({profundidad.upper()})...[/cyan]")
+            console.print(f"\n[cyan]3/4. Redactando Guía de Estudio de Alto Rendimiento ({profundidad.upper()})...[/cyan]")
 
             directivas_veracidad = (
                 "\n\nDIRECTRICES OBLIGATORIAS DE MÁXIMA FIDELIDAD AL MATERIAL OFICIAL (PROHIBIDO INVENTAR):\n"
@@ -147,6 +147,7 @@ class GeneradorGuiaEstudio:
                 "- PROHIBIDO INVENTAR: No introduzcas librerías ajenas a UNIR, conceptos no tratados en el tema ni declaraciones o fechas ficticias del profesor.\n"
                 "- Código adaptado al nivel de clase (2º DAM): claro, limpio, compilable, usando 'System.out.println()' estándar para ejemplos sin sobreingeniería de Logger.\n"
                 "- Si en la transcripción no hay menciones explícitas a avisos de examen, enfoca los avisos en las dificultades técnicas reales del temario oficial sin inventar citas docentes falsas.\n"
+                "- ESTUDIO ACTIVO (ACTIVE RECALL): Incluye cajas de autoevaluación interactiva utilizando etiquetas HTML nativas <details><summary>💡 Ver respuesta y razonamiento técnico</summary>...</details> para que el estudiante pueda ponerse a prueba antes de ver la solución.\n"
             )
 
             if profundidad == "corta":
@@ -155,14 +156,15 @@ class GeneradorGuiaEstudio:
                     f"Basándote en el siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                     f"{contexto_combinado}\n\n"
                     f"{directivas_veracidad}\n\n"
-                    "Genera un REPASO EXPRÉS de alta densidad conceptual (~1.200 palabras) en Markdown estructurado exactamente así:\n"
+                    "Genera un REPASO EXPRÉS de alta densidad conceptual (~1.500 palabras) en Markdown estructurado exactamente así:\n"
                     f"# ⚡ REPASO EXPRÉS: {nombre_tema.upper()} — {asignatura.upper()}\n"
                     "> Guía rápida y condensada para repaso intensivo antes de exámenes y asimilación ágil de conceptos clave.\n\n"
                     "## 🚀 1. Resumen de Alto Impacto (Ideas fuerza y conceptos imprescindibles sin relleno)\n"
-                    "## 📑 2. Chuleta Rápida de Examen y Sintaxis (Cheatsheet Markdown con comandos, métodos clave y firmas)\n"
+                    "## 📑 2. Chuleta Rápida de Examen y Sintaxis (Cheatsheet Markdown con clases, comandos, métodos clave y firmas)\n"
                     "## 💡 3. Conceptos Mínimos Viables de Aprobado (Tabla Markdown con Término, Definición concisa y Clave en Test)\n"
-                    "## 💻 4. Micro-ejemplo de Código Práctico (Snippet conciso, limpio, moderno y comentado)\n"
-                    "## ⚠️ 5. Los 3 Errores Fatales en Examen (Trampas habituales de UNIR y cómo evitarlas)\n"
+                    "## 💻 4. Micro-ejemplo de Código Práctico (Snippet conciso, limpio, moderno con System.out.println() y comentado)\n"
+                    "## ❓ 5. Reto de Active Recall Rápido (Pregunta de autoevaluación con <details><summary>💡 Ver respuesta</summary>...</details>)\n"
+                    "## ⚠️ 6. Los 3 Errores Fatales en Examen (Trampas habituales de UNIR y cómo evitarlas)\n"
                 )
             elif profundidad == "robusta":
                 prompt_guia = (
@@ -170,17 +172,43 @@ class GeneradorGuiaEstudio:
                     f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                     f"{contexto_combinado}\n\n"
                     f"{directivas_veracidad}\n\n"
-                    "Redacta una GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO / MATRÍCULA DE HONOR) exhaustiva, profunda y de máxima ingeniería (~4.500+ palabras) en Markdown estructurado exactamente así:\n"
+                    "Redacta una GUÍA MAESTRA DE ALTO RENDIMIENTO (MÉTODO CORNELL & ACTIVE RECALL / NIVEL PRO) exhaustiva, profunda y de máxima ingeniería (~4.500+ palabras) en Markdown estructurado exactamente así:\n"
                     f"# 🏆 GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO): {nombre_tema.upper()} — {asignatura.upper()}\n"
-                    "> Dossier técnico exhaustivo de ingeniería de software para dominio absoluto de la materia y preparación de examen con Matrícula de Honor en UNIR.\n\n"
-                    "## 🏛️ 1. Fundamentos Teóricos Profundos y Arquitectura Interna (Bajo el capó: funcionamiento en JVM, memoria, SO, red o motor de BD)\n"
-                    "## 🎙️ 2. Transcripción y Énfasis del Profesor en Videoclase (Puntos críticos señalados por el docente, minutajes, aclaraciones y avisos de examen)\n"
-                    "## 🧠 3. Glosario Técnico Exhaustivo y Diccionario de Examen (Tabla Markdown completa: Término, Definición Rigurosa, Caso de Uso y Trampa Asociada)\n"
-                    "## 💻 4. Laboratorio de Código Práctico de Clase (Implementación completa, compilable, adaptada al temario de 2º DAM sin sobreingeniería innecesaria)\n"
-                    "## 🔄 5. Comparativas Técnicas y Patrones de Diseño (Tablas comparativas entre tecnologías, alternativas, pros/contras y cuándo elegir cada una)\n"
-                    "## 🏢 6. Casos de Uso Reales en la Industria y Escenarios de Fallo (Resolución de problemas de concurrencia, latencia, cuellos de botella y resiliencia)\n"
-                    "## ⚠️ 7. Desglose de Preguntas Trampa y Puntos Capciosos de Exámenes UNIR (Análisis de distractores típicos en exámenes test y argumentación técnica)\n"
-                    "## 🚀 8. Checklist de Dominio del Tema (Lista de comprobación interactiva [ ] para autoevaluación final previa al examen)\n"
+                    "> Dossier técnico exhaustivo con Método Cornell y Active Recall para dominio absoluto de la materia y preparación de examen en UNIR (2º DAM).\n\n"
+                    "## 🧭 1. Mapa Conceptual y Arquitectura del Tema\n"
+                    "- Resumen ejecutivo de alto nivel y marco arquitectónico.\n"
+                    "- Diagrama visual de flujo, ciclo de vida o arquitectura técnica (en formato ASCII estructurado o bloque Mermaid ```mermaid ... ``` explicativo).\n\n"
+                    "## 🏛️ 2. Fundamentos Teóricos Profundos y Funcionamiento Interno\n"
+                    "- Explicación exhaustiva, rigurosa y sin saltarse ningún epígrafe del PDF oficial de UNIR.\n"
+                    "- Análisis de funcionamiento interno a bajo nivel (JVM, hilos, memoria RAM/Stack/Heap, gestión del Sistema Operativo o Sockets de red).\n"
+                    "- Cajas de autoevaluación inmediata (Active Recall) usando bloques interactivos:\n"
+                    "  <details><summary>💡 Pregunta Active Recall: [Concepto clave del tema]</summary>\n"
+                    "  [Explicación concisa y técnica de la respuesta]\n"
+                    "  </details>\n\n"
+                    "## 📑 3. Chuleta Exhaustiva de Sintaxis, Clases y Firmas de Métodos (Cheatsheet)\n"
+                    "- Tabla Markdown completa con todos los métodos y clases indispensables del tema:\n"
+                    "  | Clase / Interfaz | Método y Firma | Parámetros | Tipo Retorno | Excepciones Obligatorias (`throws`) | Clave en Examen |\n"
+                    "- Reglas nemotécnicas para no confundir métodos parecidos.\n\n"
+                    "## 🎙️ 4. Énfasis del Profesor en Videoclase y Dificultades Críticas\n"
+                    "- Puntos críticos destacados en clase magistral, dudas frecuentes de alumnos y aclaraciones del docente.\n"
+                    "- <details><summary>💡 Pregunta Active Recall de Videoclase: [Duda habitual de alumnos]</summary>[Solución explicada]</details>\n\n"
+                    "## 💻 5. Laboratorio de Código Práctico (Implementación Paso a Paso)\n"
+                    "- Implementación Java completa, limpia, moderna y 100% compilable adaptada al temario de 2º DAM.\n"
+                    "- Sin sobreingeniería ni Logger: uso de `System.out.println()` pedagógico.\n"
+                    "- Código ampliamente comentado línea a línea explicando el porqué de cada sentencia.\n"
+                    "- Traza de ejecución paso a paso con salida por consola esperada.\n\n"
+                    "## 🔄 6. Comparativas Técnicas y Cuándo Usar Cada Solución\n"
+                    "- Tabla comparativa entre las diferentes alternativas que ofrece la tecnología explicada (pros, contras, rendimiento y casos de uso).\n\n"
+                    "## ⚠️ 7. Desglose de Preguntas Trampa y Distractores de Exámenes UNIR\n"
+                    "- Análisis detallado de cómo formula UNIR las preguntas capciosas de este tema.\n"
+                    "- Análisis de distractores en preguntas tipo test: por qué una respuesta incorrecta parece correcta a primera vista y cuál es el fallo técnico sutil.\n"
+                    "- <details><summary>💡 Simulacro de Pregunta Trampa de Examen</summary>[Análisis del distractor y respuesta correcta fundamentada]</details>\n\n"
+                    "## 🧠 8. Glosario Técnico Exhaustivo (Diccionario de Examen)\n"
+                    "- Tabla Markdown completa: | Término Técnico | Definición Rigurosa | Trampa Asociada en Test |\n\n"
+                    "## 🚀 9. Checklist de Dominio Pre-Examen\n"
+                    "- Lista de comprobación interactiva `[ ]` con:\n"
+                    "  - [ ] Objetivos mínimos imprescindibles para asegurar el Aprobado (5.0)\n"
+                    "  - [ ] Hitos avanzados para aspirar a Matrícula de Honor (9.0 - 10)\n"
                 )
             else:  # media
                 prompt_guia = (
@@ -188,34 +216,47 @@ class GeneradorGuiaEstudio:
                     f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                     f"{contexto_combinado}\n\n"
                     f"{directivas_veracidad}\n\n"
-                    "Redacta una GUÍA DE ESTUDIO OFICIAL COMPLETA Y EQUILIBRADA (~2.500 - 3.500 palabras) en Markdown con esta estructura exacta:\n"
+                    "Redacta una GUÍA DE ESTUDIO OFICIAL EQUILIBRADA Y PRODUCTIVA (~3.000 palabras) con Método Cornell y Active Recall en Markdown estructurado así:\n"
                     f"# 📘 GUÍA DE ESTUDIO OFICIAL: {nombre_tema.upper()} — {asignatura.upper()}\n"
-                    "> Material equilibrado de alto rendimiento sintetizado con temario oficial y clases magistrales de UNIR.\n\n"
+                    "> Material de alto rendimiento sintetizado con temario oficial, clases magistrales de UNIR y herramientas de estudio activo.\n\n"
                     "## 📌 1. Resumen Ejecutivo y Marco Teórico (Fundamentos y arquitectura general del tema)\n"
-                    "## 📢 2. Avisos y Trampas del Profesor en Clase (Qué enfatizó el docente en videoclase, avisos y errores comunes)\n"
-                    "## 🧠 3. Conceptos Clave y Definiciones de Examen (Tabla Markdown con Término, Definición Técnica Rigurosa y Relevancia en Examen)\n"
-                    "## 💻 4. Código y Patrones de Implementación (Código completo, pedagógico, adaptado al temario de clase)\n"
-                    "## 🔬 5. Arquitectura y Flujo de Ejecución (Cómo interactúan los componentes en tiempo de ejecución)\n"
-                    "## ⚠️ 6. Puntos Críticos y Preguntas Capciosas de Examen (Preguntas con trampa típicas de UNIR y cómo responderlas)\n"
+                    "## 📑 2. Chuleta de Sintaxis y Firmas de Métodos (Tabla Markdown con Clase, Método, Tipo Retorno y Excepciones)\n"
+                    "## 📢 3. Avisos y Trampas del Profesor en Clase (Qué enfatizó el docente en videoclase, avisos y errores comunes)\n"
+                    "## 🧠 4. Conceptos Clave y Cajas Active Recall (Definiciones de examen + <details><summary>💡 Comprobar comprensión</summary>...</details>)\n"
+                    "## 💻 5. Laboratorio de Código Práctico (Código completo, pedagógico, compilable con System.out.println() y comentado)\n"
+                    "## ⚠️ 6. Puntos Críticos y Preguntas Capciosas de Examen (Distractores típicos de UNIR y cómo detectarlos)\n"
+                    "## 🚀 7. Checklist de Comprobación Pre-Examen (Lista [ ] de conceptos que debes dominar)\n"
                 )
 
-            guia_md = self.tutor.client.generar_contenido(prompt_guia, temperatura=0.3, api_key_override=api_key_override)
+            guia_md = self.tutor.client.generar_contenido(
+                prompt_guia,
+                temperatura=0.3,
+                max_output_tokens=8192,
+                api_key_override=api_key_override
+            )
             if not guia_md:
                 console.print("[yellow]⚠ Reintentando redacción de guía con versión concisa...[/yellow]")
                 prompt_guia_conciso = (
                     f"Eres NOVA, tutor de IA de FP DAM en UNIR.\n"
                     f"A partir del siguiente material oficial de '{asignatura}' ({nombre_tema}):\n\n"
-                    f"{contexto_combinado[:15000]}\n\n"
+                    f"{contexto_combinado[:35000]}\n\n"
                     f"{directivas_veracidad}\n\n"
                     "Redacta una GUÍA DE ESTUDIO COMPLETA en Markdown con:\n"
                     f"# 📘 GUÍA DE ESTUDIO: {nombre_tema.upper()}\n"
-                    "## 📌 1. Resumen Ejecutivo\n"
-                    "## 📢 2. Avisos de Examen y Trampas\n"
-                    "## 🧠 3. Conceptos Clave (Tabla)\n"
-                    "## 💻 4. Código Ejemplo\n"
-                    "## ⚠️ 5. Puntos Críticos y Preguntas Trampa\n"
+                    "## 📌 1. Resumen Ejecutivo y Mapa Conceptual\n"
+                    "## 📑 2. Chuleta de Métodos y Clases Clave\n"
+                    "## 📢 3. Avisos de Examen y Trampas Docentes\n"
+                    "## 🧠 4. Conceptos Clave (Tabla con Active Recall)\n"
+                    "## 💻 5. Código Ejemplo Comentado\n"
+                    "## ⚠️ 6. Puntos Críticos y Preguntas Trampa\n"
+                    "## 🚀 7. Checklist Pre-Examen\n"
                 )
-                guia_md = self.tutor.client.generar_contenido(prompt_guia_conciso, temperatura=0.3, api_key_override=api_key_override)
+                guia_md = self.tutor.client.generar_contenido(
+                    prompt_guia_conciso,
+                    temperatura=0.3,
+                    max_output_tokens=8192,
+                    api_key_override=api_key_override
+                )
 
             if guia_md:
                 dir_asig_guia = GUIAS_DIR / asignatura
@@ -241,7 +282,7 @@ class GeneradorGuiaEstudio:
             prompt_test = (
                 f"Genera un examen tipo test oficial de {num_preguntas} preguntas con rigor pedagógico y técnico, "
                 f"basado en el tema '{nombre_tema}' de '{asignatura}'. Nivel de profundidad: {profundidad.upper()}.\n\n"
-                f"{contexto_combinado[:25000]}\n\n"
+                f"{contexto_combinado[:60000]}\n\n"
                 f"REGLAS OBLIGATORIAS:\n"
                 f"1. Genera exactamente {num_preguntas} preguntas.\n"
                 "2. Incluye preguntas conceptuales rigurosas, análisis de fragmentos de código y trampas de examen de UNIR.\n"
