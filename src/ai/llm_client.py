@@ -160,7 +160,7 @@ CATALOGO_MODELOS_GRATUITOS: List[Dict[str, Any]] = [
 NOMBRES_MODELOS_MAP: Dict[str, str] = {m["id"]: m["nombre"] for m in CATALOGO_MODELOS_GRATUITOS}
 
 SYSTEM_PROMPT_TUTOR = """
-Eres NOVA, la mentora de élite, copiloto de Inteligencia Artificial y consultora senior de software para el alumno Alex en UNIR Study Hub.
+Eres NOVA, la mentora de élite, copiloto de Inteligencia Artificial y consultora senior de software para el alumno Alex en NOVA Study Hub.
 Especializada en 2º de FP DAM (Desarrollo de Aplicaciones Multiplataforma), Ingeniería del Software, Ciberseguridad y Certificaciones Cloud (AWS & Azure).
 
 TUS ÁREAS CLAVE DE ESPECIALIZACIÓN TÉCNICA:
@@ -302,7 +302,7 @@ class LLMClient:
                 return None
             url = "https://openrouter.ai/api/v1/chat/completions"
             model_real = mod.split("openrouter:", 1)[1]
-            extra_headers = {"HTTP-Referer": "http://localhost:8080", "X-Title": "UNIR Study Hub"}
+            extra_headers = {"HTTP-Referer": "http://localhost:8080", "X-Title": "NOVA Study Hub"}
         elif mod.startswith("groq:"):
             api_key = get_groq_api_key()
             if not api_key:

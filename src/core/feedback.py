@@ -1,6 +1,6 @@
 """
 Módulo de gestión de Feedback, Reporte de Errores y Propuestas de Mejora
-para alumnos y administración de UNIR Study Hub.
+para alumnos y administración de NOVA Study Hub.
 Persistencia dual en SQLite (data/usuarios.db) y JSON (data/feedback.json).
 """
 

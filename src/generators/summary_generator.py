@@ -32,7 +32,7 @@ def formatear_apunte_markdown(
 
     # Cabecera del tema
     md.append(f"# {asignatura.upper()} — {tema.upper()}: {titulo}")
-    md.append(f"> **Documento generado automáticamente por UNIR Study Hub v2.0**\n")
+    md.append(f"> **Documento generado automáticamente por NOVA Study Hub**\n")
     md.append("---\n")
 
     # Sección 1: Resumen Ejecutivo

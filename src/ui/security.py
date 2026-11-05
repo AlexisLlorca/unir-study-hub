@@ -1,5 +1,5 @@
 """
-Capa de seguridad de la web de UNIR Study Hub.
+Capa de seguridad de la web de NOVA Study Hub.
 
 - Validación de rutas (evita path traversal y la lectura de .env, cookies de Canvas, .git...).
 - Validación de nombres de asignatura usados como carpeta.
@@ -215,7 +215,7 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UNIR Study Hub · Acceso y Registro</title>
+  <title>NOVA Study Hub · Acceso y Registro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
@@ -234,8 +234,8 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
       <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white shadow-lg shadow-cyan-500/25 mb-3 text-2xl">
         <i class="fa-solid fa-graduation-cap"></i>
       </div>
-      <h1 class="text-2xl font-black text-white tracking-tight">UNIR Study Hub</h1>
-      <p class="text-xs text-gray-400 mt-1">Plataforma académica privada y tutor inteligente</p>
+      <h1 class="text-2xl font-black text-white tracking-tight">NOVA Study Hub</h1>
+      <p class="text-xs text-gray-400 mt-1">Plataforma académica inteligente y tutor NOVA</p>
     </div>
 
     <!-- Pestañas Login / Registro -->

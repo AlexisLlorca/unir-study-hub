@@ -46,7 +46,7 @@ class TutorIA:
 
         console.print(
             Panel.fit(
-                "[bold cyan]🤖 TUTOR ACADÉMICO DE IA — UNIR Study Hub[/bold cyan]\n"
+                "[bold cyan]🤖 TUTOR ACADÉMICO DE IA — NOVA Study Hub[/bold cyan]\n"
                 "[bold white]Pregúntame cualquier duda sobre 2º DAM o PFU Ingeniería del Software.[/bold white]\n\n"
                 "[dim]Comandos especiales:[/dim]\n"
                 "  [cyan]/test[/cyan]      → Pídeme un examen tipo test al instante\n"

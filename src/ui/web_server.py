@@ -1,5 +1,5 @@
 """
-Servidor Web y Dashboard Gráfico Interactivo para UNIR Study Hub.
+Servidor Web y Dashboard Gráfico Interactivo para NOVA Study Hub.
 Plataforma Académica Multi-Titulación 100% Web:
   - FP Grado Superior DAM (1º y 2º Curso)
   - Máster en Ciberseguridad (Módulos Oficiales M1 a M7)
@@ -83,7 +83,7 @@ from src.ui.security import (
     ruta_segura_lectura,
 )
 
-app = FastAPI(title="UNIR Study Hub — Hub Multi-Titulación", version="3.3.0")
+app = FastAPI(title="NOVA Study Hub — Plataforma Inteligente Multi-Titulación", version="3.3.0")
 
 # Sin CORS: el frontend se sirve desde este mismo servidor, así que ninguna web externa
 # necesita (ni debe poder) leer las respuestas de la API.
@@ -880,7 +880,7 @@ def buscar_contexto_transcripciones(query: str, asignatura: Optional[str] = None
         return ""
 
     top = coincidencias[:4]
-    contexto_str = "\n[ACCESO A VIDEOCLASES Y TRANSCRIPCIONES OFICIALES DISPONIBLES EN UNIR STUDY HUB]:\n"
+    contexto_str = "\n[ACCESO A VIDEOCLASES Y TRANSCRIPCIONES OFICIALES DISPONIBLES EN NOVA STUDY HUB]:\n"
 
     # Incluir índice completo de fechas disponibles para evitar alucinaciones
     for asig in asigs_a_buscar:
@@ -1452,7 +1452,7 @@ def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudian
     nombre_alumno_fmt = nombre_estudiante.strip().capitalize() if nombre_estudiante else "estudiante"
     instrucciones_base = (
         f"\nINSTRUCCIONES CLAVE DE MÁXIMA ROBUSTEZ Y NATURALIDAD PARA NOVA:\n"
-        f"1. Eres NOVA, la mentora de élite y copiloto académica personal del alumno {nombre_alumno_fmt} en UNIR Study Hub.\n"
+        f"1. Eres NOVA, la mentora de élite y copiloto académica personal del alumno {nombre_alumno_fmt} en NOVA Study Hub.\n"
         "2. FLUJO CONVERSACIONAL NATURAL (CRUCIAL): NO saludes en cada turno con 'Hola' o presentándote repetidamente. "
         "Ve DIRECTO al grano respondiendo con calidez y rigor, como en una conversación fluida en tiempo real.\n"
         "3. MEMORIA CONVERSACIONAL ACTIVA: Recuerda y apóyate siempre en lo que habéis discutido en los mensajes anteriores. "
@@ -1460,16 +1460,16 @@ def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudian
         "responde enlazando directamente con el tema previo sin desviar la conversación ni reiniciar el contexto.\n"
         "4. ROBUSTEZ Y RIGOR TÉCNICO: Desarrolla respuestas profundas, completas y fundamentadas en ingeniería de software y arquitectura. "
         "Explica el porqué bajo el capó (JVM, memoria, hilos, SO, red, base de datos). Prohibidas las respuestas telegráficas o superficiales.\n"
-        "5. CÓDIGO DIDÁCTICO ADAPTADO AL NIVEL (2º DAM UNIR): Adapta siempre los ejemplos al temario y al estilo que enseñan los profesores en clase (Borja, César, etc.). "
+        "5. CÓDIGO DIDÁCTICO ADAPTADO AL NIVEL: Adapta siempre los ejemplos al temario y al estilo que enseñan los profesores en clase (Borja, César, etc.). "
         "Prioriza código limpio, pedagógico y directo al grano usando 'System.out.println()' estándar para ejemplos y consola. "
         "NO añadas boilerplate pesado ni sobreingeniería (como java.util.logging.Logger o log4j) a menos que el alumno te pida explícitamente 'código para producción' o 'con logging'. "
         "El código debe ser compilable y completo, pero sin ruido innecesario para estudiar.\n"
-        "6. TRAMPAS DE EXAMEN UNIR: Advierte proactivamente sobre preguntas capciosas de examen tipo test, errores conceptuales habituales, casos límite y excepciones típicas del temario.\n"
+        "6. TRAMPAS TÍPICAS DE EXAMEN: Advierte proactivamente sobre preguntas capciosas de examen tipo test, errores conceptuales habituales, casos límite y excepciones típicas del temario.\n"
         "7. ACCESO LOCAL COMPLETO: Tienes ACCESO TOTAL Y LOCAL a la biblioteca oficial de clases grabadas transcritas con minutaje exacto y a todos los temarios y actividades. NUNCA digas que no tienes acceso al campus o a los materiales.\n"
         "8. FORMATO: Emplea Markdown enriquecido con títulos jerárquicos, negritas para conceptos clave, listas didácticas y tablas comparativas.\n"
-        "9. FIDELIDAD ABSOLUTA AL MATERIAL OFICIAL (PROHIBIDO INVENTAR): Basa tus explicaciones, guías y respuestas ESTRICTAMENTE en el temario oficial, apuntes y transcripciones reales de clase de UNIR. "
+        "9. FIDELIDAD ABSOLUTA AL MATERIAL OFICIAL (PROHIBIDO INVENTAR): Basa tus explicaciones, guías y respuestas ESTRICTAMENTE en el temario oficial, apuntes y transcripciones reales de clase. "
         "PROHIBIDO inventar conceptos, librerías ajenas al curso, fechas de entrega inventadas o declaraciones ficticias del profesor. "
-        "Si una duda técnica concreta o detalle no consta en los materiales de UNIR, indícalo claramente con honestidad académica ('Según los materiales oficiales de UNIR...') sin especular ni alucinar.\n"
+        "Si una duda técnica concreta o detalle no consta en los materiales oficiales, indícalo claramente con honestidad académica ('Según los materiales oficiales...') sin especular ni alucinar.\n"
     )
 
     system_instruction_completo = f"{contexto_rol}\n{instrucciones_base}\n{contexto_asig}".strip()
@@ -1703,7 +1703,7 @@ def dashboard_html():
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UNIR Study Hub — Hub Multi-Titulación</title>
+  <title>NOVA Study Hub — Plataforma Inteligente Multi-Titulación</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -1850,7 +1850,7 @@ def dashboard_html():
           <i class="fa-solid fa-graduation-cap text-lg"></i>
         </div>
         <div>
-          <h1 class="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400">UNIR Study Hub</h1>
+          <h1 class="text-base font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-indigo-400">NOVA Study Hub</h1>
           <p class="text-[11px] text-gray-400 font-medium">Plataforma Multi-Titulación</p>
         </div>
       </div>
@@ -2159,7 +2159,7 @@ def dashboard_html():
                 </button>
                 <button @click="descargarCanvasOnline()" :disabled="descargandoCanvas"
                         class="px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1.5 shadow-sm"
-                        title="Sincronización con Canvas UNIR">
+                        title="Sincronización de Agenda y PACs con Canvas">
                   <i :class="descargandoCanvas ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-cloud-arrow-down'"></i>
                   <span x-text="descargandoCanvas ? '...' : '🌐 Canvas'"></span>
                 </button>
@@ -2520,7 +2520,7 @@ def dashboard_html():
                         <i class="fa-solid fa-trash-can"></i>
                       </button>
                     </div>
-                    <p class="text-[11px] text-gray-400 mt-1">Simulacro interactivo con baremo oficial UNIR</p>
+                    <p class="text-[11px] text-gray-400 mt-1">Simulacro interactivo con baremo oficial (+1 / -0.33)</p>
                     <div class="mt-3 flex items-center space-x-2">
                       <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
                         Comenzar Simulacro
@@ -3164,7 +3164,7 @@ def dashboard_html():
             </div>
             <div>
               <h2 class="text-2xl font-black text-white">Buzón de Incidencias y Mejoras</h2>
-              <p class="text-xs text-gray-400 mt-0.5">Reporta fallos o propón mejoras para UNIR Study Hub. La administración revisa y actualiza cada reporte.</p>
+              <p class="text-xs text-gray-400 mt-0.5">Reporta fallos o propón mejoras para NOVA Study Hub. La administración revisa y actualiza cada reporte.</p>
             </div>
           </div>
           <button @click="cargarFeedback()" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold flex items-center space-x-2 transition border border-gray-700">
@@ -3489,7 +3489,7 @@ def dashboard_html():
               <span class="text-xs font-bold text-purple-400">Robusta</span>
             </div>
             <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Cornell & Active Recall)</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, cajas interactivas de autoevaluación, chuleta de firmas/métodos, trampas UNIR y 15 preguntas.</p>
+            <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, cajas interactivas de autoevaluación, chuleta de firmas/métodos, trampas de examen y 15 preguntas.</p>
           </div>
 
           <!-- Opción Media -->
@@ -3541,7 +3541,7 @@ def dashboard_html():
         <div class="flex items-center justify-between text-xs">
           <span class="font-bold text-emerald-300 flex items-center space-x-2">
             <i class="fa-solid fa-spinner fa-spin text-emerald-400"></i>
-            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Guía de Estudio con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando guía oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas UNIR)...'))"></span>
+            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Guía de Estudio con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando guía oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas de examen)...'))"></span>
           </span>
           <span class="text-[11px] font-mono text-emerald-400" x-text="generandoIaPaso + ' / 3'"></span>
         </div>
@@ -3757,7 +3757,7 @@ def dashboard_html():
 
             <span class="text-[10px] font-mono px-2.5 py-1 rounded-full uppercase tracking-wider font-bold"
                   :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'">
-              <span x-text="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? '+1.0 Punto' : '-0.33 UNIR'"></span>
+              <span x-text="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? '+1.0 Punto' : '-0.33 Puntos'"></span>
             </span>
           </div>
 
@@ -3781,13 +3781,13 @@ def dashboard_html():
         <p class="text-gray-400 text-sm">Tu puntuación oficial en el simulacro:</p>
         <p class="text-5xl font-black" :class="testNota >= 5 ? 'text-emerald-400' : 'text-rose-400'" x-text="testNota.toFixed(2) + ' / 10'"></p>
         
-        <!-- DESGLOSE OFICIAL UNIR (+1 / -0.33) -->
+        <!-- DESGLOSE OFICIAL (+1 / -0.33) -->
         <div class="flex flex-wrap items-center justify-center gap-3 py-2 px-4 bg-gray-900/90 rounded-2xl border border-gray-800 max-w-sm mx-auto text-xs font-mono">
           <span class="text-emerald-400 font-bold" x-text="'+' + testAciertos + ' Aciertos'"></span>
           <span class="text-rose-400 font-bold" x-text="'-' + testFallos + ' Fallos (-' + (testFallos * 0.33).toFixed(2) + ')'"></span>
           <span class="text-gray-400" x-text="testBlancos + ' Blanco'"></span>
         </div>
-        <p class="text-[11px] text-gray-500">Baremo oficial UNIR: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
+        <p class="text-[11px] text-gray-500">Baremo oficial de examen: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
         <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
           <button x-show="(testFallos + testBlancos) > 0"
                   @click="reintentarFallosIntentoActual()"
@@ -4868,7 +4868,7 @@ def dashboard_html():
         },
 
         async cerrarSesionUsuario() {
-          if (!confirm('¿Cerrar sesión en UNIR Study Hub?')) return;
+          if (!confirm('¿Cerrar sesión en NOVA Study Hub?')) return;
           try {
             await fetch('/api/auth/logout', { method: 'POST' });
           } catch(e) {}
@@ -5904,7 +5904,7 @@ def dashboard_html():
           this.modalVisorPdf = false;
           this.chatAsignatura = this.asigSeleccionada?.nombre || '';
           this.tab = 'tutor';
-          this.chatInput = `Estoy estudiando el documento "${this.modalTitulo}". ¿Cuáles son los puntos clave más importantes de cara al examen y qué trampas o preguntas típicas suelen poner en UNIR sobre este temario?`;
+          this.chatInput = `Estoy estudiando el documento "${this.modalTitulo}". ¿Cuáles son los puntos clave más importantes de cara al examen y qué trampas o preguntas típicas suelen poner sobre este temario?`;
           this.enviarMensajeChat();
         },
 
@@ -6265,7 +6265,7 @@ def iniciar_servidor_web(host: str = "0.0.0.0", port: int = 8080):
     descargar_datos_desde_hf_si_vacio()
     port = int(os.getenv("PORT", str(port)))
     ip_local = obtener_ip_red_local()
-    console.print(f"\n[bold green]🚀 Iniciando Interfaz Gráfica Web de UNIR Study Hub (Multi-Titulación)...[/bold green]")
+    console.print(f"\n[bold green]🚀 Iniciando Interfaz Gráfica Web de NOVA Study Hub (Multi-Titulación)...[/bold green]")
     console.print(f"[bold cyan]💻 En tu ordenador (acceso directo):[/bold cyan]      [bold white underline]http://localhost:{port}[/bold white underline]")
     console.print(f"[bold yellow]📱 En tu móvil / Nube (con token seguro):[/bold yellow] [bold white underline]http://{ip_local}:{port}/?token={HUB_ACCESS_TOKEN}[/bold white underline]\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
