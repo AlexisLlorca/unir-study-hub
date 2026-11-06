@@ -121,6 +121,14 @@ def _descargar_archivo_hf_directo(path_in_repo: str, destino_local: Path) -> boo
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 shutil.copyfileobj(resp, tmp_f)
+        except urllib.error.HTTPError as e:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            if e.code != 404:
+                console.print(f"[yellow]⚠ Error descargando {path_in_repo} desde HF: {e}[/yellow]")
+            return False
         except Exception as e:
             try:
                 os.unlink(tmp_name)

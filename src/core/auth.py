@@ -54,13 +54,32 @@ def exportar_usuarios_a_json() -> None:
 
 
 def importar_usuarios_desde_json() -> None:
-    """Restaura usuarios desde el JSON persistente si no están en la BD SQLite."""
-    if not USERS_JSON_PATH.exists():
-        try:
-            from src.core.cloud_sync import _descargar_archivo_hf_directo
-            _descargar_archivo_hf_directo("data/usuarios.json", USERS_JSON_PATH)
-        except Exception:
-            pass
+    """Restaura usuarios desde el JSON persistente si no están en la BD SQLite (descarga y fusiona con HF)."""
+    try:
+        from src.core.cloud_sync import _descargar_archivo_hf_directo
+        temp_remote = USERS_JSON_PATH.with_suffix(".remote.json")
+        if _descargar_archivo_hf_directo("data/usuarios.json", temp_remote) and temp_remote.exists():
+            try:
+                with open(temp_remote, "r", encoding="utf-8") as f:
+                    usuarios_remotos = json.load(f)
+                if isinstance(usuarios_remotos, list) and len(usuarios_remotos) > 0:
+                    usuarios_locales = []
+                    if USERS_JSON_PATH.exists():
+                        try:
+                            with open(USERS_JSON_PATH, "r", encoding="utf-8") as fl:
+                                usuarios_locales = json.load(fl)
+                        except Exception:
+                            pass
+                    mapa = {u["username"].strip().lower(): u for u in usuarios_locales if isinstance(u, dict) and u.get("username")}
+                    for ur in usuarios_remotos:
+                        if isinstance(ur, dict) and ur.get("username"):
+                            mapa[ur["username"].strip().lower()] = ur
+                    with open(USERS_JSON_PATH, "w", encoding="utf-8") as fw:
+                        json.dump(list(mapa.values()), fw, indent=2, ensure_ascii=False)
+            finally:
+                temp_remote.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     if not USERS_JSON_PATH.exists():
         return
@@ -83,8 +102,9 @@ def importar_usuarios_desde_json() -> None:
                 username = u.get("username", "").strip().lower()
                 if not username:
                     continue
-                cursor.execute("SELECT id, gemini_api_key FROM usuarios WHERE username = ?", (username,))
+                cursor.execute("SELECT id, activo, COALESCE(gemini_api_key, '') as gemini_api_key FROM usuarios WHERE username = ?", (username,))
                 row = cursor.fetchone()
+                val_activo = int(u.get("activo", 0) if "activo" in u else 1)
                 if not row:
                     cursor.execute(
                         """
@@ -97,14 +117,23 @@ def importar_usuarios_desde_json() -> None:
                             u.get("password_hash", ""),
                             u.get("salt", ""),
                             u.get("rol", "estudiante"),
-                            u.get("activo", 1),
+                            val_activo,
                             u.get("creado_en", time.strftime("%Y-%m-%d %H:%M:%S")),
                             u.get("gemini_api_key", ""),
                         ),
                     )
                 else:
+                    updates = []
+                    params = []
                     if u.get("gemini_api_key") and not row["gemini_api_key"]:
-                        cursor.execute("UPDATE usuarios SET gemini_api_key = ? WHERE id = ?", (u["gemini_api_key"], row["id"]))
+                        updates.append("gemini_api_key = ?")
+                        params.append(u["gemini_api_key"])
+                    if val_activo == 1 and row["activo"] != 1:
+                        updates.append("activo = ?")
+                        params.append(1)
+                    if updates:
+                        params.append(row["id"])
+                        cursor.execute(f"UPDATE usuarios SET {', '.join(updates)} WHERE id = ?", params)
             conn.commit()
             cursor.execute("PRAGMA wal_checkpoint(FULL);")
     except Exception:
@@ -224,10 +253,9 @@ def inicializar_bd_usuarios() -> None:
         conn.commit()
         cursor.execute("PRAGMA wal_checkpoint(FULL);")
 
-    # 4. Restaurar cualquier usuario registrado desde el JSON persistente
+    # 4. Restaurar cualquier usuario registrado desde el JSON persistente (fusionado con la nube)
     importar_usuarios_desde_json()
     exportar_usuarios_a_json()
-    _notificar_respaldo_nube()
 
 
 def _hash_password(password: str, salt: str) -> str:

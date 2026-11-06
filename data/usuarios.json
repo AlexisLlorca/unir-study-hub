@@ -2,8 +2,8 @@
   {
     "username": "alexking44",
     "nombre": "Alex (Administrador)",
-    "password_hash": "61434716c92148e237d32836a97cad029ae5698db22fade32ac7360fe05cd85a",
-    "salt": "a2535527925a95e9f0e1b2981a40ce04",
+    "password_hash": "e6580653699cd9f67e75845131d85dc8abc5c70b30856ed47d3c8e3704331f2b",
+    "salt": "5398ddac39c376ba2bae3116d0a057f6",
     "rol": "admin",
     "activo": 1,
     "creado_en": "2026-10-29 18:15:09",
@@ -17,6 +17,26 @@
     "rol": "estudiante",
     "activo": 1,
     "creado_en": "2026-11-05 14:17:24",
+    "gemini_api_key": "AIzaSyFranTestKey98765"
+  },
+  {
+    "username": "prueba1",
+    "nombre": "prueba1",
+    "password_hash": "a728f6321a2a7242e720a257e97dffd8746a282411b117c8392c8cededa98f59",
+    "salt": "1ea9dbf209daca159e29ee95b64a98b3",
+    "rol": "estudiante",
+    "activo": 1,
+    "creado_en": "2026-11-06 08:55:57",
+    "gemini_api_key": "AQ.Ab8RN6I-4L8hXSEeNTEuuirswuNUarX750JarROvBmcuTriYJg"
+  },
+  {
+    "username": "franaj",
+    "nombre": "Fran",
+    "password_hash": "b071decd702022fc527a224dd28b4bf1eea6ae9b105dcfbcac5ff1e640093087",
+    "salt": "394ef024d8545b12ffe104eef452e6c0",
+    "rol": "estudiante",
+    "activo": 1,
+    "creado_en": "2026-11-05 13:29:08",
     "gemini_api_key": ""
   }
 ]

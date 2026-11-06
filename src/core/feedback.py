@@ -74,13 +74,32 @@ def exportar_feedback_a_json() -> None:
 
 
 def importar_feedback_desde_json() -> None:
-    """Restaura los reportes desde feedback.json si la base de datos está vacía o reiniciada."""
-    if not FEEDBACK_JSON_PATH.exists():
-        try:
-            from src.core.cloud_sync import _descargar_archivo_hf_directo
-            _descargar_archivo_hf_directo("data/feedback.json", FEEDBACK_JSON_PATH)
-        except Exception:
-            pass
+    """Restaura los reportes desde feedback.json si la base de datos está vacía o reiniciada (fusionando con HF)."""
+    try:
+        from src.core.cloud_sync import _descargar_archivo_hf_directo
+        temp_remote = FEEDBACK_JSON_PATH.with_suffix(".remote.json")
+        if _descargar_archivo_hf_directo("data/feedback.json", temp_remote) and temp_remote.exists():
+            try:
+                with open(temp_remote, "r", encoding="utf-8") as f:
+                    fb_remotos = json.load(f)
+                if isinstance(fb_remotos, list) and len(fb_remotos) > 0:
+                    fb_locales = []
+                    if FEEDBACK_JSON_PATH.exists():
+                        try:
+                            with open(FEEDBACK_JSON_PATH, "r", encoding="utf-8") as fl:
+                                fb_locales = json.load(fl)
+                        except Exception:
+                            pass
+                    mapa_fb = {it["id"]: it for it in fb_locales if isinstance(it, dict) and "id" in it}
+                    for fbr in fb_remotos:
+                        if isinstance(fbr, dict) and "id" in fbr:
+                            mapa_fb[fbr["id"]] = fbr
+                    with open(FEEDBACK_JSON_PATH, "w", encoding="utf-8") as fw:
+                        json.dump(list(mapa_fb.values()), fw, indent=2, ensure_ascii=False)
+            finally:
+                temp_remote.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     if not FEEDBACK_JSON_PATH.exists():
         return
