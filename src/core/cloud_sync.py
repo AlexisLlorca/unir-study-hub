@@ -15,6 +15,7 @@ import shutil
 import tarfile
 import tempfile
 import threading
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -317,8 +318,8 @@ def _actualizar_bundle_seguro(token: str) -> None:
     try:
         time.sleep(2)  # Agrupar archivos si se generaron guía + test JSON a la vez
         crear_y_subir_bundle_rapido(token=token)
-    except Exception:
-        pass
+    except Exception as e:
+        console.print(f"[yellow]⚠ Aviso al actualizar bundle cloud: {e}[/yellow]")
     finally:
         _bundle_lock.release()
 
@@ -349,7 +350,50 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
                 commit_message=f"auto-backup: {rel_to_base.name}",
             )
             _actualizar_bundle_seguro(hf_token)
-        except Exception:
-            pass
+        except Exception as e:
+            console.print(f"[yellow]⚠ Error en respaldar_archivo_en_hf_async ({ruta_local.name}): {e}[/yellow]")
 
     threading.Thread(target=_worker, daemon=True).start()
+
+
+def eliminar_archivo_en_hf_async(ruta_local: Path) -> None:
+    """
+    Elimina en segundo plano un archivo (guía o test) del Dataset privado de Hugging Face
+    y reconstruye procesado_bundle.tar.gz para que no vuelva a aparecer tras reiniciar o actualizar.
+    """
+    hf_token = get_hf_token()
+    if not hf_token:
+        return
+
+    try:
+        rel_to_base = ruta_local.resolve().relative_to(BASE_DIR.resolve())
+    except Exception:
+        try:
+            rel_to_base = Path(str(ruta_local).replace(str(BASE_DIR) + "/", ""))
+        except Exception:
+            return
+
+    path_in_repo = str(rel_to_base).replace("\\", "/")
+
+    def _worker_del():
+        try:
+            from huggingface_hub import HfApi
+            api = HfApi(token=hf_token)
+            repo_id = get_hf_dataset_repo()
+            try:
+                api.delete_file(
+                    path_in_repo=path_in_repo,
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    commit_message=f"delete: eliminar {rel_to_base.name}",
+                )
+                console.print(f"[cyan]🗑️ Archivo {rel_to_base.name} eliminado de Hugging Face[/cyan]")
+            except Exception as e:
+                console.print(f"[yellow]⚠ Aviso eliminando {path_in_repo} en HF: {e}[/yellow]")
+
+            # Reconstruir el bundle sin el archivo eliminado
+            _actualizar_bundle_seguro(hf_token)
+        except Exception as e:
+            console.print(f"[yellow]⚠ Error en eliminar_archivo_en_hf_async: {e}[/yellow]")
+
+    threading.Thread(target=_worker_del, daemon=True).start()

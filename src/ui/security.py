@@ -66,11 +66,12 @@ def ruta_segura_lectura(ruta_relativa: str, extensiones: Optional[Iterable[str]]
     if extensiones is not None and real.suffix.lower() not in {e.lower() for e in extensiones}:
         raise HTTPException(status_code=403, detail="Tipo de archivo no permitido")
 
-    if not real.exists() or not real.is_file():
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    if real.stat().st_size == 0:
+    if not real.exists() or (real.is_file() and real.stat().st_size == 0):
         from src.core.cloud_sync import asegurar_archivo_local
         asegurar_archivo_local(real)
+
+    if not real.exists() or not real.is_file():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
     return real
 
 
@@ -165,7 +166,7 @@ DURACION_BLOQUEO_SEG = 180  # 3 minutos de bloqueo temporal
 
 def _aplicar_cabeceras_seguridad(response: Response) -> Response:
     """Inyecta cabeceras defensivas para prevenir Clickjacking, MIME-sniffing e inyecciones."""
-    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

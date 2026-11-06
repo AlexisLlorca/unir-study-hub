@@ -463,7 +463,10 @@ def api_archivo_raw(ruta: str):
         extensiones={".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".md", ".txt", ".mp3", ".mp4", ".wav", ".m4a"},
     )
     media_type = "application/pdf" if archivo.suffix.lower() == ".pdf" else None
-    return FileResponse(archivo, media_type=media_type)
+    resp = FileResponse(archivo, media_type=media_type)
+    resp.headers["Content-Disposition"] = f'inline; filename="{archivo.name}"'
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+    return resp
 
 
 @app.get("/api/test/{asignatura}/{test_name}")
@@ -521,7 +524,7 @@ def api_guardar_test(sub: TestSubmission):
 
 @app.delete("/api/guia/{asignatura}/{guia_name}")
 def api_eliminar_guia(asignatura: str, guia_name: str):
-    """Elimina una guía de estudio generada."""
+    """Elimina una guía de estudio generada tanto localmente como en la nube."""
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     guia_limpia = nombre_seguro(guia_name, "guía")
     guia_path = ruta_dentro_de(GUIAS_DIR, asig_limpia, guia_limpia)
@@ -529,6 +532,8 @@ def api_eliminar_guia(asignatura: str, guia_name: str):
         raise HTTPException(status_code=404, detail="Guía no encontrada")
 
     try:
+        from src.core.cloud_sync import eliminar_archivo_en_hf_async
+        eliminar_archivo_en_hf_async(guia_path)
         guia_path.unlink()
         return {"ok": True, "mensaje": f"Guía {guia_limpia} eliminada correctamente"}
     except Exception as e:
@@ -537,7 +542,7 @@ def api_eliminar_guia(asignatura: str, guia_name: str):
 
 @app.delete("/api/test/{asignatura}/{test_name}")
 def api_eliminar_test(asignatura: str, test_name: str):
-    """Elimina un simulacro de test (JSON y Markdown acompañante si existe)."""
+    """Elimina un simulacro de test (JSON y Markdown acompañante si existe) tanto localmente como en la nube."""
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     stem = nombre_seguro(test_name.replace(".json", "").replace(".md", ""), "test")
     f_json = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
@@ -545,10 +550,13 @@ def api_eliminar_test(asignatura: str, test_name: str):
 
     eliminado = False
     try:
+        from src.core.cloud_sync import eliminar_archivo_en_hf_async
         if f_json.exists() and f_json.is_file():
+            eliminar_archivo_en_hf_async(f_json)
             f_json.unlink()
             eliminado = True
         if f_md.exists() and f_md.is_file():
+            eliminar_archivo_en_hf_async(f_md)
             f_md.unlink()
             eliminado = True
     except Exception as e:
