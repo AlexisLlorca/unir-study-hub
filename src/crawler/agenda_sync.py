@@ -281,7 +281,7 @@ def sincronizar_calendario_notion_dam() -> List[Dict[str, Any]]:
             tipo_interno = "tarea" if es_entrega else ("clase_directo" if es_clase else ("tema" if es_tema else "test_campus"))
 
             eventos.append({
-                "id": f"notion_{bid[:8]}",
+                "id": f"notion_{bid.replace('-', '')}",
                 "tipo": tipo_interno,
                 "categoria": tipo_notion,
                 "titulo": title,

@@ -2802,7 +2802,7 @@ def dashboard_html():
               </div>
 
               <div x-show="todoHoyLista.length > 0" class="space-y-1.5 max-h-[230px] overflow-y-auto pr-1">
-                <template x-for="ev in todoHoyLista" :key="'hoy-' + ev.id">
+                <template x-for="(ev, idx) in todoHoyLista" :key="'hoy-' + (ev.id || 'ev') + '-' + idx">
                   <div @click="abrirModalItemAgenda(ev)"
                        draggable="true"
                        @dragstart="iniciarArrastreItem($event, ev)"
@@ -2860,7 +2860,7 @@ def dashboard_html():
               </div>
 
               <div x-show="todoSemanaLista.length > 0" class="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
-                <template x-for="ev in todoSemanaLista" :key="'sem-' + ev.id">
+                <template x-for="(ev, idx) in todoSemanaLista" :key="'sem-' + (ev.id || 'ev') + '-' + idx">
                   <div @click="abrirModalItemAgenda(ev)"
                        draggable="true"
                        @dragstart="iniciarArrastreItem($event, ev)"
@@ -3023,7 +3023,7 @@ def dashboard_html():
 
                       <!-- LISTA DE TARJETAS NOTION DENTRO DEL DÍA -->
                       <div class="space-y-1.5 max-h-[250px] overflow-y-auto pr-0.5">
-                        <template x-for="ev in celda.eventos" :key="ev.id">
+                        <template x-for="(ev, idx) in celda.eventos" :key="'cal-' + (ev.id || 'ev') + '-' + idx">
                           <div @click="abrirModalItemAgenda(ev)"
                                draggable="true"
                                @dragstart="iniciarArrastreItem($event, ev)"
@@ -3076,7 +3076,7 @@ def dashboard_html():
                   <span>Próximas entregas PAC en rojo:</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                  <template x-for="ev in proximasEntregasRojas.slice(0, 4)" :key="'red-' + ev.id">
+                  <template x-for="(ev, idx) in proximasEntregasRojas.slice(0, 4)" :key="'red-' + (ev.id || 'ev') + '-' + idx">
                     <button @click="abrirModalItemAgenda(ev)"
                             class="px-2.5 py-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/50 text-rose-200 text-[11px] font-bold transition flex items-center gap-1.5">
                       <span x-text="ev.asignatura + ': ' + ev.titulo"></span>
@@ -3395,7 +3395,7 @@ def dashboard_html():
                       <span class="font-bold ml-auto" :class="celda.esHoy ? 'text-rose-400 font-extrabold' : ''" x-text="celda.dia"></span>
                     </div>
                     <div class="space-y-1">
-                      <template x-for="ev in celda.eventos" :key="'ac-' + ev.id">
+                      <template x-for="(ev, idx) in celda.eventos" :key="'ac-' + (ev.id || 'ev') + '-' + idx">
                         <div @click="abrirModalItemAgenda(ev)"
                              draggable="true"
                              @dragstart="iniciarArrastreItem($event, ev)"
@@ -3959,7 +3959,7 @@ def dashboard_html():
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <template x-for="ev in agendaEventos" :key="ev.id">
+          <template x-for="(ev, idx) in agendaEventos" :key="'ag-' + (ev.id || 'ev') + '-' + idx">
             <div class="glass p-5 rounded-2xl border transition flex flex-col justify-between group"
                  :class="ev.urgencia === 'critica' ? 'border-rose-500/40 bg-rose-950/10' : (ev.urgencia === 'alta' ? 'border-amber-500/30' : 'border-gray-800')">
               <div>
@@ -5863,7 +5863,7 @@ def dashboard_html():
 
       <!-- LISTA DE ENTREGAS DEL MES -->
       <div class="mt-4 space-y-2.5 overflow-y-auto flex-1 pr-1">
-        <template x-for="ev in entregasMesActual" :key="'modal-ent-' + ev.id">
+        <template x-for="(ev, idx) in entregasMesActual" :key="'modal-ent-' + (ev.id || 'ev') + '-' + idx">
           <div @click="modalEntregasMes = false; abrirModalItemAgenda(ev)"
                class="p-4 rounded-2xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/35 hover:border-rose-500/50 transition cursor-pointer flex items-center justify-between gap-3 group">
             <div class="min-w-0 flex-1">

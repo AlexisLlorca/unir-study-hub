@@ -1,6 +1,6 @@
 [
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881dca6bad804691d9f50",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -20,7 +20,7 @@
     "descripcion": "Imparte: ALFREDO CORDERO MARCOS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881159a64f18372aca921",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -29,7 +29,7 @@
     "fecha_dia": "2026-09-14",
     "hora_inicio": "18:00",
     "hora_fin": "18:30",
-    "dias_restantes": -53,
+    "dias_restantes": -54,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -40,7 +40,7 @@
     "descripcion": "Imparte: LAURA GONZALEZ MONTAÑES MONTAÑES"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881e08edcea2005a08b46",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 17:00",
@@ -60,7 +60,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881d49a32f149044ca168",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -80,7 +80,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef090288158808df1cff936b958",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -100,7 +100,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef090288153a26bcd20d440b719",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -120,7 +120,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881998a0ecdd35a87fc0e",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -129,7 +129,7 @@
     "fecha_dia": "2026-09-16",
     "hora_inicio": "18:00",
     "hora_fin": "19:30",
-    "dias_restantes": -51,
+    "dias_restantes": -52,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -140,7 +140,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881cf9c90c1d26829b64c",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -160,7 +160,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881768b60e0ea8e0a66a1",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -169,7 +169,7 @@
     "fecha_dia": "2026-09-18",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -49,
+    "dias_restantes": -50,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -180,7 +180,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028816da2d2ddf054f6f584",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -189,7 +189,7 @@
     "fecha_dia": "2026-09-18",
     "hora_inicio": "18:00",
     "hora_fin": "19:30",
-    "dias_restantes": -49,
+    "dias_restantes": -50,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -200,7 +200,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881f99afcdf4ac3fdd87b",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 15:00",
@@ -220,7 +220,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881349115d3141892184d",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -229,7 +229,7 @@
     "fecha_dia": "2026-09-21",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -46,
+    "dias_restantes": -47,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -240,7 +240,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881ff8766d0eac72c3767",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -249,7 +249,7 @@
     "fecha_dia": "2026-09-21",
     "hora_inicio": "18:00",
     "hora_fin": "18:30",
-    "dias_restantes": -46,
+    "dias_restantes": -47,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -260,7 +260,7 @@
     "descripcion": "Imparte: LAURA GONZALEZ MONTAÑES MONTAÑES"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881c1b793d19133c68f70",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:30",
@@ -269,7 +269,7 @@
     "fecha_dia": "2026-09-21",
     "hora_inicio": "18:30",
     "hora_fin": "19:30",
-    "dias_restantes": -46,
+    "dias_restantes": -47,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -280,7 +280,7 @@
     "descripcion": "Imparte: LAURA GONZALEZ MONTAÑES MONTAÑES"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef090288155b5a3fa26ddd7c2dc",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -289,7 +289,7 @@
     "fecha_dia": "2026-09-22",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -45,
+    "dias_restantes": -46,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -300,7 +300,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881f29a5be9e0549256f7",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:00",
@@ -309,7 +309,7 @@
     "fecha_dia": "2026-09-22",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -45,
+    "dias_restantes": -46,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -320,7 +320,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028812a8e12c80495d31b23",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 15:00",
@@ -340,7 +340,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881d4a15ef8335277a0e0",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -360,7 +360,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881b3a5d4d1cc3a126016",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -380,7 +380,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028814eacd0fbdce58912c8",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -389,7 +389,7 @@
     "fecha_dia": "2026-09-23",
     "hora_inicio": "18:00",
     "hora_fin": "19:30",
-    "dias_restantes": -44,
+    "dias_restantes": -45,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -400,7 +400,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810d91d1f4ae7cd42e8f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -420,7 +420,7 @@
     "descripcion": "Análisis de tecnologías para aplicaciones en dispositivos móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811d97e5d36831fcac8c",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -440,7 +440,7 @@
     "descripcion": "Programación multiproceso"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028816b8c4fe7cfb025d8e0",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Instalar IntelliJ - Clase 15:00",
@@ -460,7 +460,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef0902881d5a688ed06ae016fc0",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -469,7 +469,7 @@
     "fecha_dia": "2026-09-24",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -43,
+    "dias_restantes": -44,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -480,7 +480,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef090288108a185d136bbfa4030",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -489,7 +489,7 @@
     "fecha_dia": "2026-09-24",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -43,
+    "dias_restantes": -44,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -500,7 +500,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881a9b1e9fe4453015a2d",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -520,7 +520,7 @@
     "descripcion": "Información y procesos empresariales"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028818e81f8ea8b3a1950c3",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -540,7 +540,7 @@
     "descripcion": "Concepto y características de componentes"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881379ea1d18e2a904c35",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -560,7 +560,7 @@
     "descripcion": "Ficheros"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef090288122acd0c38c31be5268",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 17:00",
@@ -569,7 +569,7 @@
     "fecha_dia": "2026-09-25",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -42,
+    "dias_restantes": -43,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -580,7 +580,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3e50eef0",
+    "id": "notion_3e50eef09028801e9730c47936a13681",
     "tipo": "tarea",
     "categoria": "FFE",
     "titulo": "INDRA GROUP POSTULAR",
@@ -600,7 +600,7 @@
     "descripcion": "FFE de Fase de Formación en Empresa (FFE)"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288172b147d50b9016fd89",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -620,7 +620,7 @@
     "descripcion": "Effective communication"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef090288160ad48c43971e7d674",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 17:00",
@@ -629,7 +629,7 @@
     "fecha_dia": "2026-09-29",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -38,
+    "dias_restantes": -39,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -640,7 +640,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028815b855fc3c9a6a6d7cc",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -660,7 +660,7 @@
     "descripcion": "Digitalización en los sectores productivos"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028816a98ded8648986a594",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -680,7 +680,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028817b8eccf5c1bf814fda",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -689,7 +689,7 @@
     "fecha_dia": "2026-09-30",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -37,
+    "dias_restantes": -38,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -700,7 +700,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c194fecae44f177a86",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -720,7 +720,7 @@
     "descripcion": "Infraestructura en la nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881d3b8d0c07b083bf10e",
     "tipo": "tarea",
     "categoria": "Formulario",
     "titulo": "Formulario de solicitud de FFE y CV",
@@ -740,7 +740,7 @@
     "descripcion": "Formulario de Fase de Formación en Empresa (FFE)"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028814eafe5f073caae8718",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -760,7 +760,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881a5af9cccd9edde2519",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -769,7 +769,7 @@
     "fecha_dia": "2026-10-01",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -36,
+    "dias_restantes": -37,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -780,7 +780,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ca90ebd5f5fb0c48aa",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -800,7 +800,7 @@
     "descripcion": "Introducción a Kotlin"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028816484ead841aad20af5",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -809,7 +809,7 @@
     "fecha_dia": "2026-10-02",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -35,
+    "dias_restantes": -36,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -820,7 +820,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e40eef0",
+    "id": "notion_3e40eef09028818d9738d24e9eb0f593",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -829,7 +829,7 @@
     "fecha_dia": "2026-10-02",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -35,
+    "dias_restantes": -36,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -840,7 +840,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef09028814883afc276ebbc5da8",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 15:00",
@@ -860,7 +860,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef09028816e91cad33cb8c855c3",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -869,7 +869,7 @@
     "fecha_dia": "2026-10-05",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -32,
+    "dias_restantes": -33,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -880,7 +880,7 @@
     "descripcion": "Imparte: ALFREDO CORDERO MARCOS"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881288146f64b4b43348b",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -889,7 +889,7 @@
     "fecha_dia": "2026-10-05",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -32,
+    "dias_restantes": -33,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -900,7 +900,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881f5b485dbcd8cfe985d",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -909,7 +909,7 @@
     "fecha_dia": "2026-10-05",
     "hora_inicio": "20:00",
     "hora_fin": "20:30",
-    "dias_restantes": -32,
+    "dias_restantes": -33,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -920,7 +920,7 @@
     "descripcion": "Imparte: LAURA GONZALEZ MONTAÑES MONTAÑES"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef09028812da692d5f72b53918a",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:30",
@@ -929,7 +929,7 @@
     "fecha_dia": "2026-10-05",
     "hora_inicio": "20:30",
     "hora_fin": "21:30",
-    "dias_restantes": -32,
+    "dias_restantes": -33,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -940,7 +940,7 @@
     "descripcion": "Imparte: LAURA GONZALEZ MONTAÑES MONTAÑES"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028812faccfec0385aff078",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 1",
@@ -960,7 +960,7 @@
     "descripcion": "La sostenibilidad en el entorno actual"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881ffb448c3334385b598",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -969,7 +969,7 @@
     "fecha_dia": "2026-10-06",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -31,
+    "dias_restantes": -32,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -980,7 +980,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef09028813e8303d6dcca06089e",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:00",
@@ -989,7 +989,7 @@
     "fecha_dia": "2026-10-06",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": -31,
+    "dias_restantes": -32,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1000,7 +1000,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881b489aec952fa8041b9",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 15:00",
@@ -1020,7 +1020,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881319546fba8d6eb96c0",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -1040,7 +1040,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881c088cff42104487164",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1049,7 +1049,7 @@
     "fecha_dia": "2026-10-07",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -30,
+    "dias_restantes": -31,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1060,7 +1060,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881c3a8c4c0f720de6252",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -1069,7 +1069,7 @@
     "fecha_dia": "2026-10-07",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -30,
+    "dias_restantes": -31,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1080,7 +1080,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028814fa45bd9d335bf0150",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1100,7 +1100,7 @@
     "descripcion": "Programación multihilo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881508fe6d1eda06aee91",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1120,7 +1120,7 @@
     "descripcion": "Computación en la nube"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881f6aee7eb52b40b41ea",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -1140,7 +1140,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881b99ad9c79911d7918a",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 17:00",
@@ -1149,7 +1149,7 @@
     "fecha_dia": "2026-10-08",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -29,
+    "dias_restantes": -30,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1160,7 +1160,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881c6ae71d11a80abb626",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1169,7 +1169,7 @@
     "fecha_dia": "2026-10-08",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -29,
+    "dias_restantes": -30,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1180,7 +1180,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881f883ebee2a031c33d7",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 17:00",
@@ -1189,7 +1189,7 @@
     "fecha_dia": "2026-10-09",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -28,
+    "dias_restantes": -29,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1200,7 +1200,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881f7b23ad470225a7590",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -1209,7 +1209,7 @@
     "fecha_dia": "2026-10-09",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -28,
+    "dias_restantes": -29,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1220,7 +1220,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3ec0eef0",
+    "id": "notion_3ec0eef0902881c9adc0f333f05753d4",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -1229,7 +1229,7 @@
     "fecha_dia": "2026-10-09",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -28,
+    "dias_restantes": -29,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1240,7 +1240,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288127b776e8742faf68ed",
     "tipo": "tarea",
     "categoria": "Proyecto",
     "titulo": "Anteproyecto",
@@ -1260,7 +1260,7 @@
     "descripcion": "Proyecto de Proyecto Intermodular DAM"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c3ae45fc15b4549b4c",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 1",
@@ -1280,7 +1280,7 @@
     "descripcion": "Actividad de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288119ac87d9beb69e736e",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 17:00",
@@ -1289,7 +1289,7 @@
     "fecha_dia": "2026-10-13",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -24,
+    "dias_restantes": -25,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1300,7 +1300,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881a2a89ddef2db9d8f94",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -1309,7 +1309,7 @@
     "fecha_dia": "2026-10-13",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -24,
+    "dias_restantes": -25,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1320,7 +1320,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881539844d0aa8fcd90ca",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1340,7 +1340,7 @@
     "descripcion": "Caracterización de las tecnologías habilitadoras"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881129490c36a75d978d3",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -1360,7 +1360,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881e083a3d7abe5e27377",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1369,7 +1369,7 @@
     "fecha_dia": "2026-10-14",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -23,
+    "dias_restantes": -24,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1380,7 +1380,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881cdaa03c74b03a0aa1d",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -1389,7 +1389,7 @@
     "fecha_dia": "2026-10-14",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -23,
+    "dias_restantes": -24,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1400,7 +1400,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881d4b8d5c010d756ddb3",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -1420,7 +1420,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c980ded52acdcc7e17",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1440,7 +1440,7 @@
     "descripcion": "Ficheros XML"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef09028810eb19ce6a8a381a4da",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 16:00",
@@ -1460,7 +1460,7 @@
     "descripcion": "Imparte: JAIRO BAHILLO CALVO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881e4a666c6f965d3da21",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 17:00",
@@ -1469,7 +1469,7 @@
     "fecha_dia": "2026-10-16",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -21,
+    "dias_restantes": -22,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1480,7 +1480,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881a6ab5be351cf7d60de",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -1489,7 +1489,7 @@
     "fecha_dia": "2026-10-16",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -21,
+    "dias_restantes": -22,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1500,7 +1500,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881708bced81f60763afc",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -1509,7 +1509,7 @@
     "fecha_dia": "2026-10-16",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -21,
+    "dias_restantes": -22,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1520,7 +1520,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881fa9712ed313ecbb1bd",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1540,7 +1540,7 @@
     "descripcion": "Sistemas de gestión empresarial"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881dfa2f7f6487e981c1c",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1549,7 +1549,7 @@
     "fecha_dia": "2026-10-19",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -18,
+    "dias_restantes": -19,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1560,7 +1560,7 @@
     "descripcion": "Imparte: ALFREDO CORDERO MARCOS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881f8b002f253706bf8ba",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -1569,7 +1569,7 @@
     "fecha_dia": "2026-10-19",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -18,
+    "dias_restantes": -19,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1580,7 +1580,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881f19b9dcfcef5a36348",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:30",
@@ -1589,7 +1589,7 @@
     "fecha_dia": "2026-10-19",
     "hora_inicio": "20:30",
     "hora_fin": "21:30",
-    "dias_restantes": -18,
+    "dias_restantes": -19,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1600,7 +1600,7 @@
     "descripcion": "Imparte: LAURA GONZALEZ MONTAÑES MONTAÑES"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881d88f80e469a97ebb85",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1620,7 +1620,7 @@
     "descripcion": "Los principales retos ambientales y sociales"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881b8bcb6ffb518daac7d",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -1640,7 +1640,7 @@
     "descripcion": "Connecting ideas"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ffb0a9da42f077f1d4",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 1",
@@ -1660,7 +1660,7 @@
     "descripcion": "Actividad de Acceso a Datos"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef09028815ea215e9ea997b6756",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -1669,7 +1669,7 @@
     "fecha_dia": "2026-10-20",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -17,
+    "dias_restantes": -18,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1680,7 +1680,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881c7981be1daa3914c8f",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:00",
@@ -1689,7 +1689,7 @@
     "fecha_dia": "2026-10-20",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": -17,
+    "dias_restantes": -18,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1700,7 +1700,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288160b3c5f6d59d153bfd",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 15:00",
@@ -1720,7 +1720,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288163bcadd44498759d6b",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -1740,7 +1740,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288138bd5dd808821705c6",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1749,7 +1749,7 @@
     "fecha_dia": "2026-10-21",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -16,
+    "dias_restantes": -17,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1760,7 +1760,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881f5b64cebf5c51d966d",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -1769,7 +1769,7 @@
     "fecha_dia": "2026-10-21",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -16,
+    "dias_restantes": -17,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1780,7 +1780,7 @@
     "descripcion": "Imparte: JAIRO BAHILLO CALVO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288112ac12d911cfd66a27",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -1789,7 +1789,7 @@
     "fecha_dia": "2026-10-21",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -16,
+    "dias_restantes": -17,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1800,7 +1800,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810eaf60c828bef0fdb0",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -1820,7 +1820,7 @@
     "descripcion": "Programación de aplicaciones para dispositivos móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028812bbc2cf1886fc04a54",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -1840,7 +1840,7 @@
     "descripcion": "Comunicaciones en red"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288175901cc631152ad12d",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -1860,7 +1860,7 @@
     "descripcion": "Almacenamiento en la nube"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881bf8145d7c73c784c65",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -1880,7 +1880,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881b981e9d5e85bcdd877",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1889,7 +1889,7 @@
     "fecha_dia": "2026-10-22",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -15,
+    "dias_restantes": -16,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1900,7 +1900,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881fe99e1c8aa20f49f5e",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:00",
@@ -1909,7 +1909,7 @@
     "fecha_dia": "2026-10-22",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": -15,
+    "dias_restantes": -16,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1920,7 +1920,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881539b62c134dd49685a",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 17:00",
@@ -1929,7 +1929,7 @@
     "fecha_dia": "2026-10-23",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -14,
+    "dias_restantes": -15,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1940,7 +1940,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881209473f254440aa46e",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -1949,7 +1949,7 @@
     "fecha_dia": "2026-10-23",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -14,
+    "dias_restantes": -15,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1960,7 +1960,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881ef8ba4eb11bfedd41c",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -1969,7 +1969,7 @@
     "fecha_dia": "2026-10-23",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -14,
+    "dias_restantes": -15,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -1980,7 +1980,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef09028812d9e15f84e6cc26af1",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -1989,7 +1989,7 @@
     "fecha_dia": "2026-10-23",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -14,
+    "dias_restantes": -15,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2000,7 +2000,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028818db9cfc52c3508385f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 2",
@@ -2020,7 +2020,7 @@
     "descripcion": "Añadir, eliminar e integrar componentes"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288130a5cdc7c1840863e4",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 1",
@@ -2040,7 +2040,7 @@
     "descripcion": "Actividad de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881e886f7e947317b334d",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 17:00",
@@ -2049,7 +2049,7 @@
     "fecha_dia": "2026-10-27",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": -10,
+    "dias_restantes": -11,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2060,7 +2060,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881f99d5ac21ca4d2361a",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2069,7 +2069,7 @@
     "fecha_dia": "2026-10-27",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": -10,
+    "dias_restantes": -11,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2080,7 +2080,7 @@
     "descripcion": "Imparte: DAVID CANTOS BARDISA BARDISA"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028814590cddfefd69e663f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -2100,7 +2100,7 @@
     "descripcion": "Cloud y sistemas conectados"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881fbb5c6fa9248034652",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -2120,7 +2120,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef09028818fb827e3ad7ae46c7e",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -2129,7 +2129,7 @@
     "fecha_dia": "2026-10-28",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -9,
+    "dias_restantes": -10,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2140,7 +2140,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881afbefbf7736eea00c2",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2149,7 +2149,7 @@
     "fecha_dia": "2026-10-28",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -9,
+    "dias_restantes": -10,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2160,7 +2160,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288125ba76d8321b3c48da",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -2180,7 +2180,7 @@
     "descripcion": "Diseño de interfaces con Jetpack Compose"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881059370f4dc695b1dfe",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -2200,7 +2200,7 @@
     "descripcion": "Aplicaciones cliente-servidor"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881af94aaf846fa78006a",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -2220,7 +2220,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288102a462d814e9d2324d",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -2229,7 +2229,7 @@
     "fecha_dia": "2026-10-29",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -8,
+    "dias_restantes": -9,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2240,7 +2240,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef09028816d8360da3dfa794eb7",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -2249,7 +2249,7 @@
     "fecha_dia": "2026-10-30",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -7,
+    "dias_restantes": -8,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2260,7 +2260,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef09028814f8c31c29c1746ccde",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2269,7 +2269,7 @@
     "fecha_dia": "2026-10-30",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -7,
+    "dias_restantes": -8,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2280,7 +2280,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881b39b03c38de11a4c1f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -2300,7 +2300,7 @@
     "descripcion": "ERP Odoo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881fba78efd06e0c00ad2",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -2320,7 +2320,7 @@
     "descripcion": "Los principales retos ambientales y sociales"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881138abef6108cf39b35",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -2340,7 +2340,7 @@
     "descripcion": "Bases de Datos en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811b80afe8dee71c0f09",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -2360,7 +2360,7 @@
     "descripcion": "JDBC. DDL"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028815884d0cc32d59da566",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 1",
@@ -2380,7 +2380,7 @@
     "descripcion": "Actividad de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881e38347d06cc08a36de",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 19:00",
@@ -2389,7 +2389,7 @@
     "fecha_dia": "2026-11-03",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": -3,
+    "dias_restantes": -4,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2400,7 +2400,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881f49f52f24a921006e0",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:00",
@@ -2409,7 +2409,7 @@
     "fecha_dia": "2026-11-03",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": -3,
+    "dias_restantes": -4,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2420,7 +2420,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef09028819eb210f700b4f4c813",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 15:00",
@@ -2440,7 +2440,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881c48f02f0d9b866bfbf",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -2460,7 +2460,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881f38ed7c50b1ed4680a",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -2469,7 +2469,7 @@
     "fecha_dia": "2026-11-04",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": -2,
+    "dias_restantes": -3,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2480,7 +2480,7 @@
     "descripcion": "Imparte: DAMIAN SUALDEA SOY"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881d89d37e816d887e3b1",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2489,7 +2489,7 @@
     "fecha_dia": "2026-11-04",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": -2,
+    "dias_restantes": -3,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2500,7 +2500,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef09028818b8ab8dff3433b0b77",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -2520,7 +2520,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881d392d4cee2345382ba",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 20:00",
@@ -2529,7 +2529,7 @@
     "fecha_dia": "2026-11-05",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": -1,
+    "dias_restantes": -2,
     "plazo_texto": "Vencida",
     "urgencia": "vencida",
     "estado": "No vista",
@@ -2540,7 +2540,7 @@
     "descripcion": "Imparte: CESAR CARRION ROSILLO"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef09028812bb700edeb933da4e4",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Tutoria 17:00",
@@ -2549,9 +2549,9 @@
     "fecha_dia": "2026-11-06",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": 0,
-    "plazo_texto": "¡Hoy! (en 0h)",
-    "urgencia": "critica",
+    "dias_restantes": -1,
+    "plazo_texto": "Vencida",
+    "urgencia": "vencida",
     "estado": "No vista",
     "puntos": null,
     "nota_personal": null,
@@ -2560,7 +2560,7 @@
     "descripcion": "Imparte: BORJA MARTIN HERRERA"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881998c1ef99c5b1db1f5",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -2569,9 +2569,9 @@
     "fecha_dia": "2026-11-06",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": 0,
-    "plazo_texto": "¡Hoy! (en 2h)",
-    "urgencia": "critica",
+    "dias_restantes": -1,
+    "plazo_texto": "Vencida",
+    "urgencia": "vencida",
     "estado": "No vista",
     "puntos": null,
     "nota_personal": null,
@@ -2580,7 +2580,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881009bc2e291712a9140",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2589,9 +2589,9 @@
     "fecha_dia": "2026-11-06",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": 0,
-    "plazo_texto": "¡Hoy! (en 3h)",
-    "urgencia": "critica",
+    "dias_restantes": -1,
+    "plazo_texto": "Vencida",
+    "urgencia": "vencida",
     "estado": "No vista",
     "puntos": null,
     "nota_personal": null,
@@ -2600,7 +2600,7 @@
     "descripcion": "Imparte: IGNACIO SEGUI TOMAS"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288193a6f9d584cf9d690f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -2610,7 +2610,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 0,
-    "plazo_texto": "¡Hoy! (en 7h)",
+    "plazo_texto": "¡Hoy! (en 2h)",
     "urgencia": "critica",
     "estado": "No hecho",
     "puntos": null,
@@ -2620,7 +2620,7 @@
     "descripcion": "Desarrollo basado en componentes"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288170bc69d7e93e755703",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -2630,7 +2630,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 3,
-    "plazo_texto": "En 3 días",
+    "plazo_texto": "En 3 días (09/11/2026)",
     "urgencia": "alta",
     "estado": "No hecho",
     "puntos": null,
@@ -2640,7 +2640,7 @@
     "descripcion": "Programación multihilo en aplicaciones en red"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288199be67d213e9a2c409",
     "tipo": "tarea",
     "categoria": "Proyecto",
     "titulo": "Primera entrega",
@@ -2650,7 +2650,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 3,
-    "plazo_texto": "En 3 días",
+    "plazo_texto": "En 3 días (09/11/2026)",
     "urgencia": "alta",
     "estado": "No entregado",
     "puntos": null,
@@ -2660,7 +2660,7 @@
     "descripcion": "Proyecto de Proyecto Intermodular DAM"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028812cb98fc7d42d410bca",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 1",
@@ -2670,7 +2670,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 3,
-    "plazo_texto": "En 3 días",
+    "plazo_texto": "En 3 días (09/11/2026)",
     "urgencia": "alta",
     "estado": "No entregado",
     "puntos": null,
@@ -2680,7 +2680,7 @@
     "descripcion": "Actividad de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881a2ad76d5cf0faba2cd",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 17:00",
@@ -2689,8 +2689,8 @@
     "fecha_dia": "2026-11-10",
     "hora_inicio": "17:00",
     "hora_fin": "18:00",
-    "dias_restantes": 4,
-    "plazo_texto": "En 4 días",
+    "dias_restantes": 3,
+    "plazo_texto": "En 3 días (10/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2700,7 +2700,7 @@
     "descripcion": "Sesión en directo (17:00 - 18:00)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881529387def936714b80",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -2710,7 +2710,7 @@
     "hora_inicio": "16:00",
     "hora_fin": "17:30",
     "dias_restantes": 4,
-    "plazo_texto": "En 4 días",
+    "plazo_texto": "En 4 días (11/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2720,7 +2720,7 @@
     "descripcion": "Sesión en directo (16:00 - 17:30)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef090288122aa07c50802f15ef4",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 18:00",
@@ -2729,8 +2729,8 @@
     "fecha_dia": "2026-11-11",
     "hora_inicio": "18:00",
     "hora_fin": "19:00",
-    "dias_restantes": 5,
-    "plazo_texto": "En 5 días",
+    "dias_restantes": 4,
+    "plazo_texto": "En 4 días (11/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2740,7 +2740,7 @@
     "descripcion": "Sesión en directo (18:00 - 19:00)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881248565d2e610080e7c",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -2749,8 +2749,8 @@
     "fecha_dia": "2026-11-11",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": 5,
-    "plazo_texto": "En 5 días",
+    "dias_restantes": 4,
+    "plazo_texto": "En 4 días (11/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2760,7 +2760,7 @@
     "descripcion": "Sesión en directo (19:00 - 20:00)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef090288144bcd4c104987eefdb",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2769,8 +2769,8 @@
     "fecha_dia": "2026-11-11",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": 5,
-    "plazo_texto": "En 5 días",
+    "dias_restantes": 4,
+    "plazo_texto": "En 4 días (11/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2780,7 +2780,7 @@
     "descripcion": "Sesión en directo (20:00 - 21:30)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881eda241ec12c3eb7c46",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 15:00",
@@ -2790,7 +2790,7 @@
     "hora_inicio": "15:00",
     "hora_fin": "16:30",
     "dias_restantes": 5,
-    "plazo_texto": "En 5 días",
+    "plazo_texto": "En 5 días (12/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2800,7 +2800,7 @@
     "descripcion": "Sesión en directo (15:00 - 16:30)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881c9a821d79737fd0f13",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2809,8 +2809,8 @@
     "fecha_dia": "2026-11-12",
     "hora_inicio": "20:00",
     "hora_fin": "21:00",
-    "dias_restantes": 6,
-    "plazo_texto": "En 6 días",
+    "dias_restantes": 5,
+    "plazo_texto": "En 5 días (12/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2820,7 +2820,7 @@
     "descripcion": "Sesión en directo (20:00 - 21:00)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef0902881e9b653f568ec9b1777",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 16:00",
@@ -2830,7 +2830,7 @@
     "hora_inicio": "16:00",
     "hora_fin": "17:00",
     "dias_restantes": 6,
-    "plazo_texto": "En 6 días",
+    "plazo_texto": "En 6 días (13/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2840,7 +2840,7 @@
     "descripcion": "Sesión en directo (16:00 - 17:00)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef09028812cb20cc6945a2565f3",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 19:00",
@@ -2849,8 +2849,8 @@
     "fecha_dia": "2026-11-13",
     "hora_inicio": "19:00",
     "hora_fin": "20:00",
-    "dias_restantes": 7,
-    "plazo_texto": "En 7 días",
+    "dias_restantes": 6,
+    "plazo_texto": "En 6 días (13/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2860,7 +2860,7 @@
     "descripcion": "Sesión en directo (19:00 - 20:00)"
   },
   {
-    "id": "notion_4090eef0",
+    "id": "notion_4090eef090288100b3d7e11fbdfda632",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2869,8 +2869,8 @@
     "fecha_dia": "2026-11-13",
     "hora_inicio": "20:00",
     "hora_fin": "21:30",
-    "dias_restantes": 7,
-    "plazo_texto": "En 7 días",
+    "dias_restantes": 6,
+    "plazo_texto": "En 6 días (13/11/2026)",
     "urgencia": "alta",
     "estado": "No vista",
     "puntos": null,
@@ -2880,7 +2880,7 @@
     "descripcion": "Sesión en directo (20:00 - 21:30)"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881768e6edc58c0fdaf4b",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -2890,7 +2890,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 7,
-    "plazo_texto": "En 7 días",
+    "plazo_texto": "En 7 días (13/11/2026)",
     "urgencia": "alta",
     "estado": "No hecho",
     "puntos": null,
@@ -2900,7 +2900,7 @@
     "descripcion": "Instalación de Odoo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288135a78bef920521b0a7",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -2910,7 +2910,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 7,
-    "plazo_texto": "En 7 días",
+    "plazo_texto": "En 7 días (13/11/2026)",
     "urgencia": "alta",
     "estado": "No hecho",
     "puntos": null,
@@ -2920,7 +2920,7 @@
     "descripcion": "Interacción de datos y eventos en componentes"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288186a45cf49d8d5558f5",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -2930,7 +2930,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 10,
-    "plazo_texto": "En 10 días (16/11)",
+    "plazo_texto": "En 10 días (16/11/2026)",
     "urgencia": "media",
     "estado": "No hecho",
     "puntos": null,
@@ -2940,7 +2940,7 @@
     "descripcion": "JDBC. DML"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881088c5cd99aeede2615",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 1",
@@ -2950,7 +2950,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 10,
-    "plazo_texto": "En 10 días (16/11)",
+    "plazo_texto": "En 10 días (16/11/2026)",
     "urgencia": "media",
     "estado": "No entregado",
     "puntos": null,
@@ -2960,7 +2960,7 @@
     "descripcion": "Actividad de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef0902881608e56d28da1f05a98",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:00",
@@ -2969,8 +2969,8 @@
     "fecha_dia": "2026-11-30",
     "hora_inicio": "20:00",
     "hora_fin": "20:30",
-    "dias_restantes": 24,
-    "plazo_texto": "En 24 días (30/11)",
+    "dias_restantes": 23,
+    "plazo_texto": "En 23 días (30/11/2026)",
     "urgencia": "baja",
     "estado": "No vista",
     "puntos": null,
@@ -2980,7 +2980,7 @@
     "descripcion": "Sesión en directo (20:00 - 20:30)"
   },
   {
-    "id": "notion_4030eef0",
+    "id": "notion_4030eef090288157a656c14a55bb8573",
     "tipo": "clase_directo",
     "categoria": "Clase",
     "titulo": "Clase 20:30",
@@ -2989,8 +2989,8 @@
     "fecha_dia": "2026-11-30",
     "hora_inicio": "20:30",
     "hora_fin": "21:30",
-    "dias_restantes": 24,
-    "plazo_texto": "En 24 días (30/11)",
+    "dias_restantes": 23,
+    "plazo_texto": "En 23 días (30/11/2026)",
     "urgencia": "baja",
     "estado": "No vista",
     "puntos": null,
@@ -3000,7 +3000,7 @@
     "descripcion": "Sesión en directo (20:30 - 21:30)"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288163abf6d3d698f78a16",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 3",
@@ -3010,7 +3010,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 24,
-    "plazo_texto": "En 24 días (30/11)",
+    "plazo_texto": "En 24 días (30/11/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3020,7 +3020,7 @@
     "descripcion": "The power of words"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881159dd6fe69945352b6",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3030,7 +3030,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 24,
-    "plazo_texto": "En 24 días (30/11)",
+    "plazo_texto": "En 24 días (30/11/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3040,7 +3040,7 @@
     "descripcion": "Herramientas de diseño y edición de interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811f8e34ecd280c9c049",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -3050,7 +3050,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 31,
-    "plazo_texto": "En 31 días (07/12)",
+    "plazo_texto": "En 31 días (07/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3060,7 +3060,7 @@
     "descripcion": "Objetivos de desarrollo sostenible"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e1ae21d0092d0a5815",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3070,7 +3070,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 31,
-    "plazo_texto": "En 31 días (07/12)",
+    "plazo_texto": "En 31 días (07/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3080,7 +3080,7 @@
     "descripcion": "Programación avanzada de aplicaciones móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ffbc65e8d8b04fdf5e",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 6",
@@ -3090,7 +3090,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 31,
-    "plazo_texto": "En 31 días (07/12)",
+    "plazo_texto": "En 31 días (07/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3100,7 +3100,7 @@
     "descripcion": "Programación de servicios en red"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881128644e90a8d7d8e21",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -3110,7 +3110,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 31,
-    "plazo_texto": "En 31 días (07/12)",
+    "plazo_texto": "En 31 días (07/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3120,7 +3120,7 @@
     "descripcion": "Aplicación de la IA"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881b0b138f5c3e37295f3",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3130,7 +3130,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 31,
-    "plazo_texto": "En 31 días (07/12)",
+    "plazo_texto": "En 31 días (07/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3140,7 +3140,7 @@
     "descripcion": "Redes virtuales y Conectividad en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028817f9757e8cbba7ada04",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3150,7 +3150,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 35,
-    "plazo_texto": "En 35 días (11/12)",
+    "plazo_texto": "En 35 días (11/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3160,7 +3160,7 @@
     "descripcion": "Usando Odoo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e289fbdc658ddc2ce8",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 6",
@@ -3170,7 +3170,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 38,
-    "plazo_texto": "En 38 días (14/12)",
+    "plazo_texto": "En 38 días (14/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3180,7 +3180,7 @@
     "descripcion": "Usabilidad, accesibilidad y normas ISO"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881409c71c66348f103aa",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 6",
@@ -3190,7 +3190,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 38,
-    "plazo_texto": "En 38 días (14/12)",
+    "plazo_texto": "En 38 días (14/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3200,7 +3200,7 @@
     "descripcion": "Seguridad y Control de Acceso"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028819dad1efad5b22f325f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3210,7 +3210,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 38,
-    "plazo_texto": "En 38 días (14/12)",
+    "plazo_texto": "En 38 días (14/12/2026)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3220,7 +3220,7 @@
     "descripcion": "Componentes"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ccb192df00c50cd86c",
     "tipo": "tarea",
     "categoria": "Proyecto",
     "titulo": "Segunda entrega",
@@ -3230,7 +3230,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 38,
-    "plazo_texto": "En 38 días (14/12)",
+    "plazo_texto": "En 38 días (14/12/2026)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3240,7 +3240,7 @@
     "descripcion": "Proyecto de Proyecto Intermodular DAM"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881f6a232c5286601e6ac",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 7",
@@ -3250,7 +3250,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 66,
-    "plazo_texto": "En 66 días (11/01)",
+    "plazo_texto": "En 66 días (11/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3260,7 +3260,7 @@
     "descripcion": "Servicios Web REST"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881f6bc1ded94a89dde9a",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 2",
@@ -3270,7 +3270,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 66,
-    "plazo_texto": "En 66 días (11/01)",
+    "plazo_texto": "En 66 días (11/01/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3280,7 +3280,7 @@
     "descripcion": "Actividad de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881198433e15955170fa9",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 6",
@@ -3290,7 +3290,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 70,
-    "plazo_texto": "En 70 días (15/01)",
+    "plazo_texto": "En 70 días (15/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3300,7 +3300,7 @@
     "descripcion": "Implantación de Odoo en la empresa"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881138a0cf27c34fe1774",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 6",
@@ -3310,7 +3310,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 73,
-    "plazo_texto": "En 73 días (18/01)",
+    "plazo_texto": "En 73 días (18/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3320,7 +3320,7 @@
     "descripcion": "Conexiones y comunicaciones de las aplicaciones móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c59cf2e75524f742dc",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 4",
@@ -3330,7 +3330,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 73,
-    "plazo_texto": "En 73 días (18/01)",
+    "plazo_texto": "En 73 días (18/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3340,7 +3340,7 @@
     "descripcion": "Linking success"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881948732d2ac86207151",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3350,7 +3350,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 73,
-    "plazo_texto": "En 73 días (18/01)",
+    "plazo_texto": "En 73 días (18/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3360,7 +3360,7 @@
     "descripcion": "Evaluación de datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881839b04f202ad9bb591",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 7",
@@ -3370,7 +3370,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 73,
-    "plazo_texto": "En 73 días (18/01)",
+    "plazo_texto": "En 73 días (18/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3380,7 +3380,7 @@
     "descripcion": "Documentación y ayuda de aplicaciones"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288177919bd87b1fa82681",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 6",
@@ -3390,7 +3390,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 73,
-    "plazo_texto": "En 73 días (18/01)",
+    "plazo_texto": "En 73 días (18/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3400,7 +3400,7 @@
     "descripcion": "Hibernate. Consultas básicas"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288119b14dfd33862d56a3",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 2",
@@ -3410,7 +3410,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 73,
-    "plazo_texto": "En 73 días (18/01)",
+    "plazo_texto": "En 73 días (18/01/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3420,7 +3420,7 @@
     "descripcion": "Actividad de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881229a6ef9eb79e4c900",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3430,7 +3430,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 80,
-    "plazo_texto": "En 80 días (25/01)",
+    "plazo_texto": "En 80 días (25/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3440,7 +3440,7 @@
     "descripcion": "Hacia una economía circular"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810f9cf5f6fcebf275db",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 8",
@@ -3450,7 +3450,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 80,
-    "plazo_texto": "En 80 días (25/01)",
+    "plazo_texto": "En 80 días (25/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3460,7 +3460,7 @@
     "descripcion": "Programación segura"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881848ed1c24780808675",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 7",
@@ -3470,7 +3470,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 80,
-    "plazo_texto": "En 80 días (25/01)",
+    "plazo_texto": "En 80 días (25/01/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3480,7 +3480,7 @@
     "descripcion": "Elasticidad, Monitorización y Alta Disponibilidad"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881beab88caecf8bb9330",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 2",
@@ -3490,7 +3490,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 80,
-    "plazo_texto": "En 80 días (25/01)",
+    "plazo_texto": "En 80 días (25/01/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3500,7 +3500,7 @@
     "descripcion": "Actividad de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881bab4d4d146930d2382",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 7",
@@ -3510,7 +3510,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 87,
-    "plazo_texto": "En 87 días (01/02)",
+    "plazo_texto": "En 87 días (01/02/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3520,7 +3520,7 @@
     "descripcion": "Utilización de librerías multimedia"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881f3b166dd544a41ad53",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 7",
@@ -3530,7 +3530,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 87,
-    "plazo_texto": "En 87 días (01/02)",
+    "plazo_texto": "En 87 días (01/02/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3540,7 +3540,7 @@
     "descripcion": "Hibernate. Relaciones"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288118995be4ffe36fede4",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 2",
@@ -3550,7 +3550,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 87,
-    "plazo_texto": "En 87 días (01/02)",
+    "plazo_texto": "En 87 días (01/02/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3560,7 +3560,7 @@
     "descripcion": "Actividad de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028817088c1e01697842d4c",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 7",
@@ -3570,7 +3570,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 91,
-    "plazo_texto": "En 91 días (05/02)",
+    "plazo_texto": "En 91 días (05/02/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3580,7 +3580,7 @@
     "descripcion": "Desarrollo de módulos en Odoo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028818f9058d82e40822ac0",
     "tipo": "tarea",
     "categoria": "Proyecto",
     "titulo": "Tercera entrega",
@@ -3590,7 +3590,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 94,
-    "plazo_texto": "En 94 días (08/02)",
+    "plazo_texto": "En 94 días (08/02/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3600,7 +3600,7 @@
     "descripcion": "Proyecto de Proyecto Intermodular DAM"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881a7a8d3cdbf30c2be4a",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 2",
@@ -3610,7 +3610,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 94,
-    "plazo_texto": "En 94 días (08/02)",
+    "plazo_texto": "En 94 días (08/02/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3620,7 +3620,7 @@
     "descripcion": "Actividad de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881488291cd6ff8a962cb",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 2",
@@ -3630,7 +3630,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 101,
-    "plazo_texto": "En 101 días (15/02)",
+    "plazo_texto": "En 101 días (15/02/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3640,7 +3640,7 @@
     "descripcion": "Actividad de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e50eef0",
+    "id": "notion_3e50eef0902880099f51fd759836016d",
     "tipo": "tarea",
     "categoria": "FFE",
     "titulo": "INDRA GROUP POSTULAR",
@@ -3650,7 +3650,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 110,
-    "plazo_texto": "En 110 días (24/02)",
+    "plazo_texto": "En 110 días (24/02/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3660,7 +3660,7 @@
     "descripcion": "FFE de Fase de Formación en Empresa (FFE)"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288174aa58d27b64a91700",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 5",
@@ -3670,7 +3670,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 115,
-    "plazo_texto": "En 115 días (01/03)",
+    "plazo_texto": "En 115 días (01/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3680,7 +3680,7 @@
     "descripcion": "Contrasting ideas"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e1a1bcdc07429f0bf8",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 8",
@@ -3690,7 +3690,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 115,
-    "plazo_texto": "En 115 días (01/03)",
+    "plazo_texto": "En 115 días (01/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3700,7 +3700,7 @@
     "descripcion": "Componentes de una aplicación y su empaquetado"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288106b01cfe78a6c800ac",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 8",
@@ -3710,7 +3710,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 115,
-    "plazo_texto": "En 115 días (01/03)",
+    "plazo_texto": "En 115 días (01/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3720,7 +3720,7 @@
     "descripcion": "Bases de datos orientadas a objeto"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881d58c5bf1636faa93f8",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 8",
@@ -3730,7 +3730,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 122,
-    "plazo_texto": "En 122 días (08/03)",
+    "plazo_texto": "En 122 días (08/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3740,7 +3740,7 @@
     "descripcion": "Análisis de motores de videojuegos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288151ae35ec2cdfd14bdb",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 9",
@@ -3750,7 +3750,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 122,
-    "plazo_texto": "En 122 días (08/03)",
+    "plazo_texto": "En 122 días (08/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3760,7 +3760,7 @@
     "descripcion": "Criptografía"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ae9f9fe38901022123",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 9",
@@ -3770,7 +3770,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 122,
-    "plazo_texto": "En 122 días (08/03)",
+    "plazo_texto": "En 122 días (08/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3780,7 +3780,7 @@
     "descripcion": "Arquitecturas Avanzadas"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881a4a98eea969aae6c8a",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 8",
@@ -3790,7 +3790,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 122,
-    "plazo_texto": "En 122 días (08/03)",
+    "plazo_texto": "En 122 días (08/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3800,7 +3800,7 @@
     "descripcion": "Automatización de Infraestructura y Despliegue"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881348125f434114ef2df",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 9",
@@ -3810,7 +3810,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 122,
-    "plazo_texto": "En 122 días (08/03)",
+    "plazo_texto": "En 122 días (08/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3820,7 +3820,7 @@
     "descripcion": "Bases de datos XML"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881718e95da6ba0dbda1f",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 3",
@@ -3830,7 +3830,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 122,
-    "plazo_texto": "En 122 días (08/03)",
+    "plazo_texto": "En 122 días (08/03/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3840,7 +3840,7 @@
     "descripcion": "Actividad de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028818ea10dc5b1dc54a19b",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 8",
@@ -3850,7 +3850,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 126,
-    "plazo_texto": "En 126 días (12/03)",
+    "plazo_texto": "En 126 días (12/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3860,7 +3860,7 @@
     "descripcion": "Gestión empresarial con VBA"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e9bd7ce9659d35aeb6",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 9",
@@ -3870,7 +3870,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 129,
-    "plazo_texto": "En 129 días (15/03)",
+    "plazo_texto": "En 129 días (15/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3880,7 +3880,7 @@
     "descripcion": "Diseño de videojuegos con Unity"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288171a217d54c67101c99",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 9",
@@ -3890,7 +3890,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 129,
-    "plazo_texto": "En 129 días (15/03)",
+    "plazo_texto": "En 129 días (15/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3900,7 +3900,7 @@
     "descripcion": "Medición de usabilidad y UX"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028813dbfaffd08cdc8c131",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 3",
@@ -3910,7 +3910,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 129,
-    "plazo_texto": "En 129 días (15/03)",
+    "plazo_texto": "En 129 días (15/03/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -3920,7 +3920,7 @@
     "descripcion": "Actividad de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288131be26c69dbfc7b1e1",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 10",
@@ -3930,7 +3930,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 143,
-    "plazo_texto": "En 143 días (29/03)",
+    "plazo_texto": "En 143 días (29/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3940,7 +3940,7 @@
     "descripcion": "Control de acceso y sockets seguros"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810eb77ad11fa1de280f",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 10",
@@ -3950,7 +3950,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 143,
-    "plazo_texto": "En 143 días (29/03)",
+    "plazo_texto": "En 143 días (29/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3960,7 +3960,7 @@
     "descripcion": "Planificación ante Desastres y Continuidad del Negocio"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028813bbc19c5667b9d7c87",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 10",
@@ -3970,7 +3970,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 143,
-    "plazo_texto": "En 143 días (29/03)",
+    "plazo_texto": "En 143 días (29/03/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -3980,7 +3980,7 @@
     "descripcion": "Spring Data"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811d9fcdea16a9d088c0",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 3",
@@ -3990,7 +3990,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 143,
-    "plazo_texto": "En 143 días (29/03)",
+    "plazo_texto": "En 143 días (29/03/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -4000,7 +4000,7 @@
     "descripcion": "Actividad de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028819d84c9e1333b0c43d6",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 9",
@@ -4010,7 +4010,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 147,
-    "plazo_texto": "En 147 días (02/04)",
+    "plazo_texto": "En 147 días (02/04/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4020,7 +4020,7 @@
     "descripcion": "Tratamiento de información empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028817c8267dcd63aa542b1",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 10",
@@ -4030,7 +4030,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 150,
-    "plazo_texto": "En 150 días (05/04)",
+    "plazo_texto": "En 150 días (05/04/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4040,7 +4040,7 @@
     "descripcion": "Desarrollo de videojuegos con Unity"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810aba2fd3dfd984cd59",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 10",
@@ -4050,7 +4050,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 150,
-    "plazo_texto": "En 150 días (05/04)",
+    "plazo_texto": "En 150 días (05/04/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4060,7 +4060,7 @@
     "descripcion": "Realización de pruebas y generación de informes"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881dba318d5e391c85bd1",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 3",
@@ -4070,7 +4070,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 150,
-    "plazo_texto": "En 150 días (05/04)",
+    "plazo_texto": "En 150 días (05/04/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -4080,7 +4080,7 @@
     "descripcion": "Actividad de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ca90a4c4f4c82beeac",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 3",
@@ -4090,7 +4090,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 157,
-    "plazo_texto": "En 157 días (12/04)",
+    "plazo_texto": "En 157 días (12/04/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -4100,7 +4100,7 @@
     "descripcion": "Actividad de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881d483a8c645c228d84a",
     "tipo": "tema",
     "categoria": "Tema",
     "titulo": "Tema 10",
@@ -4110,7 +4110,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 161,
-    "plazo_texto": "En 161 días (16/04)",
+    "plazo_texto": "En 161 días (16/04/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4120,7 +4120,7 @@
     "descripcion": "Visualización de datos empresariales con Tableau"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881acbe6bca33cc6a39b3",
     "tipo": "tarea",
     "categoria": "Actividad",
     "titulo": "Actividad 3",
@@ -4130,7 +4130,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 164,
-    "plazo_texto": "En 164 días (19/04)",
+    "plazo_texto": "En 164 días (19/04/2027)",
     "urgencia": "baja",
     "estado": "No entregado",
     "puntos": null,
@@ -4140,7 +4140,7 @@
     "descripcion": "Actividad de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c59ec2ec0f2a98ec29",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -4150,7 +4150,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4160,7 +4160,7 @@
     "descripcion": "Test de Sostenibilidad Aplicada al Sistema Productivo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288140a967db40a4dd04fb",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -4170,7 +4170,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4180,7 +4180,7 @@
     "descripcion": "Test de Sostenibilidad Aplicada al Sistema Productivo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288156adb2cb06db7a80da",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -4190,7 +4190,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4200,7 +4200,7 @@
     "descripcion": "Test de Sostenibilidad Aplicada al Sistema Productivo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810fa88ed08f715b273e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -4210,7 +4210,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4220,7 +4220,7 @@
     "descripcion": "Test de Sostenibilidad Aplicada al Sistema Productivo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881248fbae19760b6c258",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -4230,7 +4230,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4240,7 +4240,7 @@
     "descripcion": "Test de Sostenibilidad Aplicada al Sistema Productivo"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288189b643efa2f1eef89b",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -4250,7 +4250,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4260,7 +4260,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881daa8aef255ab75d38e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -4270,7 +4270,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4280,7 +4280,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c2aedbebeab0358d7b",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -4290,7 +4290,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4300,7 +4300,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288129b9ddcf232b52ec65",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -4310,7 +4310,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4320,7 +4320,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288159bafce01fc922c377",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -4330,7 +4330,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4340,7 +4340,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810ba550feb4574f4a4e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -4350,7 +4350,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4360,7 +4360,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028819f9dedc08a150eb3e7",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -4370,7 +4370,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4380,7 +4380,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288173bbc4ef9dc8346f7c",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -4390,7 +4390,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4400,7 +4400,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811da95ee26c4e5c3456",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -4410,7 +4410,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4420,7 +4420,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028819c85b2d364758d45dc",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -4430,7 +4430,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4440,7 +4440,7 @@
     "descripcion": "Test de Sistemas de Gestión Empresarial"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881cea986ce350bd748a1",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -4450,7 +4450,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4460,7 +4460,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288123b900c3df376a68f4",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -4470,7 +4470,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4480,7 +4480,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881eabcf9d37d30deb06f",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -4490,7 +4490,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4500,7 +4500,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028813695cfc7bb46f96733",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -4510,7 +4510,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4520,7 +4520,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028819fb31edfa6f1b7823d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -4530,7 +4530,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4540,7 +4540,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028814ab04bff836687d866",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -4550,7 +4550,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4560,7 +4560,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881dfa945d15373e0846e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -4570,7 +4570,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4580,7 +4580,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e98b18dab8e809f00d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -4590,7 +4590,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4600,7 +4600,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881738f14d55bcde9d39c",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -4610,7 +4610,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4620,7 +4620,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288153a069f0c9ae38f61d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -4630,7 +4630,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4640,7 +4640,7 @@
     "descripcion": "Test de Programación Multimedia y Dispositivos Móviles"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288133aa4bdec26036bc88",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 10",
@@ -4650,7 +4650,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4660,7 +4660,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028814fb30cf0762cc11429",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 9",
@@ -4670,7 +4670,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4680,7 +4680,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288138b435ec2b98dd5375",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 8",
@@ -4690,7 +4690,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4700,7 +4700,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288170b3edc7c2403b4c9e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 7",
@@ -4710,7 +4710,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4720,7 +4720,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288118bfeaebc20734747d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 6",
@@ -4730,7 +4730,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4740,7 +4740,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881faa53fe668ace357b2",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 5",
@@ -4750,7 +4750,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4760,7 +4760,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028817ca4e2d133aac80cc8",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 4",
@@ -4770,7 +4770,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4780,7 +4780,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028817bacb3f023df5af523",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 3",
@@ -4790,7 +4790,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4800,7 +4800,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288136a9eecafd9a46972c",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 2",
@@ -4810,7 +4810,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4820,7 +4820,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028813fae11f2ce5bb6208d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test tema 1",
@@ -4830,7 +4830,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4840,7 +4840,7 @@
     "descripcion": "Test de Programación de Servicios y Procesos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288154b6edf55dcd1de94e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Unit 5",
@@ -4850,7 +4850,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4860,7 +4860,7 @@
     "descripcion": "Test de Inglés Profesional"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028816da752f9973b5b05cf",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Unit 4",
@@ -4870,7 +4870,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4880,7 +4880,7 @@
     "descripcion": "Test de Inglés Profesional"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881a2911adf5ba4c2b245",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Unit 3",
@@ -4890,7 +4890,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4900,7 +4900,7 @@
     "descripcion": "Test de Inglés Profesional"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028816aaa46fc0a7e3dc34e",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Unit 2",
@@ -4910,7 +4910,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4920,7 +4920,7 @@
     "descripcion": "Test de Inglés Profesional"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288139a981c9f5d9be8427",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Unit 1",
@@ -4930,7 +4930,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4940,7 +4940,7 @@
     "descripcion": "Test de Inglés Profesional"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288186aa4ec4e024097f31",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -4950,7 +4950,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4960,7 +4960,7 @@
     "descripcion": "Test de Digitalización Aplicada a los Sectores Productivos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881de86a6d2c256507ff7",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -4970,7 +4970,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -4980,7 +4980,7 @@
     "descripcion": "Test de Digitalización Aplicada a los Sectores Productivos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881548672fd49fb9c061f",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -4990,7 +4990,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5000,7 +5000,7 @@
     "descripcion": "Test de Digitalización Aplicada a los Sectores Productivos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288112862bd7bfccdabf42",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -5010,7 +5010,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5020,7 +5020,7 @@
     "descripcion": "Test de Digitalización Aplicada a los Sectores Productivos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028818d9490c1fc43a23e77",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -5030,7 +5030,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5040,7 +5040,7 @@
     "descripcion": "Test de Digitalización Aplicada a los Sectores Productivos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e5b6dfd5cc9593f039",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -5050,7 +5050,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5060,7 +5060,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881e2922ad6c5bc773346",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -5070,7 +5070,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5080,7 +5080,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881bcb06cdd1406f8c3d7",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -5090,7 +5090,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5100,7 +5100,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881aeb6e3db9f56ddb30b",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -5110,7 +5110,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5120,7 +5120,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881cf8ac8d7e77a4e8482",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -5130,7 +5130,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5140,7 +5140,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028814fbb49eef3364bffd9",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -5150,7 +5150,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5160,7 +5160,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288111afcbf9d262a8f00d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -5170,7 +5170,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5180,7 +5180,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028814cb0a7f509588be707",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -5190,7 +5190,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5200,7 +5200,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881c6b3f4ec1e899c9025",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -5210,7 +5210,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5220,7 +5220,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881acae42f5644a611b67",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -5230,7 +5230,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5240,7 +5240,7 @@
     "descripcion": "Test de Desarrollo de Interfaces"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288106a55bf8a8da493bd2",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -5250,7 +5250,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5260,7 +5260,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288114952fe8c5ee3e3cad",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -5270,7 +5270,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5280,7 +5280,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288191b32fe66b953b7569",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -5290,7 +5290,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5300,7 +5300,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288159bf59e34a83feeeff",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -5310,7 +5310,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5320,7 +5320,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028813a81f7db885020a77a",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -5330,7 +5330,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5340,7 +5340,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881ec8e2bc0a7a7065b2f",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -5350,7 +5350,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5360,7 +5360,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881eb855bee95a64722ae",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -5370,7 +5370,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5380,7 +5380,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028812d9f4ad386fb3730ea",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -5390,7 +5390,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5400,7 +5400,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288104963df2a5cc3a5797",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -5410,7 +5410,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5420,7 +5420,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881b1b735cafa3e8b23f0",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -5430,7 +5430,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5440,7 +5440,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881f785e2ef203d6e9ba7",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -5450,7 +5450,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5460,7 +5460,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811580eac163ad87535d",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -5470,7 +5470,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5480,7 +5480,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288105a802c68c982eb856",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -5490,7 +5490,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5500,7 +5500,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881938f22d9e4fc6a7542",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -5510,7 +5510,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5520,7 +5520,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288186a6a7f942c3d32cb7",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -5530,7 +5530,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5540,7 +5540,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288172b8dfe2a19948e170",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -5550,7 +5550,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5560,7 +5560,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881b5b99ef501fbbce1d2",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -5570,7 +5570,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5580,7 +5580,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811e9300c102fb420130",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -5590,7 +5590,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5600,7 +5600,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881deb37af6c827b84020",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -5610,7 +5610,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5620,7 +5620,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028816b8eb2efef7add0098",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -5630,7 +5630,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5640,7 +5640,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288155bb85de861fe44392",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -5650,7 +5650,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5660,7 +5660,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288174b4d8ff5e200bb697",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -5670,7 +5670,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5680,7 +5680,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288152b476c326c13135f8",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -5690,7 +5690,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5700,7 +5700,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881268303c708d110dbd1",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -5710,7 +5710,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5720,7 +5720,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288137ad1dc70bc4038666",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -5730,7 +5730,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5740,7 +5740,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881f58194e9045f5ea120",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -5750,7 +5750,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5760,7 +5760,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028816081ecf2e78d5d7b68",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -5770,7 +5770,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5780,7 +5780,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288117b13afca67976e4dc",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -5790,7 +5790,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5800,7 +5800,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028811bada5cbc7fa0a5a07",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -5810,7 +5810,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5820,7 +5820,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881d8ba79e190743734f8",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -5830,7 +5830,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5840,7 +5840,7 @@
     "descripcion": "Test de Arquitecturas en la Nube"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef090288138a380c5bc124c4e1f",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 10",
@@ -5850,7 +5850,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5860,7 +5860,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028818bb501dd0c84e4857f",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 9",
@@ -5870,7 +5870,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5880,7 +5880,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881459253dd224199794b",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 8",
@@ -5890,7 +5890,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5900,7 +5900,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028819590b0e36ccfa71638",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 7",
@@ -5910,7 +5910,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5920,7 +5920,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881bc8da2f86abf38f63a",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 6",
@@ -5930,7 +5930,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5940,7 +5940,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881a887bddc0f8473e8ed",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 5",
@@ -5950,7 +5950,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5960,7 +5960,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881398c1afe9ac46cbf62",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 4",
@@ -5970,7 +5970,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -5980,7 +5980,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028812d899fefb474ed08f2",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 3",
@@ -5990,7 +5990,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -6000,7 +6000,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef09028810c9704e4233ba86ad5",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 2",
@@ -6010,7 +6010,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
@@ -6020,7 +6020,7 @@
     "descripcion": "Test de Acceso a Datos"
   },
   {
-    "id": "notion_3e20eef0",
+    "id": "notion_3e20eef0902881a39a49c4c8b3d90c89",
     "tipo": "test_campus",
     "categoria": "Test",
     "titulo": "Test Tema 1",
@@ -6030,7 +6030,7 @@
     "hora_inicio": "23:59",
     "hora_fin": "",
     "dias_restantes": 198,
-    "plazo_texto": "En 198 días (23/05)",
+    "plazo_texto": "En 198 días (23/05/2027)",
     "urgencia": "baja",
     "estado": "No hecho",
     "puntos": null,
