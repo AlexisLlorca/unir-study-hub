@@ -118,6 +118,11 @@ class GestorFlashcards:
 
     def _guardar(self, data: Dict[str, List[Dict[str, Any]]]):
         escribir_json_atomico(FLASHCARDS_DATA_FILE, data)
+        try:
+            from src.core.cloud_sync import respaldar_archivo_en_hf_async
+            respaldar_archivo_en_hf_async(FLASHCARDS_DATA_FILE)
+        except Exception:
+            pass
 
     def obtener_tarjetas(self, programa_id: str = "dam", asignatura: Optional[str] = None) -> List[Dict[str, Any]]:
         tarjetas = self.mazos.get(programa_id, [])

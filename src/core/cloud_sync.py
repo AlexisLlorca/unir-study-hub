@@ -80,12 +80,6 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
 
         with tarfile.open(bundle_path, "w:gz") as tar:
             tar.add(str(manifest_path), arcname="data/catalogo_materiales.json")
-            usuarios_json = DATA_DIR / "usuarios.json"
-            if usuarios_json.exists():
-                tar.add(str(usuarios_json.resolve()), arcname="data/usuarios.json")
-            usuarios_db = DATA_DIR / "usuarios.db"
-            if usuarios_db.exists():
-                tar.add(str(usuarios_db.resolve()), arcname="data/usuarios.db")
             for sub in ("procesado", "clases_grabadas"):
                 sub_dir = DATA_DIR / sub
                 if sub_dir.exists():
@@ -191,10 +185,41 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
 
         try:
             with tarfile.open(bundle_local, "r:gz") as tar:
-                tar.extractall(path=str(BASE_DIR))
+                # Nunca sobrescribir bases de datos de usuarios o feedback con el bundle general
+                miembros_seguros = [
+                    m for m in tar.getmembers()
+                    if not m.name.startswith(("data/usuarios", "data/feedback"))
+                ]
+                tar.extractall(path=str(BASE_DIR), members=miembros_seguros)
         except Exception as e:
             console.print(f"[red]❌ Error extrayendo {BUNDLE_FILENAME}: {e}[/red]")
             return False
+
+    # Reconciliar guías y exámenes individuales con Hugging Face por si hubo creaciones/borrados recientes
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi(token=hf_token)
+        repo_id = get_hf_dataset_repo()
+        remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
+        for sub_proc in ("guias", "examenes", "resumenes_clases"):
+            local_sub_dir = DATA_DIR / "procesado" / sub_proc
+            prefix = f"data/procesado/{sub_proc}/"
+            remote_sub = {rf for rf in remote_files if rf.startswith(prefix)}
+            if remote_sub or local_sub_dir.exists():
+                # 1. Eliminar archivos locales que fueron borrados en Hugging Face
+                if local_sub_dir.exists():
+                    for f_loc in list(local_sub_dir.rglob("*")):
+                        if f_loc.is_file():
+                            rel_str = str(f_loc.relative_to(BASE_DIR)).replace("\\", "/")
+                            if rel_str not in remote_sub:
+                                f_loc.unlink(missing_ok=True)
+                # 2. Descargar archivos individuales nuevos que aún no estaban en el bundle
+                for rf in remote_sub:
+                    dest_loc = BASE_DIR / rf
+                    if not dest_loc.exists() or dest_loc.stat().st_size == 0:
+                        _descargar_archivo_hf_directo(rf, dest_loc)
+    except Exception as e:
+        console.print(f"[yellow]⚠ Aviso reconciliando guías/tests individuales desde HF: {e}[/yellow]")
 
     manifest_file = DATA_DIR / "catalogo_materiales.json"
     if manifest_file.exists():
@@ -308,16 +333,21 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
 
 
 _bundle_lock = threading.Lock()
+_bundle_dirty = False
 
 
 def _actualizar_bundle_seguro(token: str) -> None:
-    """Actualiza y sube procesado_bundle.tar.gz de forma segura evitando colisiones entre hilos."""
+    """Actualiza y sube procesado_bundle.tar.gz de forma segura garantizando que ningún cambio quede sin empaquetar."""
+    global _bundle_dirty
+    _bundle_dirty = True
     if not _bundle_lock.acquire(blocking=False):
-        # Si otro hilo ya está empaquetando el bundle, este incluirá los archivos escritos en disco
+        # Otro hilo ya está subiendo el bundle; al ver _bundle_dirty=True hará una pasada final con los nuevos cambios
         return
     try:
-        time.sleep(2)  # Agrupar archivos si se generaron guía + test JSON a la vez
-        crear_y_subir_bundle_rapido(token=token)
+        while _bundle_dirty:
+            _bundle_dirty = False
+            time.sleep(2)  # Agrupar archivos si se generaron o borraron varios seguidos
+            crear_y_subir_bundle_rapido(token=token)
     except Exception as e:
         console.print(f"[yellow]⚠ Aviso al actualizar bundle cloud: {e}[/yellow]")
     finally:
@@ -326,8 +356,8 @@ def _actualizar_bundle_seguro(token: str) -> None:
 
 def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
     """
-    Sube en segundo plano un archivo recién generado (guía, test JSON, progreso o flashcards)
-    al Dataset privado de Hugging Face y actualiza el bundle si es posible.
+    Sube en segundo plano un archivo recién generado (guía, test JSON, progreso, usuarios o flashcards)
+    al Dataset privado de Hugging Face y actualiza el bundle si pertenece a procesado o clases_grabadas.
     """
     hf_token = get_hf_token()
     if not hf_token:
@@ -338,18 +368,21 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
     except Exception:
         return
 
+    rel_str = str(rel_to_base).replace("\\", "/")
+
     def _worker():
         try:
             from huggingface_hub import HfApi
             api = HfApi(token=hf_token)
             api.upload_file(
                 path_or_fileobj=str(ruta_local.resolve()),
-                path_in_repo=str(rel_to_base).replace("\\", "/"),
+                path_in_repo=rel_str,
                 repo_id=get_hf_dataset_repo(),
                 repo_type="dataset",
                 commit_message=f"auto-backup: {rel_to_base.name}",
             )
-            _actualizar_bundle_seguro(hf_token)
+            if rel_str.startswith(("data/procesado/", "data/clases_grabadas/")):
+                _actualizar_bundle_seguro(hf_token)
         except Exception as e:
             console.print(f"[yellow]⚠ Error en respaldar_archivo_en_hf_async ({ruta_local.name}): {e}[/yellow]")
 

@@ -194,7 +194,7 @@ def api_auth_login(req: LoginRequest, request: Request, response: Response):
         max_age=60 * 60 * 24 * 30,
         httponly=True,
         secure=es_https,
-        samesite="none" if es_https else "lax",
+        samesite="lax",
     )
     return {"status": "ok", "usuario": usuario}
 
@@ -423,9 +423,10 @@ def api_progreso():
 
 
 @app.get("/api/preguntas-falladas")
-def api_preguntas_falladas(asig: Optional[str] = None):
+def api_preguntas_falladas(asig: Optional[str] = None, asignatura: Optional[str] = None):
     """Devuelve las preguntas pendientes en el banco de fallos para el Modo Repaso de Fallos."""
-    asig_limpia = nombre_seguro(asig, "asignatura") if asig else None
+    asig_raw = asig or asignatura
+    asig_limpia = nombre_seguro(asig_raw, "asignatura") if asig_raw else None
     return tracker.obtener_preguntas_falladas(asignatura=asig_limpia)
 
 
@@ -463,8 +464,12 @@ def api_archivo_raw(ruta: str):
         extensiones={".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".md", ".txt", ".mp3", ".mp4", ".wav", ".m4a"},
     )
     media_type = "application/pdf" if archivo.suffix.lower() == ".pdf" else None
-    resp = FileResponse(archivo, media_type=media_type)
-    resp.headers["Content-Disposition"] = f'inline; filename="{archivo.name}"'
+    resp = FileResponse(
+        archivo,
+        media_type=media_type,
+        filename=archivo.name,
+        content_disposition_type="inline",
+    )
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
     return resp
 
@@ -476,8 +481,13 @@ def api_obtener_test(asignatura: str, test_name: str):
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     stem = nombre_seguro(test_name.replace(".json", ""), "test")
     archivo = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
+    try:
+        from src.core.cloud_sync import asegurar_archivo_local
+        archivo = asegurar_archivo_local(archivo)
+    except Exception:
+        pass
     
-    if not archivo.exists() or not archivo.is_file():
+    if not archivo.exists() or not archivo.is_file() or archivo.stat().st_size == 0:
         # Fallback tolerante con normalización de acentos y caracteres
         def norm(s):
             return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("_", " ").strip()
@@ -490,7 +500,7 @@ def api_obtener_test(asignatura: str, test_name: str):
                     archivo = f
                     break
 
-    if not archivo.exists() or not archivo.is_file():
+    if not archivo.exists() or not archivo.is_file() or archivo.stat().st_size == 0:
         raise HTTPException(status_code=404, detail="Test no encontrado")
 
     with open(archivo, "r", encoding="utf-8") as f:
@@ -1243,6 +1253,11 @@ def api_resumen_clase(req: ResumenClaseRequest, request: Request):
         raise HTTPException(status_code=500, detail="No se pudo generar el resumen con la IA.")
 
     cache_file.write_text(resumen, encoding="utf-8")
+    try:
+        from src.core.cloud_sync import respaldar_archivo_en_hf_async
+        respaldar_archivo_en_hf_async(cache_file)
+    except Exception:
+        pass
 
     return {
         "resumen": resumen,
@@ -3999,7 +4014,9 @@ def dashboard_html():
       </div>
       <!-- IFRAME VISOR NATIVO CON TEMA OSCURO -->
       <div class="flex-1 bg-gray-950 w-full h-full">
-        <iframe :src="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" class="w-full h-full border-0"></iframe>
+        <template x-if="modalVisorPdf && modalRutaPdf">
+          <iframe :src="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" class="w-full h-full border-0"></iframe>
+        </template>
       </div>
     </div>
   </div>
