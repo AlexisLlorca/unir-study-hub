@@ -825,9 +825,10 @@ def obtener_catalogo_academico(programa_id: Optional[str] = None, curso_id: Opti
     return catalogo
 
 
-def obtener_resumen_programas() -> List[Dict[str, Any]]:
+def obtener_resumen_programas(examenes_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
     """Devuelve un resumen con métricas clave de cada programa para el frontend."""
     resumen = []
+    base_exam_dir = examenes_dir or EXAMENES_DIR
     for p_id, p_info in PROGRAMAS.items():
         total_asigs = 0
         total_mats = 0
@@ -839,7 +840,7 @@ def obtener_resumen_programas() -> List[Dict[str, Any]]:
                 total_asigs += 1
                 dir_mat = MATERIALES_DIR / asig
                 dir_trans = TRANSCRIPCIONES_DIR / asig
-                dir_exam = EXAMENES_DIR / asig
+                dir_exam = base_exam_dir / asig
 
                 if dir_mat.exists():
                     total_mats += len([

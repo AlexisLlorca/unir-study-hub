@@ -344,12 +344,31 @@ def api_admin_feedback_eliminar(feedback_id: int, request: Request):
     return {"status": "ok"}
 
 
+def _username_actual(request: Request) -> str:
+    """Devuelve el nombre de usuario de la cuenta autenticada (o 'alexking44' en modo local/admin)."""
+    u = getattr(request.state, "usuario", None)
+    username = (u.get("username") if isinstance(u, dict) else None) or "alexking44"
+    return "alexking44" if username == "local" else username
+
+
+def _rutas_usuario_request(request: Request) -> dict:
+    """Devuelve las rutas de guías, tests, resúmenes, progreso y flashcards privadas del usuario actual."""
+    from src.core.config import obtener_rutas_usuario
+    return obtener_rutas_usuario(_username_actual(request))
+
+
+def _tracker_usuario(request: Request) -> GestorProgreso:
+    """Devuelve el gestor de progreso y calificaciones privado del usuario actual."""
+    return GestorProgreso(username=_username_actual(request))
+
+
 # --- API ENDPOINTS ---
 
 @app.get("/api/programas")
-def api_programas():
+def api_programas(request: Request):
     """Retorna la lista de programas académicos con todas sus métricas y cursos."""
-    return obtener_resumen_programas()
+    rutas = _rutas_usuario_request(request)
+    return obtener_resumen_programas(examenes_dir=rutas["examenes"])
 
 
 def _orden_natural_items(texto: Any) -> tuple:
@@ -365,19 +384,21 @@ def _orden_natural_items(texto: Any) -> tuple:
 
 
 @app.get("/api/catalogo")
-def api_catalogo(programa: Optional[str] = None, curso: Optional[str] = None):
-    """Retorna el catálogo consolidado de asignaturas filtrado por programa y curso."""
+def api_catalogo(request: Request, programa: Optional[str] = None, curso: Optional[str] = None):
+    """Retorna el catálogo consolidado de asignaturas filtrado por programa, curso y espacio privado del usuario."""
     catalogo = obtener_catalogo_academico(programa_id=programa, curso_id=curso)
+    rutas = _rutas_usuario_request(request)
+    tracker_u = _tracker_usuario(request)
     resultado = []
 
     for asig, info in catalogo.items():
-        dir_guias = GUIAS_DIR / asig
-        dir_examenes = EXAMENES_DIR / asig
+        dir_guias = rutas["guias"] / asig
+        dir_examenes = rutas["examenes"] / asig
 
         guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
         tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
 
-        resumen_progreso = tracker.obtener_resumen_asignatura(asig)
+        resumen_progreso = tracker_u.obtener_resumen_asignatura(asig)
 
         resultado.append({
             "nombre": asig,
@@ -404,9 +425,10 @@ def api_catalogo(programa: Optional[str] = None, curso: Optional[str] = None):
 
 
 @app.get("/api/progreso")
-def api_progreso():
-    """Retorna el estado del expediente, banco de fallos y estadísticas globales."""
-    datos = tracker._cargar()
+def api_progreso(request: Request):
+    """Retorna el estado del expediente, banco de fallos y estadísticas globales privadas del usuario."""
+    tracker_u = _tracker_usuario(request)
+    datos = tracker_u._cargar()
     historial = datos.get("historial_tests", [])
     falladas = datos.get("preguntas_falladas", [])
     notas = [r["nota"] for r in historial]
@@ -423,11 +445,11 @@ def api_progreso():
 
 
 @app.get("/api/preguntas-falladas")
-def api_preguntas_falladas(asig: Optional[str] = None, asignatura: Optional[str] = None):
-    """Devuelve las preguntas pendientes en el banco de fallos para el Modo Repaso de Fallos."""
+def api_preguntas_falladas(request: Request, asig: Optional[str] = None, asignatura: Optional[str] = None):
+    """Devuelve las preguntas pendientes en el banco de fallos privado del usuario para el Modo Repaso de Fallos."""
     asig_raw = asig or asignatura
     asig_limpia = nombre_seguro(asig_raw, "asignatura") if asig_raw else None
-    return tracker.obtener_preguntas_falladas(asignatura=asig_limpia)
+    return _tracker_usuario(request).obtener_preguntas_falladas(asignatura=asig_limpia)
 
 
 @app.get("/api/acceso-movil")
@@ -444,8 +466,19 @@ def api_acceso_movil(request: Request):
 
 
 @app.get("/api/contenido")
-def api_contenido(ruta: str):
-    """Devuelve el contenido en texto de cualquier guía, transcripción o documento .docx dentro de data/."""
+def api_contenido(ruta: str, request: Request):
+    """Devuelve el contenido en texto de cualquier guía (del espacio privado del usuario), transcripción o .docx."""
+    ruta_normalizada = (ruta or "").strip().replace("\\", "/").lstrip("/")
+    rutas_u = _rutas_usuario_request(request)
+    if ruta_normalizada.startswith("data/procesado/guias/"):
+        rel_guia = ruta_normalizada[len("data/procesado/guias/"):]
+        ruta_personal = rutas_u["guias"] / rel_guia
+        ruta = str(ruta_personal.relative_to(BASE_DIR))
+    elif ruta_normalizada.startswith("data/procesado/resumenes_clases/"):
+        rel_res = ruta_normalizada[len("data/procesado/resumenes_clases/"):]
+        ruta_personal = rutas_u["resumenes_clases"] / rel_res
+        ruta = str(ruta_personal.relative_to(BASE_DIR))
+
     archivo = ruta_segura_lectura(ruta, extensiones={".md", ".txt", ".json", ".docx"})
     if archivo.suffix.lower() == ".docx":
         from src.ai.materials_search import extraer_texto_docx
@@ -475,12 +508,14 @@ def api_archivo_raw(ruta: str):
 
 
 @app.get("/api/test/{asignatura}/{test_name}")
-def api_obtener_test(asignatura: str, test_name: str):
-    """Devuelve las preguntas de un test en JSON de forma tolerante a tildes y caracteres."""
+def api_obtener_test(asignatura: str, test_name: str, request: Request):
+    """Devuelve las preguntas de un test en JSON del espacio privado del usuario de forma tolerante."""
     import unicodedata
+    rutas_u = _rutas_usuario_request(request)
+    dir_examenes_u = rutas_u["examenes"]
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     stem = nombre_seguro(test_name.replace(".json", ""), "test")
-    archivo = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
+    archivo = ruta_dentro_de(dir_examenes_u, asig_limpia, f"{stem}.json")
     try:
         from src.core.cloud_sync import asegurar_archivo_local
         archivo = asegurar_archivo_local(archivo)
@@ -492,7 +527,7 @@ def api_obtener_test(asignatura: str, test_name: str):
         def norm(s):
             return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("_", " ").strip()
         
-        dir_asig = EXAMENES_DIR / asig_limpia
+        dir_asig = dir_examenes_u / asig_limpia
         if dir_asig.exists():
             stem_norm = norm(stem)
             for f in dir_asig.glob("*.json"):
@@ -518,9 +553,9 @@ class TestSubmission(BaseModel):
 
 
 @app.post("/api/test/guardar")
-def api_guardar_test(sub: TestSubmission):
-    """Registra la calificación de un test realizado en la web y sincroniza el banco de fallos."""
-    tracker.registrar_resultado_test(
+def api_guardar_test(sub: TestSubmission, request: Request):
+    """Registra la calificación de un test realizado en la web en el expediente privado del usuario."""
+    _tracker_usuario(request).registrar_resultado_test(
         asignatura=nombre_seguro(sub.asignatura, "asignatura"),
         tema=sub.tema.strip()[:200],
         nota=sub.nota,
@@ -533,11 +568,12 @@ def api_guardar_test(sub: TestSubmission):
 
 
 @app.delete("/api/guia/{asignatura}/{guia_name}")
-def api_eliminar_guia(asignatura: str, guia_name: str):
-    """Elimina una guía de estudio generada tanto localmente como en la nube."""
+def api_eliminar_guia(asignatura: str, guia_name: str, request: Request):
+    """Elimina una guía de estudio del espacio privado del usuario tanto localmente como en la nube."""
+    rutas_u = _rutas_usuario_request(request)
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     guia_limpia = nombre_seguro(guia_name, "guía")
-    guia_path = ruta_dentro_de(GUIAS_DIR, asig_limpia, guia_limpia)
+    guia_path = ruta_dentro_de(rutas_u["guias"], asig_limpia, guia_limpia)
     if not guia_path.exists() or not guia_path.is_file():
         raise HTTPException(status_code=404, detail="Guía no encontrada")
 
@@ -551,12 +587,13 @@ def api_eliminar_guia(asignatura: str, guia_name: str):
 
 
 @app.delete("/api/test/{asignatura}/{test_name}")
-def api_eliminar_test(asignatura: str, test_name: str):
-    """Elimina un simulacro de test (JSON y Markdown acompañante si existe) tanto localmente como en la nube."""
+def api_eliminar_test(asignatura: str, test_name: str, request: Request):
+    """Elimina un simulacro de test del espacio privado del usuario tanto localmente como en la nube."""
+    rutas_u = _rutas_usuario_request(request)
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     stem = nombre_seguro(test_name.replace(".json", "").replace(".md", ""), "test")
-    f_json = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
-    f_md = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.md")
+    f_json = ruta_dentro_de(rutas_u["examenes"], asig_limpia, f"{stem}.json")
+    f_md = ruta_dentro_de(rutas_u["examenes"], asig_limpia, f"{stem}.md")
 
     eliminado = False
     try:
@@ -675,6 +712,7 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
             detail="No se encontró un PDF ni videoclase que coincida con ese nombre de tema. Selecciona el documento PDF en el desplegable.",
         )
 
+    rutas_u = _rutas_usuario_request(request)
     res = generador.generar_paquete_tema(
         asignatura=asig_limpia,
         nombre_tema=req.nombre_tema,
@@ -684,6 +722,8 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
         num_preguntas=req.num_preguntas,
         tipo_generacion=req.tipo_generacion or "ambos",
         api_key_override=user_key,
+        guias_dir=rutas_u["guias"],
+        examenes_dir=rutas_u["examenes"],
     )
 
     tiene_guia = bool(res.get("guia"))
@@ -719,11 +759,12 @@ class GuardarGuiaChatRequest(BaseModel):
 
 
 @app.post("/api/guardar-guia-chat")
-def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
-    """Guarda una respuesta o guía generada en el chat de NOVA directamente como guía de estudio oficial."""
+def api_guardar_guia_chat(req: GuardarGuiaChatRequest, request: Request):
+    """Guarda una respuesta o guía generada en el chat de NOVA directamente como guía de estudio en el espacio privado del usuario."""
     if not req.asignatura or not req.contenido.strip():
         raise HTTPException(status_code=400, detail="Faltan datos de asignatura o contenido")
 
+    rutas_u = _rutas_usuario_request(request)
     slug_asig = nombre_seguro(req.asignatura, "asignatura")
     slug_titulo = re.sub(r'[\\/*?:"<>|.]', "", req.titulo).strip().replace(" ", "_")
     if not slug_titulo:
@@ -732,7 +773,7 @@ def api_guardar_guia_chat(req: GuardarGuiaChatRequest):
         slug_titulo = f"{slug_titulo}_guia"
     slug_titulo = nombre_seguro(slug_titulo, "título")
 
-    dir_guia = ruta_dentro_de(GUIAS_DIR, slug_asig)
+    dir_guia = ruta_dentro_de(rutas_u["guias"], slug_asig)
     dir_guia.mkdir(parents=True, exist_ok=True)
     ruta_archivo = ruta_dentro_de(dir_guia, f"{slug_titulo}.md")
 
@@ -1114,11 +1155,13 @@ def obtener_contexto_inteligente_clases(
 
 
 @app.get("/api/videoclases")
-def api_videoclases(programa: Optional[str] = None):
-    """Devuelve el catálogo de todas las clases grabadas con sus metadatos y resúmenes oficiales."""
+def api_videoclases(request: Request, programa: Optional[str] = None):
+    """Devuelve el catálogo de todas las clases grabadas con sus metadatos y resúmenes del usuario."""
     if not TRANSCRIPCIONES_DIR.exists():
         return []
 
+    rutas_u = _rutas_usuario_request(request)
+    dir_resumenes_u = rutas_u["resumenes_clases"]
     clases = []
     for dir_asig in sorted(TRANSCRIPCIONES_DIR.iterdir()):
         if not dir_asig.is_dir():
@@ -1146,8 +1189,7 @@ def api_videoclases(programa: Optional[str] = None):
                     pass
 
             cues_file = dir_asig / f"{f_md.stem}_cues.json"
-            from src.core.config import RESUMENES_CLASES_DIR
-            resumen_file = RESUMENES_CLASES_DIR / asig / f"{f_md.stem}_resumen.md"
+            resumen_file = dir_resumenes_u / asig / f"{f_md.stem}_resumen.md"
 
             clases.append({
                 "asignatura": asig,
@@ -1197,16 +1239,16 @@ class ResumenClaseRequest(BaseModel):
 
 @app.post("/api/resumen-clase")
 def api_resumen_clase(req: ResumenClaseRequest, request: Request):
-    """Genera o recupera de caché un informe exhaustivo de una videoclase oficial."""
+    """Genera o recupera de caché del usuario un informe exhaustivo de una videoclase oficial."""
     user_key = _obtener_user_key_o_exigir(request, req.api_key)
-    from src.core.config import RESUMENES_CLASES_DIR
+    rutas_u = _rutas_usuario_request(request)
     asig_limpia = nombre_seguro(req.asignatura, "asignatura")
     stem = nombre_seguro(
         Path(req.nombre_archivo).stem.replace("_cues", "").replace("_info", "").replace("_resumen", ""),
         "nombre_archivo",
     )
 
-    asig_dir_cache = ruta_dentro_de(RESUMENES_CLASES_DIR, asig_limpia)
+    asig_dir_cache = ruta_dentro_de(rutas_u["resumenes_clases"], asig_limpia)
     asig_dir_cache.mkdir(parents=True, exist_ok=True)
     cache_file = ruta_dentro_de(asig_dir_cache, f"{stem}_resumen.md")
 
@@ -1282,10 +1324,10 @@ def api_sincronizar_agenda():
 
 
 @app.get("/api/flashcards")
-def api_flashcards(programa: str = "dam", asig: Optional[str] = None):
-    """Devuelve las barajas de flashcards para memorización y repaso activo."""
+def api_flashcards(request: Request, programa: str = "dam", asig: Optional[str] = None):
+    """Devuelve las barajas de flashcards privadas del usuario para memorización y repaso activo."""
     from src.ai.flashcards import GestorFlashcards
-    gestor = GestorFlashcards()
+    gestor = GestorFlashcards(username=_username_actual(request))
     return gestor.obtener_tarjetas(programa, asignatura=asig)
 
 
@@ -1296,9 +1338,9 @@ class CalificarCardReq(BaseModel):
 
 
 @app.post("/api/flashcards/calificar")
-def api_calificar_flashcard(req: CalificarCardReq):
+def api_calificar_flashcard(req: CalificarCardReq, request: Request):
     from src.ai.flashcards import GestorFlashcards
-    gestor = GestorFlashcards()
+    gestor = GestorFlashcards(username=_username_actual(request))
     return gestor.calificar_tarjeta(req.programa, req.tarjeta_id, req.dificultad)
 
 
@@ -1314,7 +1356,7 @@ class GenerarCardsReq(BaseModel):
 def api_generar_flashcards(req: GenerarCardsReq, request: Request):
     user_key = _obtener_user_key_o_exigir(request, req.api_key)
     from src.ai.flashcards import GestorFlashcards
-    gestor = GestorFlashcards()
+    gestor = GestorFlashcards(username=_username_actual(request))
     nuevas = gestor.generar_flashcards_con_ia(
         texto_tema=req.texto,
         asignatura=req.asignatura,
@@ -4375,6 +4417,7 @@ def dashboard_html():
             });
           }
           window.addEventListener('popstate', () => this.procesarUrlInicial());
+          await this.cargarUsuarioActual();
           await this.cargarProgramas();
           await this.cargarCatalogo();
           await this.cargarProgreso();
@@ -4383,7 +4426,6 @@ def dashboard_html():
           await this.cargarFlashcards();
           await this.cargarFeedback();
           await this.cargarModelosIa();
-          await this.cargarUsuarioActual();
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
         },
@@ -4581,9 +4623,12 @@ def dashboard_html():
             const res = await fetch('/api/usuario/actual');
             const data = await res.json();
             this.usuarioActual = data;
-            if (this.usuarioActual?.gemini_api_key && !this.userGeminiKey) {
+            if (this.usuarioActual?.gemini_api_key) {
               this.userGeminiKey = this.usuarioActual.gemini_api_key;
               try { localStorage.setItem('unir_user_gemini_key', this.userGeminiKey); } catch(e) {}
+            } else if (this.usuarioActual?.es_admin) {
+              this.userGeminiKey = '';
+              try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
             }
             if (this.usuarioActual && this.usuarioActual.es_admin) {
               await this.cargarAdminUsuarios();
@@ -4740,6 +4785,9 @@ def dashboard_html():
 
         async cerrarSesionUsuario() {
           if (!confirm('¿Cerrar sesión en NOVA Study Hub?')) return;
+          try {
+            localStorage.removeItem('unir_user_gemini_key');
+          } catch(e) {}
           try {
             await fetch('/api/auth/logout', { method: 'POST' });
           } catch(e) {}
@@ -5157,9 +5205,10 @@ def dashboard_html():
         },
 
         obtenerClaveChat(asig) {
+          const userPrefix = (this.usuarioActual && this.usuarioActual.username) ? this.usuarioActual.username.toLowerCase() : 'anon';
           const asigNorm = (asig || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
           const progId = this.programaActivoId || 'dam';
-          return asigNorm ? `${progId}_${asigNorm}` : `${progId}__global_`;
+          return asigNorm ? `${userPrefix}_${progId}_${asigNorm}` : `${userPrefix}_${progId}__global_`;
         },
 
         obtenerMensajeBienvenida(asig) {

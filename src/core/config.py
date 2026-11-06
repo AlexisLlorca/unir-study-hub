@@ -67,6 +67,40 @@ TRANSCRIPCIONES_DIR = PROCESADO_DIR / "transcripciones"
 RESUMENES_CLASES_DIR = PROCESADO_DIR / "resumenes_clases"
 RESUMENES_CLASES_DIR.mkdir(parents=True, exist_ok=True)
 
+# Espacios privados por cuenta de usuario (guías, tests, resúmenes, progreso y flashcards aislados)
+USUARIOS_ESPACIOS_DIR = DATA_DIR / "usuarios_espacios"
+USUARIOS_ESPACIOS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def obtener_espacio_usuario(username: Optional[str] = None) -> Path:
+    """Devuelve el directorio privado de estudio del usuario (`data/usuarios_espacios/<username>`)."""
+    import re
+    u = re.sub(r"[^a-zA-Z0-9_\-]", "", (username or "alexking44").strip().lower())
+    if not u or u == "local":
+        u = "alexking44"
+    espacio = USUARIOS_ESPACIOS_DIR / u
+    espacio.mkdir(parents=True, exist_ok=True)
+    return espacio
+
+
+def obtener_rutas_usuario(username: Optional[str] = None) -> dict:
+    """Devuelve las rutas de guías, exámenes, resúmenes, progreso y flashcards exclusivas del usuario."""
+    espacio = obtener_espacio_usuario(username)
+    guias = espacio / "guias"
+    examenes = espacio / "examenes"
+    resumenes = espacio / "resumenes_clases"
+    flashcards_dir = espacio / "flashcards"
+    for d in (guias, examenes, resumenes, flashcards_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    return {
+        "espacio": espacio,
+        "guias": guias,
+        "examenes": examenes,
+        "resumenes_clases": resumenes,
+        "progreso_file": espacio / "progreso.json",
+        "flashcards_file": flashcards_dir / "mazos.json",
+    }
+
 # 5. CIBERSEGURIDAD: Rutas de autenticación y sesiones
 AUTH_DIR = BASE_DIR / "auth"
 SESSION_STATE_FILE = AUTH_DIR / "session_state.json"

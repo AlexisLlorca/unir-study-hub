@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from src.core.config import PROCESADO_DIR, ensure_directories, escribir_json_atomico
+from src.core.config import PROCESADO_DIR, ensure_directories, escribir_json_atomico, obtener_rutas_usuario
 from src.ai.tutor import TutorIA
 
 FLASHCARDS_DIR = PROCESADO_DIR / "flashcards"
@@ -99,28 +99,32 @@ MAZOS_PREDETERMINADOS = {
 
 
 class GestorFlashcards:
-    """Gestiona el almacenamiento, generación y estado de repetición espaciada de las flashcards."""
+    """Gestiona el almacenamiento, generación y estado de repetición espaciada de las flashcards (aislado por usuario)."""
 
-    def __init__(self):
+    def __init__(self, username: Optional[str] = None):
+        import copy
         ensure_directories()
-        FLASHCARDS_DIR.mkdir(parents=True, exist_ok=True)
+        self.username = username or "alexking44"
+        self.archivo_datos = obtener_rutas_usuario(self.username)["flashcards_file"]
         with _FLASHCARDS_LOCK:
             self.mazos = self._cargar_o_inicializar()
 
     def _cargar_o_inicializar(self) -> Dict[str, List[Dict[str, Any]]]:
-        if FLASHCARDS_DATA_FILE.exists():
+        import copy
+        if self.archivo_datos.exists():
             try:
-                return json.loads(FLASHCARDS_DATA_FILE.read_text(encoding="utf-8"))
+                return json.loads(self.archivo_datos.read_text(encoding="utf-8"))
             except Exception:
                 pass
-        self._guardar(MAZOS_PREDETERMINADOS)
-        return MAZOS_PREDETERMINADOS
+        inicial = copy.deepcopy(MAZOS_PREDETERMINADOS)
+        self._guardar(inicial)
+        return inicial
 
     def _guardar(self, data: Dict[str, List[Dict[str, Any]]]):
-        escribir_json_atomico(FLASHCARDS_DATA_FILE, data)
+        escribir_json_atomico(self.archivo_datos, data)
         try:
             from src.core.cloud_sync import respaldar_archivo_en_hf_async
-            respaldar_archivo_en_hf_async(FLASHCARDS_DATA_FILE)
+            respaldar_archivo_en_hf_async(self.archivo_datos)
         except Exception:
             pass
 

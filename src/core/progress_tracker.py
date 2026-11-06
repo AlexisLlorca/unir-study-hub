@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional
 from rich.panel import Panel
 from rich.table import Table
 
-from src.core.config import console, PROCESADO_DIR, ensure_directories, escribir_json_atomico
+from src.core.config import console, PROCESADO_DIR, ensure_directories, escribir_json_atomico, obtener_rutas_usuario
 from src.core.academic_structure import ASIGNATURAS_2DAM
 
 PROGRESO_FILE = PROCESADO_DIR / "progreso.json"
@@ -21,11 +21,12 @@ _PROGRESO_LOCK = threading.Lock()
 
 
 class GestorProgreso:
-    """Gestiona el expediente y registro de notas de autoevaluación del alumno."""
+    """Gestiona el expediente y registro de notas de autoevaluación del alumno (aislado por usuario)."""
 
-    def __init__(self):
+    def __init__(self, username: Optional[str] = None):
         ensure_directories()
-        self.archivo_progreso = PROGRESO_FILE
+        self.username = username or "alexking44"
+        self.archivo_progreso = obtener_rutas_usuario(self.username)["progreso_file"]
         self._inicializar()
 
     def _inicializar(self):

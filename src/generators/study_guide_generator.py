@@ -43,6 +43,8 @@ class GeneradorGuiaEstudio:
         num_preguntas: Optional[int] = None,
         tipo_generacion: str = "ambos",
         api_key_override: Optional[str] = None,
+        guias_dir: Optional[Path] = None,
+        examenes_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """
         Genera:
@@ -259,7 +261,7 @@ class GeneradorGuiaEstudio:
                 )
 
             if guia_md:
-                dir_asig_guia = GUIAS_DIR / asignatura
+                dir_asig_guia = (guias_dir or GUIAS_DIR) / asignatura
                 dir_asig_guia.mkdir(parents=True, exist_ok=True)
                 ruta_guia_base = dir_asig_guia / f"{slug_tema}_guia.md"
                 # B4: Evitar que una guía corta machaque silenciosamente una guía robusta previa
@@ -353,7 +355,7 @@ class GeneradorGuiaEstudio:
                             if "enunciado" in p and "opciones" in p and "correcta" in p
                         ]
 
-                        dir_examenes = EXAMENES_DIR / asignatura
+                        dir_examenes = (examenes_dir or EXAMENES_DIR) / asignatura
                         dir_examenes.mkdir(parents=True, exist_ok=True)
 
                         # Guardar JSON para el test interactivo

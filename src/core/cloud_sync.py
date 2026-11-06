@@ -80,7 +80,7 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
 
         with tarfile.open(bundle_path, "w:gz") as tar:
             tar.add(str(manifest_path), arcname="data/catalogo_materiales.json")
-            for sub in ("procesado", "clases_grabadas"):
+            for sub in ("procesado", "clases_grabadas", "usuarios_espacios"):
                 sub_dir = DATA_DIR / sub
                 if sub_dir.exists():
                     for f in sub_dir.rglob("*"):
@@ -185,25 +185,29 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
 
         try:
             with tarfile.open(bundle_local, "r:gz") as tar:
-                # Nunca sobrescribir bases de datos de usuarios o feedback con el bundle general
+                # Nunca sobrescribir bases de datos de cuentas de usuario o feedback con el bundle general
                 miembros_seguros = [
                     m for m in tar.getmembers()
-                    if not m.name.startswith(("data/usuarios", "data/feedback"))
+                    if not m.name.startswith(("data/usuarios.json", "data/usuarios.db", "data/feedback"))
                 ]
                 tar.extractall(path=str(BASE_DIR), members=miembros_seguros)
         except Exception as e:
             console.print(f"[red]❌ Error extrayendo {BUNDLE_FILENAME}: {e}[/red]")
             return False
 
-    # Reconciliar guías y exámenes individuales con Hugging Face por si hubo creaciones/borrados recientes
+    # Reconciliar espacios privados de usuarios y procesado con Hugging Face por si hubo creaciones/borrados recientes
     try:
         from huggingface_hub import HfApi
         api = HfApi(token=hf_token)
         repo_id = get_hf_dataset_repo()
         remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
-        for sub_proc in ("guias", "examenes", "resumenes_clases"):
-            local_sub_dir = DATA_DIR / "procesado" / sub_proc
-            prefix = f"data/procesado/{sub_proc}/"
+        rutas_a_reconciliar = [
+            (DATA_DIR / "usuarios_espacios", "data/usuarios_espacios/"),
+            (DATA_DIR / "procesado" / "guias", "data/procesado/guias/"),
+            (DATA_DIR / "procesado" / "examenes", "data/procesado/examenes/"),
+            (DATA_DIR / "procesado" / "resumenes_clases", "data/procesado/resumenes_clases/"),
+        ]
+        for local_sub_dir, prefix in rutas_a_reconciliar:
             remote_sub = {rf for rf in remote_files if rf.startswith(prefix)}
             if remote_sub or local_sub_dir.exists():
                 # 1. Eliminar archivos locales que fueron borrados en Hugging Face
@@ -219,7 +223,7 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
                     if not dest_loc.exists() or dest_loc.stat().st_size == 0:
                         _descargar_archivo_hf_directo(rf, dest_loc)
     except Exception as e:
-        console.print(f"[yellow]⚠ Aviso reconciliando guías/tests individuales desde HF: {e}[/yellow]")
+        console.print(f"[yellow]⚠ Aviso reconciliando espacios de usuarios/guías desde HF: {e}[/yellow]")
 
     manifest_file = DATA_DIR / "catalogo_materiales.json"
     if manifest_file.exists():
@@ -294,7 +298,7 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
             except Exception:
                 continue
 
-        for sub in ["clases_grabadas", "procesado", "materiales"]:
+        for sub in ["clases_grabadas", "procesado", "materiales", "usuarios_espacios"]:
             sub_path = tmp_data / sub
             if sub_path.exists():
                 api.upload_folder(
@@ -381,7 +385,7 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
                 repo_type="dataset",
                 commit_message=f"auto-backup: {rel_to_base.name}",
             )
-            if rel_str.startswith(("data/procesado/", "data/clases_grabadas/")):
+            if rel_str.startswith(("data/procesado/", "data/clases_grabadas/", "data/usuarios_espacios/")):
                 _actualizar_bundle_seguro(hf_token)
         except Exception as e:
             console.print(f"[yellow]⚠ Error en respaldar_archivo_en_hf_async ({ruta_local.name}): {e}[/yellow]")
