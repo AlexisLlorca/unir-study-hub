@@ -4,6 +4,7 @@ Define las rutas base de forma relativa y dinámica para máxima portabilidad.
 """
 
 from pathlib import Path
+from typing import Optional
 import os
 from dotenv import load_dotenv
 from rich.console import Console

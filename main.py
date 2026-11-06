@@ -7,6 +7,7 @@ generación automática de apuntes, ejercicios y simulacros de examen.
 
 import sys
 from pathlib import Path
+from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
