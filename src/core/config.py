@@ -85,16 +85,18 @@ def obtener_espacio_usuario(username: Optional[str] = None) -> Path:
 
 
 def obtener_rutas_usuario(username: Optional[str] = None) -> dict:
-    """Devuelve las rutas de guías, exámenes, resúmenes, progreso y flashcards exclusivas del usuario."""
+    """Devuelve las rutas de materiales, guías, exámenes, resúmenes, progreso y flashcards exclusivas del usuario."""
     espacio = obtener_espacio_usuario(username)
+    materiales = espacio / "materiales"
     guias = espacio / "guias"
     examenes = espacio / "examenes"
     resumenes = espacio / "resumenes_clases"
     flashcards_dir = espacio / "flashcards"
-    for d in (guias, examenes, resumenes, flashcards_dir):
+    for d in (materiales, guias, examenes, resumenes, flashcards_dir):
         d.mkdir(parents=True, exist_ok=True)
     return {
         "espacio": espacio,
+        "materiales": materiales,
         "guias": guias,
         "examenes": examenes,
         "resumenes_clases": resumenes,

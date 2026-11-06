@@ -16,6 +16,7 @@ secrets/
 *.db-journal
 *.sqlite3
 data/usuarios.db*
+data/usuarios_espacios/
 
 # 3. Material docente y datos temporales de la UNIR (Privacidad y Copyright)
 data/downloads/
