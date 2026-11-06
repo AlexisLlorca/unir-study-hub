@@ -48,9 +48,9 @@ def calcular_dias_restantes(fecha_iso: Optional[str]) -> tuple[int, str]:
         elif dias_reales == 1:
             return 1, "Mañana"
         elif dias_reales <= 7:
-            return dias_reales, f"En {dias_reales} días"
+            return dias_reales, f"En {dias_reales} días ({limite.strftime('%d/%m/%Y')})"
         else:
-            return dias_reales, f"En {dias_reales} días ({limite.strftime('%d/%m')})"
+            return dias_reales, f"En {dias_reales} días ({limite.strftime('%d/%m/%Y')})"
     except Exception:
         return 999, "Fecha no disponible"
 

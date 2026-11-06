@@ -2872,7 +2872,7 @@ def dashboard_html():
                           <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[10px] shrink-0"></i>
                           <span class="text-xs font-extrabold text-white truncate" x-text="ev.titulo"></span>
                         </div>
-                        <span class="text-[9px] text-gray-300 font-mono shrink-0" x-text="(ev.fecha_dia || '').slice(5)"></span>
+                        <span class="text-[9px] text-gray-300 font-mono shrink-0" x-text="formatearFechaDDMMAAAA(ev.fecha_dia || ev.fecha_iso)"></span>
                       </div>
                       <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1">
                         <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
@@ -3089,7 +3089,7 @@ def dashboard_html():
                             class="px-2.5 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-100 text-[11px] font-bold transition flex items-center gap-1.5">
                       <span x-text="rec.titulo"></span>
                       <span x-show="rec.hora_inicio && rec.hora_inicio !== '23:59'" class="font-mono text-[10px] text-amber-300" x-text="rec.hora_inicio"></span>
-                      <span class="px-1.5 py-0.2 rounded bg-purple-600 text-white text-[9px] font-extrabold" x-text="rec.fecha_dia"></span>
+                      <span class="px-1.5 py-0.2 rounded bg-purple-600 text-white text-[9px] font-extrabold font-mono" x-text="formatearFechaDDMMAAAA(rec.fecha_dia)"></span>
                     </button>
                   </template>
                 </div>
@@ -3452,7 +3452,7 @@ def dashboard_html():
                            :class="claseColorTarjetaNotion(act)">
                         <div class="min-w-0 flex-1">
                           <p class="text-xs font-extrabold text-white break-words" x-text="act.titulo"></p>
-                          <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (act.fecha_dia || 'Pendiente') + ' • ' + (act.plazo_texto || '')"></p>
+                          <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (formatearFechaDDMMAAAA(act.fecha_dia) || 'Pendiente') + ' • ' + (formatearPlazoTexto(act.plazo_texto, act.fecha_dia) || '')"></p>
                         </div>
                         <div class="text-right shrink-0">
                           <span class="text-[9px] px-1.5 py-0.5 rounded font-bold block" :class="claseBadgeEstadoNotion(act.estado)" x-text="act.estado"></span>
@@ -3477,7 +3477,7 @@ def dashboard_html():
                            :class="claseColorTarjetaNotion(act)">
                         <div class="min-w-0 flex-1">
                           <p class="text-xs font-extrabold text-white break-words" x-text="act.titulo"></p>
-                          <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (act.fecha_dia || 'Pendiente') + ' • ' + (act.plazo_texto || '')"></p>
+                          <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (formatearFechaDDMMAAAA(act.fecha_dia) || 'Pendiente') + ' • ' + (formatearPlazoTexto(act.plazo_texto, act.fecha_dia) || '')"></p>
                         </div>
                         <div class="text-right shrink-0">
                           <span class="text-[9px] px-1.5 py-0.5 rounded font-bold block" :class="claseBadgeEstadoNotion(act.estado)" x-text="act.estado"></span>
@@ -3509,7 +3509,7 @@ def dashboard_html():
                          :class="claseColorTarjetaNotion(tm)">
                       <div class="min-w-0 flex-1">
                         <p class="text-xs font-bold text-white break-words" x-text="tm.titulo"></p>
-                        <p class="text-[9px] text-gray-300 font-mono" x-text="tm.fecha_dia ? ('Día: ' + tm.fecha_dia) : 'Arrástralo a un día o haz clic'"></p>
+                        <p class="text-[9px] text-gray-300 font-mono" x-text="tm.fecha_dia ? ('Día: ' + formatearFechaDDMMAAAA(tm.fecha_dia)) : 'Arrástralo a un día o haz clic'"></p>
                       </div>
                       <div class="flex items-center gap-1 shrink-0">
                         <div class="hidden group-hover/tm:flex items-center gap-0.5 mr-1" @click.stop="">
@@ -3653,9 +3653,9 @@ def dashboard_html():
                       <template x-if="tm.fecha_dia">
                         <button @click="tm.eventoAgenda ? abrirModalItemAgenda(tm.eventoAgenda) : planificarTemaEnCalendario(tm)"
                                 class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 group/cal"
-                                :title="'Planificado para el ' + tm.fecha_dia + '. Clic para editar o mover en el calendario'">
+                                :title="'Planificado para el ' + formatearFechaDDMMAAAA(tm.fecha_dia) + '. Clic para editar o mover en el calendario'">
                           <i class="fa-regular fa-calendar-check text-amber-400 text-xs"></i>
-                          <span x-text="formatearFechaCorta(tm.fecha_dia)"></span>
+                          <span x-text="formatearFechaDDMMAAAA(tm.fecha_dia)"></span>
                           <i class="fa-solid fa-pen text-[9px] opacity-60 group-hover/cal:opacity-100"></i>
                         </button>
                       </template>
@@ -3723,7 +3723,7 @@ def dashboard_html():
                 <template x-for="clase in asigSeleccionada?.clases" :key="clase.nombre">
                   <div class="glass-card p-3 rounded-xl hover:border-amber-500/30 transition flex items-center justify-between">
                     <div class="overflow-hidden pr-2 flex-1">
-                      <p class="text-[10px] text-amber-400 font-bold" x-text="clase.fecha"></p>
+                      <p class="text-[10px] text-amber-400 font-bold font-mono" x-text="formatearFechaDDMMAAAA(clase.fecha)"></p>
                       <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="clase.titulo"></h5>
                     </div>
                     <div class="flex items-center space-x-1 shrink-0 ml-2">
@@ -3789,7 +3789,7 @@ def dashboard_html():
                 <div class="glass-card p-4 rounded-xl flex items-center justify-between">
                   <div>
                     <h5 class="text-sm font-bold text-white" x-text="item.asignatura + ' — ' + item.tema"></h5>
-                    <p class="text-xs text-gray-400" x-text="item.fecha + ' • ' + item.aciertos + ' de ' + (item.total_preguntas || item.total) + ' aciertos'"></p>
+                    <p class="text-xs text-gray-400" x-text="formatearFechaDDMMAAAA(item.fecha) + ' • ' + item.aciertos + ' de ' + (item.total_preguntas || item.total) + ' aciertos'"></p>
                   </div>
                   <span class="text-base font-black px-3 py-1 rounded-xl"
                         :class="item.nota >= 5 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'"
@@ -3901,7 +3901,7 @@ def dashboard_html():
                             <h6 class="text-xs font-semibold text-gray-200 truncate" x-text="cal.titulo"></h6>
                             <p class="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1.5">
                               <i class="fa-regular fa-calendar text-[10px] text-gray-500"></i>
-                              <span x-text="'Calificada: ' + (cal.fecha_calificacion || 'Reciente')"></span>
+                              <span x-text="'Calificada: ' + (formatearFechaDDMMAAAA(cal.fecha_calificacion) || 'Reciente')"></span>
                             </p>
                           </div>
                           <div class="text-right shrink-0">
@@ -4480,7 +4480,7 @@ def dashboard_html():
                   <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 break-words" x-text="clase.asignatura"></span>
                   <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1 shrink-0">
                     <i class="fa-regular fa-calendar mr-1"></i>
-                    <span x-text="clase.fecha"></span>
+                    <span x-text="formatearFechaDDMMAAAA(clase.fecha)"></span>
                   </span>
                 </div>
                 <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition break-words" x-text="clase.titulo"></h4>
@@ -5354,7 +5354,7 @@ def dashboard_html():
           <div>
             <div class="flex items-center space-x-2">
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 uppercase" x-text="minuteroClase?.asignatura"></span>
-              <span class="text-xs text-amber-400 font-mono" x-text="minuteroClase?.fecha"></span>
+              <span class="text-xs text-amber-400 font-mono" x-text="formatearFechaDDMMAAAA(minuteroClase?.fecha)"></span>
             </div>
             <h3 class="font-bold text-white text-sm mt-0.5" x-text="minuteroClase?.titulo"></h3>
           </div>
@@ -5414,7 +5414,7 @@ def dashboard_html():
           <div>
             <div class="flex items-center space-x-2">
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 uppercase" x-text="resumenClaseActual?.asignatura"></span>
-              <span class="text-xs text-amber-400 font-mono" x-text="resumenClaseActual?.fecha"></span>
+              <span class="text-xs text-amber-400 font-mono" x-text="formatearFechaDDMMAAAA(resumenClaseActual?.fecha)"></span>
               <span x-show="resumenClaseCached" class="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">En caché local</span>
             </div>
             <h3 class="font-bold text-white text-sm mt-0.5" x-text="resumenClaseActual?.titulo"></h3>
@@ -5706,7 +5706,7 @@ def dashboard_html():
             <template x-if="miCampusConfig?.token_estado?.estado === 'ok'">
               <div class="text-[11px] text-emerald-400/90 flex items-center gap-1.5">
                 <i class="fa-solid fa-shield-halved text-[10px]"></i>
-                <span x-text="'Token activo (vigente hasta: ' + (miCampusConfig.token_estado.expira || '30 días') + ')'"></span>
+                <span x-text="'Token activo (vigente hasta: ' + (formatearFechaDDMMAAAA(miCampusConfig.token_estado.expira) || '30 días') + ')'"></span>
               </div>
             </template>
           </div>
@@ -5858,8 +5858,8 @@ def dashboard_html():
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-[10px] font-bold px-2 py-0.2 rounded-md bg-rose-500 text-white uppercase tracking-wider" x-text="ev.categoria || 'Entrega'"></span>
-                <span class="text-xs font-bold text-rose-300 font-mono" x-text="ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10)"></span>
-                <span x-show="ev.plazo_texto" class="text-[10px] px-1.5 py-0.2 rounded bg-black/40 text-rose-200 border border-rose-500/30 font-medium" x-text="ev.plazo_texto"></span>
+                <span class="text-xs font-bold text-rose-300 font-mono" x-text="formatearFechaDDMMAAAA(ev.fecha_dia || ev.fecha_iso)"></span>
+                <span x-show="ev.plazo_texto" class="text-[10px] px-1.5 py-0.2 rounded bg-black/40 text-rose-200 border border-rose-500/30 font-medium" x-text="formatearPlazoTexto(ev.plazo_texto, ev.fecha_dia || ev.fecha_iso)"></span>
               </div>
               <h4 class="text-sm font-extrabold text-white group-hover:text-rose-200 transition truncate" x-text="ev.titulo"></h4>
               <p class="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
@@ -5997,6 +5997,7 @@ def dashboard_html():
           <div class="col-span-2 space-y-2">
             <div class="flex flex-wrap items-center gap-2">
               <input type="date" x-model="itemEditFechaDia" class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-cyan-500">
+              <span class="text-xs text-cyan-300 font-mono font-bold px-2 py-1 bg-cyan-950/40 border border-cyan-800/60 rounded-lg" x-text="formatearFechaDDMMAAAA(itemEditFechaDia)"></span>
               <input type="time" x-model="itemEditHora" class="bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-amber-200 font-mono outline-none focus:border-cyan-500" title="Hora de la cita, clase o recordatorio">
               <div class="flex items-center gap-1">
                 <button type="button" @click="desplazarFechaModal(-7)" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px] font-bold" title="1 semana antes">-1 sem</button>
@@ -6117,7 +6118,10 @@ def dashboard_html():
             </select>
           </div>
           <div class="col-span-4">
-            <label class="text-gray-400 block mb-1">Fecha</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-gray-400 block">Fecha</label>
+              <span class="text-[10px] text-cyan-300 font-mono font-bold" x-text="formatearFechaDDMMAAAA(nuevoItemFecha)"></span>
+            </div>
             <input type="date" x-model="nuevoItemFecha" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-2 text-white outline-none">
           </div>
           <div class="col-span-3">
@@ -7616,11 +7620,13 @@ def dashboard_html():
         formatearFechaSeleccionada(fechaStr) {
           if (!fechaStr) return 'Selecciona un día';
           const partes = fechaStr.split('-');
-          if (partes.length !== 3) return fechaStr;
+          if (partes.length !== 3) return this.formatearFechaDDMMAAAA(fechaStr);
           const fecha = new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10));
           const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-          const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-          return `${diasSemana[fecha.getDay()]}, ${parseInt(partes[2], 10)} ${meses[fecha.getMonth()]} ${partes[0]}`;
+          const dia = String(parseInt(partes[2], 10)).padStart(2, '0');
+          const mes = String(parseInt(partes[1], 10)).padStart(2, '0');
+          const anio = partes[0];
+          return `${diasSemana[fecha.getDay()]}, ${dia}/${mes}/${anio}`;
         },
 
         abreviarAsignatura(nombre) {
@@ -7824,14 +7830,38 @@ def dashboard_html():
           return 'fa-regular fa-circle text-gray-400';
         },
 
-        formatearFechaCorta(fechaStr) {
+        formatearFechaDDMMAAAA(fechaStr) {
           if (!fechaStr) return '';
-          const partes = fechaStr.split('-');
-          if (partes.length !== 3) return fechaStr;
-          const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-          const mesIdx = parseInt(partes[1], 10) - 1;
-          const dia = parseInt(partes[2], 10);
-          return `${dia} ${meses[mesIdx] || ''}`;
+          const s = String(fechaStr).trim();
+          if (/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(s)) return s;
+          const m = s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+          if (m) {
+            return `${m[3].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[1]}`;
+          }
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yyyy = d.getFullYear();
+            return `${dd}/${mm}/${yyyy}`;
+          }
+          return s;
+        },
+
+        formatearPlazoTexto(txt, fechaStr) {
+          if (!txt) return '';
+          const m = txt.match(/\\((\\d{1,2}\\/\\d{1,2})\\)/);
+          if (m && fechaStr) {
+            const fPartes = String(fechaStr).match(/(\\d{4})/);
+            if (fPartes) {
+              return txt.replace(m[0], '(' + m[1] + '/' + fPartes[1] + ')');
+            }
+          }
+          return txt;
+        },
+
+        formatearFechaCorta(fechaStr) {
+          return this.formatearFechaDDMMAAAA(fechaStr);
         },
 
         async cambiarEstadoTema(tm, nuevoEstado) {
@@ -8662,7 +8692,7 @@ def dashboard_html():
         preguntarSobreClase(clase) {
           this.chatAsignatura = clase.asignatura;
           this.tab = 'tutor';
-          this.chatInput = '¿Qué explicó el profesor en la sesión ' + clase.titulo + ' (' + clase.fecha + ') y qué indicaciones concretas dio?';
+          this.chatInput = '¿Qué explicó el profesor en la sesión ' + clase.titulo + ' (' + this.formatearFechaDDMMAAAA(clase.fecha) + ') y qué indicaciones concretas dio?';
           this.enviarMensajeChat();
         },
 
@@ -9495,7 +9525,7 @@ def dashboard_html():
           this.modalMinutero = false;
           this.chatAsignatura = clase.asignatura;
           this.tab = 'tutor';
-          this.chatInput = `En la sesión ${clase.titulo} (${clase.fecha}), en el minuto [${cue.start_str}], ${cue.speaker} explicó: "${cue.text}". ¿Me lo puedes explicar con más detalle técnico y darme un ejemplo práctico?`;
+          this.chatInput = `En la sesión ${clase.titulo} (${this.formatearFechaDDMMAAAA(clase.fecha)}), en el minuto [${cue.start_str}], ${cue.speaker} explicó: "${cue.text}". ¿Me lo puedes explicar con más detalle técnico y darme un ejemplo práctico?`;
           this.enviarMensajeChat();
         },
 
