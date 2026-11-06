@@ -3067,6 +3067,7 @@ def dashboard_html():
                 </template>
               </div>
             </div>
+          </div>
 
             <!-- BARRA INFERIOR DE PRÓXIMAS ENTREGAS EN ROJO Y RECORDATORIOS PERSONALES -->
             <div x-show="proximasEntregasRojas.length > 0 || proximosRecordatorios.length > 0" class="mt-4 pt-3 border-t border-gray-800 space-y-2">
