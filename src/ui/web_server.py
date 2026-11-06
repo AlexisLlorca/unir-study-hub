@@ -352,6 +352,18 @@ def api_programas():
     return obtener_resumen_programas()
 
 
+def _orden_natural_items(texto: Any) -> tuple:
+    """Ordenamiento natural de menor a mayor (Tema 1, Tema 2, ..., Tema 10)."""
+    s = str(getattr(texto, "name", texto)).replace("_", " ").strip()
+    m = re.search(r"(?:tema|unit|m[óo]dulo)\s*[\._-]?\s*(\d+)", s, re.IGNORECASE)
+    if m:
+        return (0, int(m.group(1)), s.lower())
+    m_num = re.search(r"\d+", s)
+    if m_num:
+        return (1, int(m_num.group(0)), s.lower())
+    return (2, 999, s.lower())
+
+
 @app.get("/api/catalogo")
 def api_catalogo(programa: Optional[str] = None, curso: Optional[str] = None):
     """Retorna el catálogo consolidado de asignaturas filtrado por programa y curso."""
@@ -362,8 +374,8 @@ def api_catalogo(programa: Optional[str] = None, curso: Optional[str] = None):
         dir_guias = GUIAS_DIR / asig
         dir_examenes = EXAMENES_DIR / asig
 
-        guias = [f.name for f in dir_guias.glob("*.md")] if dir_guias.exists() else []
-        tests = [f.stem for f in dir_examenes.glob("*.json")] if dir_examenes.exists() else []
+        guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
+        tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
 
         resumen_progreso = tracker.obtener_resumen_asignatura(asig)
 
@@ -2392,7 +2404,7 @@ def dashboard_html():
 
               <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
                 <!-- GUÍAS RESUMIDAS IA -->
-                <template x-for="guia in asigSeleccionada?.guias" :key="guia">
+                <template x-for="guia in ordenarNatural(asigSeleccionada?.guias)" :key="guia">
                   <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between group">
                     <div class="overflow-hidden pr-2 flex-1">
                       <p class="text-[10px] text-cyan-400 font-bold">Guía de Alto Rendimiento</p>
@@ -2471,7 +2483,7 @@ def dashboard_html():
               </div>
 
               <div class="space-y-3">
-                <template x-for="test in asigSeleccionada?.tests" :key="test">
+                <template x-for="test in ordenarNatural(asigSeleccionada?.tests)" :key="test">
                   <div class="glass-card p-4 rounded-2xl border-l-4 border-emerald-400 hover:bg-gray-800/50 transition">
                     <div class="flex items-start justify-between gap-2">
                       <h5 class="font-bold text-white text-xs flex-1 break-words" x-text="test.replace('_test', '').replaceAll('_', ' ')"></h5>
@@ -4751,11 +4763,44 @@ def dashboard_html():
           } catch(e) { console.error(e); }
         },
 
+        ordenarNatural(lista) {
+          if (!lista || !Array.isArray(lista)) return [];
+          return [...lista].sort((a, b) => {
+            const parse = (str) => {
+              const s = (str || '').replace(/_/g, ' ').trim();
+              const mTema = s.match(/(?:tema|unit|m[óo]dulo)\\s*[\\._-]?\\s*(\\d+)/i);
+              if (mTema) return [0, parseInt(mTema[1], 10), s.toLowerCase()];
+              const mNum = s.match(/\\d+/);
+              if (mNum) return [1, parseInt(mNum[0], 10), s.toLowerCase()];
+              return [2, 999, s.toLowerCase()];
+            };
+            const pa = parse(a);
+            const pb = parse(b);
+            if (pa[0] !== pb[0]) return pa[0] - pb[0];
+            if (pa[1] !== pb[1]) return pa[1] - pb[1];
+            return pa[2].localeCompare(pb[2], undefined, { numeric: true, sensitivity: 'base' });
+          });
+        },
+
         async cargarCatalogo() {
           try {
             const res = await fetch('/api/catalogo');
-            this.catalogoTotal = await res.json();
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              data.forEach(asig => {
+                if (Array.isArray(asig.guias)) asig.guias = this.ordenarNatural(asig.guias);
+                if (Array.isArray(asig.tests)) asig.tests = this.ordenarNatural(asig.tests);
+                if (Array.isArray(asig.materiales)) asig.materiales = this.ordenarNatural(asig.materiales);
+              });
+            }
+            this.catalogoTotal = data;
             this.aplicarFiltroCatalogo();
+            if (this.asigSeleccionada) {
+              const asigActualizada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre);
+              if (asigActualizada) {
+                this.asigSeleccionada = asigActualizada;
+              }
+            }
           } catch(e) { console.error(e); }
         },
 

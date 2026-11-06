@@ -362,6 +362,18 @@ def _orden_pedagogico_material(p: Path) -> tuple:
     return (3, nums[0] if nums else 99, nl)
 
 
+def _orden_natural_items(item: Any) -> tuple:
+    """Ordenamiento natural de menor a mayor (Tema 1, Tema 2, ..., Tema 10) para guías y tests."""
+    s = str(getattr(item, "name", item)).replace("_", " ").strip()
+    m = re.search(r"(?:tema|unit|m[óo]dulo)\s*[\._-]?\s*(\d+)", s, re.IGNORECASE)
+    if m:
+        return (0, int(m.group(1)), s.lower())
+    m_num = re.search(r"\d+", s)
+    if m_num:
+        return (1, int(m_num.group(0)), s.lower())
+    return (2, 999, s.lower())
+
+
 def sincronizar_estudios_externos():
     """
     Escanea carpetas externas en RESPALDO_DIR
@@ -733,8 +745,8 @@ def obtener_info_asignatura(asig: str) -> Dict[str, Any]:
     apuntes = sorted([f for f in dir_apuntes.glob("*.md") if f.is_file()]) if dir_apuntes.exists() else []
     ejercicios = sorted([f for f in dir_ejer.glob("*.md") if f.is_file()]) if dir_ejer.exists() else []
     examenes = sorted([f for f in dir_exam.glob("*.md") if f.is_file()]) if dir_exam.exists() else []
-    tests_json = sorted([f.stem for f in dir_exam.glob("*.json")]) if dir_exam.exists() else []
-    guias = sorted([f.name for f in dir_guias.glob("*.md")]) if dir_guias.exists() else []
+    tests_json = sorted([f.stem for f in dir_exam.glob("*.json")], key=_orden_natural_items) if dir_exam.exists() else []
+    guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
 
     # Determinar programa y curso
     if asig in ASIGNATURAS_2DAM:

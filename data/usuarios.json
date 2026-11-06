@@ -2,8 +2,8 @@
   {
     "username": "alexking44",
     "nombre": "Alex (Administrador)",
-    "password_hash": "e6580653699cd9f67e75845131d85dc8abc5c70b30856ed47d3c8e3704331f2b",
-    "salt": "5398ddac39c376ba2bae3116d0a057f6",
+    "password_hash": "4f71b3fac5fa4123a26b65a4ecee0020aa01b9f086eea033c0d3433be36d3c4f",
+    "salt": "f5ac0dd4caad5ace66394c3be53c31fb",
     "rol": "admin",
     "activo": 1,
     "creado_en": "2026-10-29 18:15:09",
@@ -38,5 +38,15 @@
     "activo": 1,
     "creado_en": "2026-11-05 13:29:08",
     "gemini_api_key": ""
+  },
+  {
+    "username": "prueba",
+    "nombre": "prueba",
+    "password_hash": "dd9f50c5076f183c329505a362f587b9c0b9471054ccd19a9febf23fe7ea3c2b",
+    "salt": "a15c77b2559689df90af704928b0914c",
+    "rol": "estudiante",
+    "activo": 1,
+    "creado_en": "2026-11-06 09:26:47",
+    "gemini_api_key": "AQ.Ab8RN6I-4L8hXSEeNTEuuirswuNUarX750JarROvBmcuTriYJg"
   }
 ]
