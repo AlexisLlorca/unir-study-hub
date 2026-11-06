@@ -3411,28 +3411,82 @@ def dashboard_html():
             <div class="xl:col-span-4 glass p-5 rounded-3xl border border-gray-800 flex flex-col justify-between space-y-4">
               <!-- ACTIVIDADES (PACs) DE LA ASIGNATURA -->
               <div>
-                <h3 class="font-extrabold text-white text-sm flex items-center justify-between pb-2.5 border-b border-gray-800">
-                  <span class="flex items-center gap-2"><i class="fa-solid fa-flag-checkered text-rose-400"></i><span>Actividades Evaluables (PACs)</span></span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 font-mono" x-text="actividadesAsignaturaActual.length"></span>
-                </h3>
-                <div class="space-y-2 mt-2.5 max-h-[155px] overflow-y-auto pr-1">
-                  <template x-for="act in actividadesAsignaturaActual" :key="'act-' + act.id">
-                    <div @click="abrirModalItemAgenda(act)"
-                         draggable="true"
-                         @dragstart="iniciarArrastreItem($event, act)"
-                         @dragend="finalizarArrastreItem()"
-                         class="p-2.5 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2"
-                         :class="claseColorTarjetaNotion(act)">
-                      <div class="min-w-0 flex-1">
-                        <p class="text-xs font-extrabold text-white break-words" x-text="act.titulo"></p>
-                        <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (act.fecha_dia || 'Pendiente') + ' • ' + (act.plazo_texto || '')"></p>
-                      </div>
-                      <div class="text-right shrink-0">
-                        <span class="text-[9px] px-1.5 py-0.5 rounded font-bold block" :class="claseBadgeEstadoNotion(act.estado)" x-text="act.estado"></span>
-                        <span x-show="act.nota_personal !== null && act.nota_personal !== undefined" class="text-[10px] font-bold text-emerald-300 font-mono mt-0.5 block" x-text="act.nota_personal + '/10'"></span>
-                      </div>
+                <div class="flex flex-wrap items-center justify-between pb-2.5 border-b border-gray-800 gap-2">
+                  <h3 class="font-extrabold text-white text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-flag-checkered text-rose-400"></i>
+                    <span>Actividades Evaluables (PACs)</span>
+                  </h3>
+                  <!-- Selector rápido: Todas / Actividades / Tests -->
+                  <div class="flex items-center bg-gray-950/90 p-0.5 rounded-lg border border-gray-800 text-[10px]">
+                    <button @click="filtroPacTipo = 'todas'"
+                            :class="filtroPacTipo === 'todas' ? 'bg-gray-800 text-white font-bold' : 'text-gray-400 hover:text-white'"
+                            class="px-2 py-0.5 rounded transition">
+                      Todas (<span x-text="actividadesAsignaturaActual.length"></span>)
+                    </button>
+                    <button @click="filtroPacTipo = 'actividades'"
+                            :class="filtroPacTipo === 'actividades' ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-500/40' : 'text-gray-400 hover:text-rose-300'"
+                            class="px-2 py-0.5 rounded transition">
+                      Actividades (<span x-text="actividadesPurasAsignaturaActual.length"></span>)
+                    </button>
+                    <button @click="filtroPacTipo = 'tests'"
+                            :class="filtroPacTipo === 'tests' ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/40' : 'text-gray-400 hover:text-emerald-300'"
+                            class="px-2 py-0.5 rounded transition">
+                      Tests (<span x-text="testsPurosAsignaturaActual.length"></span>)
+                    </button>
+                  </div>
+                </div>
+
+                <div class="space-y-2 mt-2.5 max-h-[190px] overflow-y-auto pr-1">
+                  <!-- SECCIÓN 1: ACTIVIDADES Y PACs (PRIMERO) -->
+                  <div class="space-y-1.5" x-show="(filtroPacTipo === 'todas' || filtroPacTipo === 'actividades') && actividadesPurasAsignaturaActual.length > 0">
+                    <div x-show="filtroPacTipo === 'todas'" class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-400 pt-0.5 pb-0.5">
+                      <i class="fa-solid fa-file-pen text-[9px]"></i>
+                      <span>Actividades y PACs (<span x-text="actividadesPurasAsignaturaActual.length"></span>)</span>
                     </div>
-                  </template>
+                    <template x-for="act in actividadesPurasAsignaturaActual" :key="'act-' + act.id">
+                      <div @click="abrirModalItemAgenda(act)"
+                           draggable="true"
+                           @dragstart="iniciarArrastreItem($event, act)"
+                           @dragend="finalizarArrastreItem()"
+                           class="p-2.5 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2"
+                           :class="claseColorTarjetaNotion(act)">
+                        <div class="min-w-0 flex-1">
+                          <p class="text-xs font-extrabold text-white break-words" x-text="act.titulo"></p>
+                          <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (act.fecha_dia || 'Pendiente') + ' • ' + (act.plazo_texto || '')"></p>
+                        </div>
+                        <div class="text-right shrink-0">
+                          <span class="text-[9px] px-1.5 py-0.5 rounded font-bold block" :class="claseBadgeEstadoNotion(act.estado)" x-text="act.estado"></span>
+                          <span x-show="act.nota_personal !== null && act.nota_personal !== undefined" class="text-[10px] font-bold text-emerald-300 font-mono mt-0.5 block" x-text="act.nota_personal + '/10'"></span>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+
+                  <!-- SECCIÓN 2: TESTS DE EVALUACIÓN (LUEGO) -->
+                  <div class="space-y-1.5 pt-1" x-show="(filtroPacTipo === 'todas' || filtroPacTipo === 'tests') && testsPurosAsignaturaActual.length > 0">
+                    <div x-show="filtroPacTipo === 'todas' && actividadesPurasAsignaturaActual.length > 0" class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 pt-2 pb-0.5 border-t border-gray-800/80">
+                      <i class="fa-solid fa-bullseye text-[9px]"></i>
+                      <span>Tests de Autoevaluación (<span x-text="testsPurosAsignaturaActual.length"></span>)</span>
+                    </div>
+                    <template x-for="act in testsPurosAsignaturaActual" :key="'test-' + act.id">
+                      <div @click="abrirModalItemAgenda(act)"
+                           draggable="true"
+                           @dragstart="iniciarArrastreItem($event, act)"
+                           @dragend="finalizarArrastreItem()"
+                           class="p-2.5 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2"
+                           :class="claseColorTarjetaNotion(act)">
+                        <div class="min-w-0 flex-1">
+                          <p class="text-xs font-extrabold text-white break-words" x-text="act.titulo"></p>
+                          <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (act.fecha_dia || 'Pendiente') + ' • ' + (act.plazo_texto || '')"></p>
+                        </div>
+                        <div class="text-right shrink-0">
+                          <span class="text-[9px] px-1.5 py-0.5 rounded font-bold block" :class="claseBadgeEstadoNotion(act.estado)" x-text="act.estado"></span>
+                          <span x-show="act.nota_personal !== null && act.nota_personal !== undefined" class="text-[10px] font-bold text-emerald-300 font-mono mt-0.5 block" x-text="act.nota_personal + '/10'"></span>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+
                   <div x-show="actividadesAsignaturaActual.length === 0" class="text-xs text-gray-500 py-3 text-center">
                     Sin entregas PAC registradas en esta materia.
                   </div>
@@ -6443,6 +6497,7 @@ def dashboard_html():
         itemEditComentario: '',
         modoAsignaturaPersonalizada: false,
         temasEstado: {},
+        filtroPacTipo: 'todas',
         itemArrastrando: null,
         diaArrastreSobre: '',
         modalNuevoItemAgenda: false,
@@ -6890,10 +6945,38 @@ def dashboard_html():
           return celdas;
         },
 
-        get actividadesAsignaturaActual() {
+        esItemTest(ev) {
+          if (!ev) return false;
+          if (ev.tipo === 'test_campus' || ev.categoria === 'Test') return true;
+          const tit = (ev.titulo || '').toLowerCase().trim();
+          return /^(?:test|cuestionario|autoevaluaci[oó]n)\\b/i.test(tit) || /\\btest\\s*tema\\b/i.test(tit);
+        },
+
+        get actividadesPurasAsignaturaActual() {
           return this.eventosDeAsignaturaActual()
-            .filter(ev => ev.tipo === 'tarea' || ['Actividad', 'Entrega', 'Práctica', 'Proyecto', 'FFE'].includes(ev.categoria))
-            .sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || ''));
+            .filter(ev => (ev.tipo === 'tarea' || ['Actividad', 'Entrega', 'Práctica', 'Proyecto', 'FFE'].includes(ev.categoria)) && !this.esItemTest(ev))
+            .sort((a, b) => {
+              if (a.fecha_dia && b.fecha_dia) return a.fecha_dia.localeCompare(b.fecha_dia);
+              if (a.fecha_dia && !b.fecha_dia) return -1;
+              if (!a.fecha_dia && b.fecha_dia) return 1;
+              return (a.titulo || '').localeCompare(b.titulo || '');
+            });
+        },
+
+        get testsPurosAsignaturaActual() {
+          return this.eventosDeAsignaturaActual()
+            .filter(ev => this.esItemTest(ev) || (['Actividad', 'Entrega', 'Práctica', 'Proyecto', 'FFE'].includes(ev.categoria) && this.esItemTest(ev)))
+            .sort((a, b) => {
+              const numA = parseInt(((a.titulo || '').match(/\\d+/) || [999])[0], 10);
+              const numB = parseInt(((b.titulo || '').match(/\\d+/) || [999])[0], 10);
+              if (numA !== numB) return numA - numB;
+              return (a.fecha_dia || '').localeCompare(b.fecha_dia || '');
+            });
+        },
+
+        get actividadesAsignaturaActual() {
+          // Primero las actividades/PACs y luego los tests
+          return [...this.actividadesPurasAsignaturaActual, ...this.testsPurosAsignaturaActual];
         },
 
         get temasAsignaturaActual() {
