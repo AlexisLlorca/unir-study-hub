@@ -5821,6 +5821,7 @@ def dashboard_html():
 
   <!-- ==================== MODAL RÁPIDO: ENTREGAS DEL MES ==================== -->
   <div x-show="modalEntregasMes"
+       @keydown.escape.window="modalEntregasMes = false"
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0"
        x-transition:enter-end="opacity-100"
@@ -6292,6 +6293,7 @@ def dashboard_html():
 
         // Conexión Personal al Campus UNIR (Canvas por Estudiante) y Dashboard Personal
         modalEntregasMes: false,
+        modalMiCampus: false,
         verEntregasDelMes() {
           if (this.entregasMesActual.length === 0) {
             alert('No tienes entregas pendientes en ' + this.nombreMesCalendario);
