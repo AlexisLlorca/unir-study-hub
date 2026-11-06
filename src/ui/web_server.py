@@ -2081,47 +2081,6 @@ def dashboard_html():
       </div>
     </header>
 
-    <!-- ==================== BARRA DE PESTAÑAS MULTI-TAREA ==================== -->
-    <nav class="bg-[#0c1222]/95 border-b border-gray-800/80 px-2 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between gap-2 sm:gap-3 overflow-x-auto select-none shrink-0 sticky top-[49px] sm:top-[57px] z-20 backdrop-blur-md no-scrollbar">
-      <div class="flex items-center space-x-1.5 overflow-x-auto py-0.5 max-w-full no-scrollbar">
-        <template x-for="(p, index) in pestanasAbiertas" :key="p.id">
-          <div class="group flex items-center rounded-xl text-xs transition border cursor-pointer shrink-0 pl-2.5 sm:pl-3 pr-2 py-1 sm:py-1.5"
-               :class="pestanaActivaId === p.id 
-                       ? 'bg-gray-800/95 text-white border-cyan-500/40 shadow-lg shadow-cyan-500/10 font-medium ring-1 ring-cyan-500/20' 
-                       : 'bg-gray-900/60 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-gray-800/80'"
-               @click="activarPestana(p.id)">
-            <!-- ICONO -->
-            <i :class="'fa-solid ' + p.icono + ' mr-1.5 sm:mr-2 text-[11px] ' + (pestanaActivaId === p.id ? 'text-cyan-400' : 'text-gray-500')"></i>
-            
-            <!-- TÍTULO -->
-            <span class="max-w-[100px] sm:max-w-[180px] truncate" x-text="p.titulo"></span>
-            
-            <!-- BOTÓN ABRIR EN PESTAÑA NUEVA DEL NAVEGADOR -->
-            <a :href="p.url" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" 
-               class="ml-1.5 sm:ml-2 p-1 text-gray-500 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-md transition opacity-0 group-hover:opacity-100 hidden sm:inline-block">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
-            </a>
-
-            <!-- BOTÓN CERRAR PESTAÑA -->
-            <button x-show="pestanasAbiertas.length > 1" @click.stop="cerrarPestana(p.id)" 
-                    class="ml-1 p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition" 
-                    title="Cerrar pestaña">
-              <i class="fa-solid fa-xmark text-[10px]"></i>
-            </button>
-          </div>
-        </template>
-      </div>
-
-      <!-- BOTONES ACCIONES RÁPIDAS DE PESTAÑAS -->
-      <div class="flex items-center space-x-1.5 shrink-0 text-xs">
-        <button x-show="pestanasAbiertas.length > 1" @click="cerrarOtrasPestanas()" title="Cerrar las demás pestañas" 
-                class="px-2 py-1 text-[11px] text-gray-400 hover:text-gray-200 bg-gray-900/60 hover:bg-gray-800 rounded-lg border border-gray-800 transition hidden sm:inline-flex items-center space-x-1">
-          <i class="fa-solid fa-compress text-[10px]"></i>
-          <span>Cerrar otras</span>
-        </button>
-      </div>
-    </nav>
-
     <!-- CUERPO DE LA APLICACIÓN -->
     <main class="flex-1 p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto max-w-7xl w-full mx-auto pb-24 md:pb-8">
 
@@ -3582,10 +3541,7 @@ def dashboard_html():
              target="_blank" title="Abrir en pestaña nueva del navegador" class="p-2 text-gray-400 hover:text-cyan-400 rounded-lg hover:bg-gray-800 transition">
             <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
           </a>
-          <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg" title="Minimizar (conservar en pestañas)">
-            <i class="fa-solid fa-minus text-sm"></i>
-          </button>
-          <button @click="modalVisor = false" class="text-gray-400 hover:text-white p-2 rounded-lg" title="Cerrar visor">
+          <button @click="cerrarModalVisor()" class="text-gray-400 hover:text-white p-2 rounded-lg" title="Cerrar visor">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
@@ -3637,10 +3593,7 @@ def dashboard_html():
              title="Abrir este simulacro en pestaña nueva del navegador" class="text-gray-400 hover:text-emerald-400 p-2 rounded-xl hover:bg-gray-800 transition">
             <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
           </a>
-          <button @click="modalTest = false" title="Minimizar (conservar respuestas en curso)" class="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-gray-800 transition">
-            <i class="fa-solid fa-minus text-sm"></i>
-          </button>
-          <button @click="if (confirm('¿Deseas cerrar el simulador? Podrás retomarlo desde la pestaña superior en cualquier momento.')) { modalTest = false; }" 
+          <button @click="if (confirm('¿Deseas salir del simulador de examen?')) { cerrarModalTest(); }" 
                   class="text-gray-400 hover:text-rose-400 p-2 rounded-xl hover:bg-gray-800 transition" title="Cerrar simulacro">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
@@ -4019,10 +3972,7 @@ def dashboard_html():
           <a :href="'/api/archivo-raw?ruta=' + encodeURIComponent(modalRutaPdf)" target="_blank" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs transition" title="Abrir en pestaña nueva del navegador">
             <i class="fa-solid fa-arrow-up-right-from-square"></i>
           </a>
-          <button @click="modalVisorPdf = false" class="text-gray-400 hover:text-white p-1.5 rounded-lg" title="Minimizar (conservar en pestañas)">
-            <i class="fa-solid fa-minus text-sm"></i>
-          </button>
-          <button @click="modalVisorPdf = false" class="text-gray-400 hover:text-white p-1.5 rounded-lg" title="Cerrar visor">
+          <button @click="cerrarModalPdf()" class="text-gray-400 hover:text-white p-1.5 rounded-lg" title="Cerrar visor">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
@@ -4387,6 +4337,7 @@ def dashboard_html():
               breaks: true,
             });
           }
+          window.addEventListener('popstate', () => this.procesarUrlInicial());
           await this.cargarProgramas();
           await this.cargarCatalogo();
           await this.cargarProgreso();
@@ -4524,170 +4475,15 @@ def dashboard_html():
           this.modalApiKey = false;
         },
 
-        abrirOPestana(p) {
-          if (p.id === 'dashboard' || (p.tipo === 'seccion' && p.seccion === 'dashboard')) {
-            p.id = 'sec-dashboard';
-            p.titulo = 'Inicio';
-          }
-          const index = this.pestanasAbiertas.findIndex(x => {
-            if (x.id === p.id) return true;
-            if (x.id === 'dashboard' && p.id === 'sec-dashboard') return true;
-            if (x.id === 'sec-dashboard' && p.id === 'dashboard') return true;
-            if (p.tipo === 'seccion' && x.tipo === 'seccion' && x.seccion === p.seccion) return true;
-            return false;
-          });
-          if (index === -1) {
-            this.pestanasAbiertas.push(p);
-          } else {
-            this.pestanasAbiertas[index] = { ...this.pestanasAbiertas[index], ...p };
-            p.id = this.pestanasAbiertas[index].id;
-          }
-          this.activarPestana(p.id);
-        },
-
-        activarPestana(id) {
-          this.pestanaActivaId = id;
-          const p = this.pestanasAbiertas.find(x => x.id === id);
-          if (!p) return;
-
-          if (p.url && window.history && window.history.replaceState) {
-            window.history.replaceState(null, '', p.url);
-          }
-
-          if (p.tipo === 'tutor' || p.id.startsWith('tutor-')) {
-            this.tab = 'tutor';
-            this.asigSeleccionada = null;
-            this.modalVisor = false;
-            this.modalTest = false;
-            this.modalVisorPdf = false;
-            const targetAsig = p.data?.asignatura !== undefined ? p.data.asignatura : (p.id.replace('tutor-', '') === 'global' ? '' : (p.data?.asignatura || this.chatAsignatura));
-            if (this.chatAsignatura !== targetAsig) {
-              this.guardarHistorialActual();
-              this.chatAsignatura = targetAsig;
-              this.cargarHistorialParaAsignatura(targetAsig);
-            }
-          } else if (p.tipo === 'seccion') {
-            this.tab = p.seccion;
-            this.asigSeleccionada = null;
-            this.modalVisor = false;
-            this.modalTest = false;
-            this.modalVisorPdf = false;
-            if (p.seccion === 'tutor') {
-              this.cargarHistorialParaAsignatura(this.chatAsignatura || '');
-            } else if (p.seccion === 'admin') {
-              this.cargarAdminUsuarios();
-            }
-          } else if (p.tipo === 'asignatura') {
-            this.tab = 'asignaturas';
-            const asigObj = this.catalogoTotal.find(a => a.nombre.toLowerCase() === (p.data?.nombre || p.data || '').toLowerCase());
-            if (asigObj) {
-              this.asigSeleccionada = asigObj;
-            } else if (p.data && typeof p.data === 'object') {
-              this.asigSeleccionada = p.data;
-            }
-            this.modalVisor = false;
-            this.modalTest = false;
-            this.modalVisorPdf = false;
-          } else if (p.tipo === 'guia') {
-            this.modalTitulo = p.titulo;
-            this.modalContenido = p.data?.contenido || this.modalContenido;
-            this.modalRutaActiva = p.data?.ruta || '';
-            this.modalVisor = true;
-            this.modalTest = false;
-            this.modalVisorPdf = false;
-          } else if (p.tipo === 'test') {
-            this.modalTest = true;
-            this.modalVisor = false;
-            this.modalVisorPdf = false;
-          } else if (p.tipo === 'pdf') {
-            this.modalRutaPdf = p.data?.ruta || '';
-            this.modalTitulo = p.titulo;
-            this.modalVisorPdf = true;
-            this.modalVisor = false;
-            this.modalTest = false;
-          }
-        },
-
-        cerrarPestana(id) {
-          const index = this.pestanasAbiertas.findIndex(x => x.id === id);
-          if (index === -1) return;
-
-          const cerradaEsActiva = (this.pestanaActivaId === id);
-          const pCerrada = this.pestanasAbiertas[index];
-
-          if (pCerrada.tipo === 'test' && this.modalTest && this.testActivoNombre) {
-            if (!this.testFinalizado) {
-              if (!confirm('¿Cerrar la pestaña del test en curso? Se perderán las respuestas actuales de este intento.')) {
-                return;
-              }
-            }
-            this.modalTest = false;
-          } else if (pCerrada.tipo === 'guia' && this.modalVisor) {
-            this.modalVisor = false;
-          } else if (pCerrada.tipo === 'pdf' && this.modalVisorPdf) {
-            this.modalVisorPdf = false;
-          }
-
-          this.pestanasAbiertas.splice(index, 1);
-
-          if (this.pestanasAbiertas.length === 0) {
-            this.pestanasAbiertas.push({
-              id: 'sec-dashboard',
-              titulo: 'Inicio',
-              icono: 'fa-house',
-              tipo: 'seccion',
-              seccion: 'dashboard',
-              url: '/?tab=dashboard'
-            });
-            this.activarPestana('sec-dashboard');
-            return;
-          }
-
-          if (cerradaEsActiva) {
-            const nuevoIndex = Math.max(0, index - 1);
-            this.activarPestana(this.pestanasAbiertas[nuevoIndex].id);
-          }
-        },
-
-        cerrarOtrasPestanas() {
-          const activa = this.pestanasAbiertas.find(x => x.id === this.pestanaActivaId);
-          if (activa) {
-            this.pestanasAbiertas = [activa];
-          }
-        },
-
-        cerrarPestanaActiva() {
-          this.cerrarPestana(this.pestanaActivaId);
-        },
-
         irASeccion(sec) {
           if (window.innerWidth < 768) {
             this.sidebarVisible = false;
           }
-          const titulos = {
-            dashboard: 'Inicio',
-            asignaturas: 'Materias & Temarios',
-            clases: 'Videoclases',
-            tutor: 'Tutor NOVA',
-            agenda: 'Agenda & PACs',
-            flashcards: 'Flashcards',
-            progreso: 'Calificaciones',
-            feedback: 'Buzón y Mejoras',
-            admin: 'Panel Admin'
-          };
-          const iconos = {
-            dashboard: 'fa-house',
-            asignaturas: 'fa-folder-tree',
-            clases: 'fa-video',
-            tutor: 'fa-robot',
-            agenda: 'fa-calendar-check',
-            flashcards: 'fa-clone',
-            progreso: 'fa-trophy',
-            feedback: 'fa-bullhorn',
-            admin: 'fa-shield-halved'
-          };
           this.tab = sec;
           this.asigSeleccionada = null;
+          this.modalVisor = false;
+          this.modalTest = false;
+          this.modalVisorPdf = false;
           if (sec === 'admin') {
             this.cargarAdminUsuarios();
             this.cargarFeedback();
@@ -4695,14 +4491,52 @@ def dashboard_html():
           if (sec === 'feedback') {
             this.cargarFeedback();
           }
-          this.abrirOPestana({
-            id: 'sec-' + sec,
-            titulo: titulos[sec] || sec,
-            icono: iconos[sec] || 'fa-folder',
-            tipo: 'seccion',
-            seccion: sec,
-            url: '/?tab=' + encodeURIComponent(sec)
-          });
+          if (sec === 'tutor') {
+            this.cargarHistorialParaAsignatura(this.chatAsignatura || '');
+          }
+          const url = (sec === 'dashboard') ? '/' : '/?tab=' + encodeURIComponent(sec);
+          if (window.history && window.history.pushState) {
+            window.history.pushState({ tab: sec }, '', url);
+          }
+        },
+
+        abrirOPestana(p) {
+          // Si tiene URL sincronizamos con el historial del navegador
+          if (p?.url && window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', p.url);
+          }
+        },
+
+        activarPestana(id) {},
+        cerrarPestana(id) {},
+        cerrarOtrasPestanas() {},
+        cerrarPestanaActiva() {},
+
+        cerrarModalVisor() {
+          this.modalVisor = false;
+          this.restaurarUrlBase();
+        },
+
+        cerrarModalPdf() {
+          this.modalVisorPdf = false;
+          this.restaurarUrlBase();
+        },
+
+        cerrarModalTest() {
+          this.modalTest = false;
+          this.restaurarUrlBase();
+        },
+
+        restaurarUrlBase() {
+          let url = '/';
+          if (this.asigSeleccionada) {
+            url = '/?asig=' + encodeURIComponent(this.asigSeleccionada.nombre);
+          } else if (this.tab && this.tab !== 'dashboard') {
+            url = '/?tab=' + encodeURIComponent(this.tab);
+          }
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', url);
+          }
         },
 
         async cargarUsuarioActual() {
@@ -5322,19 +5156,9 @@ def dashboard_html():
           this.guardarHistorialActual();
           this.chatAsignatura = nuevaAsig || '';
           this.cargarHistorialParaAsignatura(this.chatAsignatura);
-
-          const activa = this.pestanasAbiertas.find(x => x.id === this.pestanaActivaId);
-          if (activa && (activa.tipo === 'tutor' || activa.seccion === 'tutor' || activa.id.startsWith('tutor-'))) {
-            const clave = this.obtenerClaveChat(this.chatAsignatura);
-            activa.id = 'tutor-' + clave;
-            activa.titulo = this.chatAsignatura ? `Tutor (${this.chatAsignatura})` : 'Tutor NOVA';
-            activa.tipo = 'tutor';
-            activa.data = { asignatura: this.chatAsignatura };
-            activa.url = '/?tab=tutor' + (this.chatAsignatura ? '&asig=' + encodeURIComponent(this.chatAsignatura) : '');
-            this.pestanaActivaId = activa.id;
-            if (window.history && window.history.replaceState) {
-              window.history.replaceState(null, '', activa.url);
-            }
+          const url = '/?tab=tutor' + (this.chatAsignatura ? '&asig=' + encodeURIComponent(this.chatAsignatura) : '');
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', url);
           }
         },
 
@@ -5374,14 +5198,13 @@ def dashboard_html():
           }
           this.asigSeleccionada = asig;
           this.tab = 'asignaturas';
-          this.abrirOPestana({
-            id: 'asig-' + asig.nombre,
-            titulo: asig.nombre,
-            icono: 'fa-book-bookmark',
-            tipo: 'asignatura',
-            data: asig,
-            url: '/?asig=' + encodeURIComponent(asig.nombre)
-          });
+          this.modalVisor = false;
+          this.modalTest = false;
+          this.modalVisorPdf = false;
+          const url = '/?asig=' + encodeURIComponent(asig.nombre);
+          if (window.history && window.history.pushState) {
+            window.history.pushState({ asig: asig.nombre }, '', url);
+          }
         },
 
         abrirChatConAsignatura(nombre) {
@@ -5391,18 +5214,15 @@ def dashboard_html():
           this.guardarHistorialActual();
           this.chatAsignatura = nombre || '';
           this.tab = 'tutor';
+          this.asigSeleccionada = null;
+          this.modalVisor = false;
+          this.modalTest = false;
+          this.modalVisorPdf = false;
           this.cargarHistorialParaAsignatura(this.chatAsignatura);
-          const clave = this.obtenerClaveChat(this.chatAsignatura);
-          const tit = nombre ? `Tutor (${nombre})` : 'Tutor NOVA';
-          this.abrirOPestana({
-            id: 'tutor-' + clave,
-            titulo: tit,
-            icono: 'fa-robot',
-            tipo: 'tutor',
-            seccion: 'tutor',
-            data: { asignatura: this.chatAsignatura },
-            url: '/?tab=tutor' + (nombre ? '&asig=' + encodeURIComponent(nombre) : '')
-          });
+          const url = '/?tab=tutor' + (nombre ? '&asig=' + encodeURIComponent(nombre) : '');
+          if (window.history && window.history.pushState) {
+            window.history.pushState({ tab: 'tutor', asig: nombre }, '', url);
+          }
         },
 
         async verContenidoArchivo(ruta) {
@@ -5414,14 +5234,12 @@ def dashboard_html():
             this.modalContenido = data.contenido;
             this.modalRutaActiva = ruta;
             this.modalVisor = true;
-            this.abrirOPestana({
-              id: 'doc-' + ruta,
-              titulo: tituloLimpio,
-              icono: 'fa-file-lines',
-              tipo: 'guia',
-              data: { ruta, contenido: data.contenido },
-              url: '/?guia=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '')
-            });
+            this.modalTest = false;
+            this.modalVisorPdf = false;
+            const url = '/?guia=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '');
+            if (window.history && window.history.pushState) {
+              window.history.pushState({ guia: ruta }, '', url);
+            }
           } catch(e) { alert('No se pudo abrir el archivo'); }
         },
 
@@ -5500,15 +5318,12 @@ def dashboard_html():
             this.testMostrarPista = false;
             this.testModo = 'notebook';
             this.modalTest = true;
-            const tit = testNombre.replace('_test', '').replaceAll('_', ' ');
-            this.abrirOPestana({
-              id: 'test-' + asignatura + '-' + testNombre,
-              titulo: 'Test: ' + tit,
-              icono: 'fa-spell-check',
-              tipo: 'test',
-              data: { asignatura, testNombre },
-              url: '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura)
-            });
+            this.modalVisor = false;
+            this.modalVisorPdf = false;
+            const url = '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura);
+            if (window.history && window.history.pushState) {
+              window.history.pushState({ test: testNombre, asig: asignatura }, '', url);
+            }
           } catch(e) {
             console.error('Error al cargar test:', e);
             alert('Error de red al cargar el simulacro');
@@ -5890,14 +5705,12 @@ def dashboard_html():
           this.modalRutaPdf = ruta;
           this.modalTitulo = titulo;
           this.modalVisorPdf = true;
-          this.abrirOPestana({
-            id: 'pdf-' + ruta,
-            titulo: titulo.replace(/\\.pdf$/i, ''),
-            icono: 'fa-file-pdf',
-            tipo: 'pdf',
-            data: { ruta, titulo },
-            url: '/?pdf=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '')
-          });
+          this.modalVisor = false;
+          this.modalTest = false;
+          const url = '/?pdf=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '');
+          if (window.history && window.history.pushState) {
+            window.history.pushState({ pdf: ruta }, '', url);
+          }
         },
 
         consultarNovaPdf() {
