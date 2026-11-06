@@ -2258,6 +2258,7 @@ def dashboard_html():
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    html, body { overflow-x: hidden; max-width: 100vw; width: 100%; }
     body { font-family: 'Inter', sans-serif; background-color: rgb(var(--surface-0)); color: rgb(var(--c-gray-100)); transition: background-color .25s ease; }
     code, pre { font-family: 'JetBrains Mono', monospace; }
     .glass { background: rgb(var(--c-gray-900) / 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
@@ -2591,46 +2592,46 @@ def dashboard_html():
   <div class="flex-1 flex flex-col min-h-screen max-w-full overflow-hidden">
     
     <!-- TOPBAR -->
-    <header class="glass sticky top-0 z-30 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between border-b border-gray-800/80 gap-2">
-      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+    <header class="glass sticky top-0 z-30 px-2.5 sm:px-6 py-2 sm:py-3.5 flex items-center justify-between border-b border-gray-800/80 gap-1.5 sm:gap-2">
+      <div class="flex items-center space-x-1.5 sm:space-x-3 min-w-0 shrink">
         <!-- BOTÓN TOGGLE SIDEBAR -->
         <button @click="toggleSidebar()" 
-                class="p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800/80 rounded-xl transition flex items-center space-x-1.5 text-xs font-semibold border border-transparent hover:border-gray-700 shrink-0"
+                class="p-1.5 sm:p-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-800/80 rounded-xl transition flex items-center space-x-1.5 text-xs font-semibold border border-transparent hover:border-gray-700 shrink-0"
                 :title="sidebarVisible ? 'Ocultar barra lateral' : 'Mostrar barra lateral'">
           <i :class="sidebarVisible ? 'fa-solid fa-bars-staggered' : 'fa-solid fa-bars text-cyan-400 text-sm'"></i>
           <span x-show="!sidebarVisible" class="text-xs text-gray-300 ml-1 font-semibold hidden sm:inline">Menú</span>
         </button>
 
-        <span class="text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider truncate max-w-[140px] sm:max-w-none"
+        <span class="text-[11px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full uppercase tracking-wider truncate max-w-[100px] sm:max-w-none"
               :style="'background: ' + obtenerFondoHex(programaActual?.color) + '; color: ' + obtenerColorHex(programaActual?.color)"
               x-text="programaActual?.nombre"></span>
         <span class="text-xs text-gray-400 hidden lg:inline" x-text="cursoFiltro === 'todos' ? 'Todo el programa' : (cursoFiltro === '2dam' ? '2º Curso' : '1º Curso')"></span>
       </div>
 
-      <!-- BUSCADOR RÁPIDO Y BOTÓN NOVA -->
-      <div class="flex items-center space-x-2 sm:space-x-4 shrink-0">
-        <div class="relative w-28 sm:w-48 md:w-64 focus-within:w-44 sm:focus-within:w-48 md:focus-within:w-64 transition-all">
+      <!-- BUSCADOR RÁPIDO Y BOTONES SUPERIORES -->
+      <div class="flex items-center space-x-1 sm:space-x-3 shrink-0">
+        <div class="relative hidden md:block w-36 lg:w-56 focus-within:w-60 transition-all">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-gray-500"></i>
           <input type="text" x-model="busquedaTexto" placeholder="Buscar..." class="w-full bg-gray-900/80 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2 rounded-xl border border-gray-800 focus:outline-none focus:border-cyan-500">
         </div>
-        <button @click="abrirChatConAsignatura('')" class="px-2.5 sm:px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-1.5 shrink-0">
+        <button @click="abrirChatConAsignatura('')" class="hidden sm:flex px-2.5 sm:px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition items-center space-x-1.5 shrink-0">
           <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">Consultar </span><span>NOVA</span>
         </button>
 
         <!-- BOTÓN CONECTAR MI CAMPUS UNIR (CANVAS PERSONAL) -->
         <button @click="abrirModalMiCampus()"
                 :class="miCampusConfig?.conectado ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-indigo-300 hover:border-indigo-500/30'"
-                class="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
+                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
                 :title="miCampusConfig?.conectado ? ('Campus UNIR conectado: ' + (miCampusConfig?.alumno_nombre || 'Activo')) : 'Conectar mi cuenta personal del Campus UNIR (Canvas)'">
           <span class="h-2 w-2 rounded-full" :class="miCampusConfig?.conectado ? 'bg-indigo-400 animate-pulse' : 'bg-gray-500'"></span>
           <i class="fa-solid fa-building-columns text-[10px]" :class="miCampusConfig?.conectado ? 'text-indigo-400' : 'text-gray-400'"></i>
-          <span class="hidden sm:inline font-medium" x-text="miCampusConfig?.conectado ? 'Mi Campus' : 'Conectar Campus'"></span>
+          <span class="hidden sm:inline font-medium" x-text="miCampusConfig?.conectado ? 'Mi Campus' : 'Campus'"></span>
         </button>
 
         <!-- BOTÓN MI KEY / TOKENS PRIVADOS (BYOK) -->
         <button @click="abrirModalApiKey()" 
                 :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
-                class="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
+                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
                 :title="userGeminiKey ? 'Usando tu clave privada de Gemini' : 'Configurar mi propia clave gratuita de Gemini (BYOK)'">
           <span class="h-2 w-2 rounded-full" :class="userGeminiKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
           <i class="fa-solid fa-key text-[10px]" :class="userGeminiKey ? 'text-emerald-400' : 'text-amber-400'"></i>
@@ -2641,7 +2642,7 @@ def dashboard_html():
         <div class="relative shrink-0" @click.outside="menuTemaAbierto = false" @keydown.escape.window="menuTemaAbierto = false">
           <button @click="menuTemaAbierto = !menuTemaAbierto"
                   :class="menuTemaAbierto ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
-                  class="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shadow-sm"
+                  class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shadow-sm"
                   title="Cambiar el tema de colores de la web">
             <i class="fa-solid fa-palette text-[11px]"></i>
             <span class="hidden lg:inline font-medium">Tema</span>
@@ -2908,12 +2909,14 @@ def dashboard_html():
 
           <!-- COLUMNA DERECHA (9 COLS): CALENDARIO INTERACTIVO CON TARJETAS DE ESTADO (SEMANAL / MENSUAL) -->
           <div class="xl:col-span-9 glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-800/90 bg-surface-1/95 flex flex-col justify-between">
-            <!-- CABECERA DEL CALENDARIO (TODO EN LÍNEA) -->
+            <!-- CABECERA DEL CALENDARIO (TODO EN LÍNEA / RESPONSIVE) -->
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-3.5 border-b border-gray-800">
               <div class="min-w-0">
-                <div class="flex items-center gap-2.5">
-                  <i class="fa-solid fa-calendar-days text-cyan-400 text-base"></i>
-                  <h3 class="text-sm sm:text-base font-extrabold text-white capitalize whitespace-nowrap" x-text="nombreMesCalendario"></h3>
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-days text-cyan-400 text-base"></i>
+                    <h3 class="text-sm sm:text-base font-extrabold text-white capitalize whitespace-nowrap" x-text="nombreMesCalendario"></h3>
+                  </div>
                   <button @click="verEntregasDelMes()"
                           class="text-[10px] px-2.5 py-0.5 rounded-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 hover:border-rose-500/60 font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 group"
                           :title="'Ver las ' + entregasMesActual.length + ' entregas de ' + nombreMesCalendario">
@@ -2922,18 +2925,19 @@ def dashboard_html():
                     <i class="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-70 group-hover:opacity-100"></i>
                   </button>
                   <button @click="abrirModalNuevoItemAgenda('Tema', '', '', 'calendario')"
-                          class="px-3 py-1 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] sm:text-[11px] font-bold transition flex items-center gap-1.5 whitespace-nowrap">
+                          class="px-2.5 sm:px-3 py-1 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] sm:text-[11px] font-bold transition flex items-center gap-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-plus text-[9px]"></i>
-                    <span>Añadir al Calendario</span>
+                    <span class="hidden sm:inline">Añadir al Calendario</span>
+                    <span class="sm:hidden">Añadir</span>
                   </button>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1 hidden sm:block">💡 Arrastra cualquier etiqueta a otro día, usa el botón «+» de cada día o haz clic para editarla</p>
               </div>
 
-              <!-- FILTROS POR TIPO + SELECTOR DE VISTA + NAVEGACIÓN DE SEMANA/MES EN UNA SOLA LÍNEA -->
-              <div class="flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
+              <!-- FILTROS POR TIPO + SELECTOR DE VISTA + NAVEGACIÓN DE SEMANA/MES -->
+              <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
                 <!-- PÍLDORAS DE TIPO (CLASE, ACTIVIDAD, TEMA, TEST) -->
-                <div class="flex items-center bg-gray-950/90 p-1 rounded-xl border border-gray-800 text-[10px] sm:text-[11px] shrink-0">
+                <div class="flex items-center bg-gray-950/90 p-1 rounded-xl border border-gray-800 text-[10px] sm:text-[11px] overflow-x-auto no-scrollbar shrink-0">
                   <button @click="calFiltroTipo = 'todos'"
                           :class="calFiltroTipo === 'todos' ? 'bg-gray-800 text-white font-bold' : 'text-gray-400 hover:text-gray-200'"
                           class="px-2 py-1 rounded-lg transition">Todo</button>
@@ -2945,7 +2949,7 @@ def dashboard_html():
                           class="px-2 py-1 rounded-lg transition">Entregas</button>
                   <button @click="calFiltroTipo = 'tema'"
                           :class="calFiltroTipo === 'tema' ? 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40' : 'text-gray-400 hover:text-amber-300'"
-                          class="px-2 py-1 rounded-lg transition">Temas / Citas</button>
+                          class="px-2 py-1 rounded-lg transition whitespace-nowrap">Temas / Citas</button>
                 </div>
 
                 <!-- VISTA: 2 SEMANAS (DETALLE NOTION) vs MES COMPLETO -->
@@ -2977,41 +2981,45 @@ def dashboard_html():
             </div>
 
             <!-- REJILLA DEL CALENDARIO ESTILO NOTION (CON SOPORTE DRAG & DROP ENTRE DÍAS) -->
-            <div class="mt-3">
-              <!-- CABECERA DÍAS DE LA SEMANA -->
-              <div class="grid gap-1.5 text-center text-[10px] sm:text-[11px] font-bold lowercase tracking-wider text-gray-400 mb-1.5"
-                   :class="calModoVista === 'quincena' ? 'grid-cols-5' : 'grid-cols-7'">
-                <div>lun</div><div>mar</div><div>mié</div><div>jue</div><div>vie</div>
-                <template x-if="calModoVista === 'mes'"><div>sáb</div></template>
-                <template x-if="calModoVista === 'mes'"><div>dom</div></template>
-              </div>
+            <div class="mt-3 overflow-x-auto no-scrollbar">
+              <div :class="calModoVista === 'mes' ? 'min-w-[580px] sm:min-w-0' : ''">
+                <!-- CABECERA DÍAS DE LA SEMANA (SOLO EN ESCRITORIO PARA QUINCENA O EN MES) -->
+                <div class="gap-1.5 text-center text-[10px] sm:text-[11px] font-bold lowercase tracking-wider text-gray-400 mb-1.5"
+                     :class="calModoVista === 'quincena' ? 'hidden sm:grid grid-cols-5' : 'grid grid-cols-7'">
+                  <div>lun</div><div>mar</div><div>mié</div><div>jue</div><div>vie</div>
+                  <template x-if="calModoVista === 'mes'"><div>sáb</div></template>
+                  <template x-if="calModoVista === 'mes'"><div>dom</div></template>
+                </div>
 
-              <!-- CELDAS CON TARJETAS DE COLORES ESTILO NOTION -->
-              <div class="grid gap-1.5" :class="calModoVista === 'quincena' ? 'grid-cols-1 sm:grid-cols-5' : 'grid-cols-7'">
-                <template x-for="celda in celdasCalendarioVisibles" :key="celda.key">
-                  <div @dragover.prevent="if (celda.fechaStr) diaArrastreSobre = celda.fechaStr"
-                       @dragleave="if (diaArrastreSobre === celda.fechaStr) diaArrastreSobre = ''"
-                       @drop.prevent="soltarItemEnDia(celda.fechaStr)"
-                       :class="[
-                         !celda.esMesActual && calModoVista === 'mes' ? 'opacity-30 bg-gray-950/20 border-gray-900' : 'bg-surface-4 border-gray-800/90',
-                         celda.esHoy ? 'ring-2 ring-rose-500/80 border-rose-500' : '',
-                         celda.tieneEntregaRoja ? 'border-rose-500/60' : '',
-                         diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/30 border-cyan-400' : ''
-                       ]"
-                       class="min-h-[120px] sm:min-h-[165px] p-1.5 rounded-xl border flex flex-col justify-between transition">
-                    <div>
-                      <!-- NÚMERO DE DÍA + BOTÓN + -->
-                      <div class="flex items-center justify-between mb-1.5 px-0.5 group/day">
-                        <button @click="abrirModalNuevoItemAgenda('Tema', '', celda.fechaStr, 'calendario')"
-                                x-show="celda.fechaStr"
-                                title="Añadir tema, tarea o cita en este día"
-                                class="opacity-60 group-hover/day:opacity-100 w-5 h-5 rounded bg-gray-800 hover:bg-cyan-500 hover:text-black text-gray-300 flex items-center justify-center text-[10px] transition">
-                          <i class="fa-solid fa-plus"></i>
-                        </button>
-                        <span class="text-[11px] font-bold px-1.5 py-0.5 rounded-full ml-auto"
-                              :class="celda.esHoy ? 'bg-rose-500 text-white font-extrabold' : 'text-gray-400'"
-                              x-text="celda.dia"></span>
-                      </div>
+                <!-- CELDAS CON TARJETAS DE COLORES ESTILO NOTION -->
+                <div class="grid gap-1.5" :class="calModoVista === 'quincena' ? 'grid-cols-1 sm:grid-cols-5' : 'grid-cols-7'">
+                  <template x-for="celda in celdasCalendarioVisibles" :key="celda.key">
+                    <div @dragover.prevent="if (celda.fechaStr) diaArrastreSobre = celda.fechaStr"
+                         @dragleave="if (diaArrastreSobre === celda.fechaStr) diaArrastreSobre = ''"
+                         @drop.prevent="soltarItemEnDia(celda.fechaStr)"
+                         :class="[
+                           !celda.esMesActual && calModoVista === 'mes' ? 'opacity-30 bg-gray-950/20 border-gray-900' : 'bg-surface-4 border-gray-800/90',
+                           celda.esHoy ? 'ring-2 ring-rose-500/80 border-rose-500' : '',
+                           celda.tieneEntregaRoja ? 'border-rose-500/60' : '',
+                           diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/30 border-cyan-400' : ''
+                         ]"
+                         class="min-h-[110px] sm:min-h-[165px] p-2 sm:p-1.5 rounded-xl border flex flex-col justify-between transition">
+                      <div>
+                        <!-- NÚMERO DE DÍA + DÍA SEMANA EN MÓVIL + BOTÓN + -->
+                        <div class="flex items-center justify-between mb-1.5 px-0.5 group/day">
+                          <button @click="abrirModalNuevoItemAgenda('Tema', '', celda.fechaStr, 'calendario')"
+                                  x-show="celda.fechaStr"
+                                  title="Añadir tema, tarea o cita en este día"
+                                  class="opacity-70 group-hover/day:opacity-100 w-5 h-5 rounded bg-gray-800 hover:bg-cyan-500 hover:text-black text-gray-300 flex items-center justify-center text-[10px] transition">
+                            <i class="fa-solid fa-plus"></i>
+                          </button>
+                          <div class="flex items-center gap-1.5 ml-auto">
+                            <span x-show="calModoVista === 'quincena'" class="sm:hidden text-xs font-bold text-cyan-300 capitalize" x-text="nombreDiaDeFecha(celda.fechaStr)"></span>
+                            <span class="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                                  :class="celda.esHoy ? 'bg-rose-500 text-white font-extrabold' : 'bg-gray-800/80 text-gray-300'"
+                                  x-text="celda.dia"></span>
+                          </div>
+                        </div>
 
                       <!-- LISTA DE TARJETAS NOTION DENTRO DEL DÍA -->
                       <div class="space-y-1.5 max-h-[250px] overflow-y-auto pr-0.5">
@@ -3365,7 +3373,7 @@ def dashboard_html():
                 </div>
               </div>
 
-              <div class="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold lowercase text-gray-400">
+              <div class="hidden sm:grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold lowercase text-gray-400">
                 <div>lun</div><div>mar</div><div>mié</div><div>jue</div><div>vie</div>
               </div>
               <div class="grid grid-cols-1 sm:grid-cols-5 gap-1.5 pb-1">
@@ -3380,7 +3388,10 @@ def dashboard_html():
                        ]"
                        class="min-h-[96px] p-1.5 rounded-xl border flex flex-col justify-between transition">
                     <div class="flex items-center justify-between text-[10px] text-gray-400 mb-1">
-                      <button x-show="celda.fechaStr" @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, celda.fechaStr, 'calendario')" class="text-gray-500 hover:text-cyan-400 text-[10px] font-bold px-1 rounded hover:bg-gray-800" title="Planificar tema o tarea aquí">+</button>
+                      <div class="flex items-center gap-1.5">
+                        <button x-show="celda.fechaStr" @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, celda.fechaStr, 'calendario')" class="text-gray-500 hover:text-cyan-400 text-[10px] font-bold px-1 rounded hover:bg-gray-800" title="Planificar tema o tarea aquí">+</button>
+                        <span class="sm:hidden text-xs font-bold text-cyan-300 capitalize" x-text="nombreDiaDeFecha(celda.fechaStr)"></span>
+                      </div>
                       <span class="font-bold ml-auto" :class="celda.esHoy ? 'text-rose-400 font-extrabold' : ''" x-text="celda.dia"></span>
                     </div>
                     <div class="space-y-1">
@@ -7627,6 +7638,15 @@ def dashboard_html():
           const mes = String(parseInt(partes[1], 10)).padStart(2, '0');
           const anio = partes[0];
           return `${diasSemana[fecha.getDay()]}, ${dia}/${mes}/${anio}`;
+        },
+
+        nombreDiaDeFecha(fechaStr) {
+          if (!fechaStr) return '';
+          const partes = fechaStr.split('-');
+          if (partes.length !== 3) return '';
+          const fecha = new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10));
+          const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+          return diasSemana[fecha.getDay()] || '';
         },
 
         abreviarAsignatura(nombre) {

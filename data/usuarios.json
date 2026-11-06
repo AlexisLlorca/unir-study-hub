@@ -2,12 +2,12 @@
   {
     "username": "alexking44",
     "nombre": "Alex (Administrador)",
-    "password_hash": "4f71b3fac5fa4123a26b65a4ecee0020aa01b9f086eea033c0d3433be36d3c4f",
-    "salt": "f5ac0dd4caad5ace66394c3be53c31fb",
+    "password_hash": "4b2895061c4207e8b5b6ebccacd930a6203b13dc2e60fcc2cc379d9a373967f4",
+    "salt": "f791ba78562d94b0984e9329a65e1aec",
     "rol": "admin",
     "activo": 1,
     "creado_en": "2026-10-29 18:15:09",
-    "gemini_api_key": ""
+    "gemini_api_key": "AQ.Ab8RN6I-4L8hXSEeNTEuuirswuNUarX750JarROvBmcuTriYJg"
   },
   {
     "username": "fran",
@@ -20,16 +20,6 @@
     "gemini_api_key": "AIzaSyFranTestKey98765"
   },
   {
-    "username": "prueba1",
-    "nombre": "prueba1",
-    "password_hash": "a728f6321a2a7242e720a257e97dffd8746a282411b117c8392c8cededa98f59",
-    "salt": "1ea9dbf209daca159e29ee95b64a98b3",
-    "rol": "estudiante",
-    "activo": 1,
-    "creado_en": "2026-11-06 08:55:57",
-    "gemini_api_key": "AQ.Ab8RN6I-4L8hXSEeNTEuuirswuNUarX750JarROvBmcuTriYJg"
-  },
-  {
     "username": "franaj",
     "nombre": "Fran",
     "password_hash": "b071decd702022fc527a224dd28b4bf1eea6ae9b105dcfbcac5ff1e640093087",
@@ -37,7 +27,7 @@
     "rol": "estudiante",
     "activo": 1,
     "creado_en": "2026-11-05 13:29:08",
-    "gemini_api_key": ""
+    "gemini_api_key": "AQ.Ab8RN6I0RpiLyqN7MEZc9sY5mqOxNij10klsk9YefhegUr1miw"
   },
   {
     "username": "prueba",
@@ -47,6 +37,26 @@
     "rol": "estudiante",
     "activo": 1,
     "creado_en": "2026-11-06 09:26:47",
+    "gemini_api_key": "AQ.Ab8RN6I-4L8hXSEeNTEuuirswuNUarX750JarROvBmcuTriYJg"
+  },
+  {
+    "username": "davidiguti",
+    "nombre": "David Gutierrez Jacob",
+    "password_hash": "40fe5c3f8cce7489a4a58fe5b1aaee40912a5f41b600967e12114fbc26a1978b",
+    "salt": "280a309557bf7cecbc3854f93d54ad0c",
+    "rol": "estudiante",
+    "activo": 1,
+    "creado_en": "2026-11-06 14:05:45",
+    "gemini_api_key": "AQ.Ab8RN6I8--Fy6abjGmPa-PmzQvVjoFB3a9whzaHctizMjq03iQ"
+  },
+  {
+    "username": "prueba1",
+    "nombre": "prueba1",
+    "password_hash": "a728f6321a2a7242e720a257e97dffd8746a282411b117c8392c8cededa98f59",
+    "salt": "1ea9dbf209daca159e29ee95b64a98b3",
+    "rol": "estudiante",
+    "activo": 1,
+    "creado_en": "2026-11-06 08:55:57",
     "gemini_api_key": "AQ.Ab8RN6I-4L8hXSEeNTEuuirswuNUarX750JarROvBmcuTriYJg"
   }
 ]
