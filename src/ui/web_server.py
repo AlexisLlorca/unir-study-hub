@@ -98,6 +98,13 @@ tracker = GestorProgreso()
 tutor_ia = TutorIA()
 generador = GeneradorGuiaEstudio(tutor_ia)
 
+# Programador nocturno automático: sincroniza notas, entregas y PDFs nuevos de cada estudiante
+try:
+    from src.crawler.student_canvas import iniciar_programador_sincronizacion
+    iniciar_programador_sincronizacion()
+except Exception:
+    pass
+
 
 # --- MODELOS AUTH Y ADMIN ---
 
@@ -390,13 +397,20 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
     rutas = _rutas_usuario_request(request)
     tracker_u = _tracker_usuario(request)
     resultado = []
+    asigs_vistas = set()
 
     for asig, info in catalogo.items():
+        asigs_vistas.add(asig)
         dir_guias = rutas["guias"] / asig
         dir_examenes = rutas["examenes"] / asig
+        dir_mat_u = rutas["materiales"] / asig
 
         guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
         tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
+
+        mats_base = [f.name for f in info["materiales"]]
+        mats_privados = [f.name for f in dir_mat_u.glob("*.pdf")] if dir_mat_u.exists() else []
+        mats_combinados = sorted(list(set(mats_base + mats_privados)), key=_orden_natural_items)
 
         resumen_progreso = tracker_u.obtener_resumen_asignatura(asig)
 
@@ -404,8 +418,8 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
             "nombre": asig,
             "programa_id": info["programa_id"],
             "curso": info["curso"],
-            "total_materiales": len(info["materiales"]),
-            "materiales": [f.name for f in info["materiales"]],
+            "total_materiales": len(mats_combinados),
+            "materiales": mats_combinados,
             "total_clases": len(info["transcripciones"]),
             "clases": [
                 {
@@ -420,6 +434,32 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
             "tests": tests,
             "progreso": resumen_progreso,
         })
+
+    # Añadir asignaturas exclusivas sincronizadas por este alumno en su carpeta privada
+    if rutas["materiales"].exists() and (not programa or programa == "dam"):
+        for d_priv in sorted(rutas["materiales"].iterdir()):
+            if not d_priv.is_dir() or d_priv.name in asigs_vistas:
+                continue
+            asig = d_priv.name
+            pdfs_priv = sorted([f.name for f in d_priv.glob("*.pdf")], key=_orden_natural_items)
+            if not pdfs_priv:
+                continue
+            dir_guias = rutas["guias"] / asig
+            dir_examenes = rutas["examenes"] / asig
+            guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
+            tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
+            resultado.append({
+                "nombre": asig,
+                "programa_id": programa or "dam",
+                "curso": curso or "2º Curso",
+                "total_materiales": len(pdfs_priv),
+                "materiales": pdfs_priv,
+                "total_clases": 0,
+                "clases": [],
+                "guias": guias,
+                "tests": tests,
+                "progreso": tracker_u.obtener_resumen_asignatura(asig),
+            })
 
     return resultado
 
@@ -490,8 +530,16 @@ def api_contenido(ruta: str, request: Request):
 
 
 @app.get("/api/archivo-raw")
-def api_archivo_raw(ruta: str):
-    """Sirve archivos directamente (como PDFs, DOCX o imágenes) para visores integrados, validando la ruta."""
+def api_archivo_raw(ruta: str, request: Request):
+    """Sirve archivos directamente (como PDFs, DOCX o imágenes) para visores integrados, validando la ruta y el espacio privado del usuario."""
+    ruta_norm = (ruta or "").strip().replace("\\", "/").lstrip("/")
+    if ruta_norm.startswith("data/materiales/"):
+        rel_mat = ruta_norm[len("data/materiales/"):]
+        rutas_u = _rutas_usuario_request(request)
+        cand_priv = rutas_u["materiales"] / rel_mat
+        if cand_priv.exists() and cand_priv.is_file():
+            ruta = str(cand_priv.relative_to(BASE_DIR))
+
     archivo = ruta_segura_lectura(
         ruta,
         extensiones={".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".md", ".txt", ".mp3", ".mp4", ".wav", ".m4a"},
@@ -694,15 +742,19 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
     """Genera una guía de estudio y/o test interactivo con IA desde la web."""
     user_key = _obtener_user_key_o_exigir(request, req.api_key)
     asig_limpia = nombre_seguro(req.asignatura, "asignatura")
+    rutas_u = _rutas_usuario_request(request)
     ruta_pdf = None
     if req.archivo_pdf:
         pdf_limpio = nombre_seguro(req.archivo_pdf, "archivo_pdf")
-        p = ruta_dentro_de(MATERIALES_DIR, asig_limpia, pdf_limpio)
-        if p.exists() and p.is_file():
-            ruta_pdf = p
+        p_priv = ruta_dentro_de(rutas_u["materiales"], asig_limpia, pdf_limpio)
+        p_base = ruta_dentro_de(MATERIALES_DIR, asig_limpia, pdf_limpio)
+        if p_priv.exists() and p_priv.is_file():
+            ruta_pdf = p_priv
+        elif p_base.exists() and p_base.is_file():
+            ruta_pdf = p_base
 
     if not ruta_pdf:
-        ruta_pdf = _buscar_pdf_relevante(MATERIALES_DIR / asig_limpia, req.nombre_tema)
+        ruta_pdf = _buscar_pdf_relevante(rutas_u["materiales"] / asig_limpia, req.nombre_tema) or _buscar_pdf_relevante(MATERIALES_DIR / asig_limpia, req.nombre_tema)
 
     ruta_trans = _buscar_transcripcion_relevante(TRANSCRIPCIONES_DIR / asig_limpia, req.nombre_tema)
 
@@ -711,8 +763,6 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
             status_code=400,
             detail="No se encontró un PDF ni videoclase que coincida con ese nombre de tema. Selecciona el documento PDF en el desplegable.",
         )
-
-    rutas_u = _rutas_usuario_request(request)
     res = generador.generar_paquete_tema(
         asignatura=asig_limpia,
         nombre_tema=req.nombre_tema,
@@ -1308,18 +1358,365 @@ def api_resumen_clase(req: ResumenClaseRequest, request: Request):
     }
 
 
+class ConectarMiCampusReq(BaseModel):
+    canvas_token: Optional[str] = None
+    ics_url: Optional[str] = None
+    base_url: Optional[str] = None
+    token_expira: Optional[str] = None
+
+
+class FavoritasReq(BaseModel):
+    asignaturas: List[str]
+
+
+@app.get("/api/mi-campus")
+def api_obtener_mi_campus(request: Request):
+    """Devuelve el estado de conexión al Campus UNIR (Canvas) personal del estudiante y sus datos sincronizados."""
+    from src.crawler.student_canvas import obtener_datos_canvas_estudiante
+    return obtener_datos_canvas_estudiante(_username_actual(request))
+
+
+@app.post("/api/mi-campus/conectar")
+def api_conectar_mi_campus(req: ConectarMiCampusReq, request: Request):
+    """Conecta o resincroniza la cuenta personal de Canvas UNIR del estudiante."""
+    from src.crawler.student_canvas import sincronizar_canvas_estudiante, obtener_datos_canvas_estudiante
+    username = _username_actual(request)
+    ok, msg, _ = sincronizar_canvas_estudiante(
+        username=username,
+        canvas_token=req.canvas_token,
+        ics_url=req.ics_url,
+        base_url=req.base_url,
+        token_expira=req.token_expira,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {
+        "status": "ok",
+        "mensaje": msg,
+        "datos": obtener_datos_canvas_estudiante(username),
+    }
+
+
+@app.post("/api/mi-campus/desconectar")
+def api_desconectar_mi_campus(request: Request):
+    """Desconecta la cuenta personal de Canvas UNIR del estudiante."""
+    from src.crawler.student_canvas import desconectar_canvas_estudiante, obtener_datos_canvas_estudiante
+    username = _username_actual(request)
+    desconectar_canvas_estudiante(username)
+    return {"status": "ok", "datos": obtener_datos_canvas_estudiante(username)}
+
+
+@app.post("/api/mi-campus/sincronizar-materiales")
+def api_sincronizar_materiales_mi_campus(request: Request):
+    """Descarga los PDFs nuevos o exclusivos de las asignaturas del alumno desde su propio Canvas UNIR a su carpeta privada."""
+    from src.crawler.student_canvas import sincronizar_materiales_canvas_estudiante
+    username = _username_actual(request)
+    ok, msg, resumen = sincronizar_materiales_canvas_estudiante(username)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"status": "ok", "mensaje": msg, "resumen": resumen}
+
+
+@app.post("/api/mi-campus/favoritas")
+def api_guardar_favoritas(req: FavoritasReq, request: Request):
+    """Guarda las asignaturas fijadas ('Mis Asignaturas') por el estudiante."""
+    from src.crawler.student_canvas import guardar_asignaturas_favoritas_usuario
+    cfg = guardar_asignaturas_favoritas_usuario(_username_actual(request), req.asignaturas)
+    return {"status": "ok", "asignaturas_favoritas": cfg.get("asignaturas_favoritas", [])}
+
+
+class ActualizarItemAgendaReq(BaseModel):
+    item_id: str
+    titulo: Optional[str] = None
+    asignatura: Optional[str] = None
+    categoria: Optional[str] = None
+    estado: Optional[str] = None
+    fecha_dia: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    recordatorio: Optional[bool] = None
+    nota: Optional[float] = None
+    nota_personal: Optional[float] = None
+    comentario: Optional[str] = None
+
+
+class CrearItemAgendaReq(BaseModel):
+    titulo: str
+    asignatura: str
+    categoria: Optional[str] = "Tema"
+    fecha_dia: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    estado: Optional[str] = None
+    recordatorio: Optional[bool] = None
+    comentario: Optional[str] = None
+
+
+class EstadoTemaReq(BaseModel):
+    asignatura: str
+    tema_num: int
+    tema_titulo: Optional[str] = None
+    estado: str  # "Por hacer", "En proceso", "Hecho"
+    fecha_dia: Optional[str] = None
+
+
+def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]:
+    """
+    Combina el calendario oficial DAM 2026-2027 (clases, tutorías, entregas PAC, temas y tests)
+    con el estado personal del estudiante (su organizador Notion privado + su conexión a Canvas).
+    """
+    from src.crawler.agenda_sync import cargar_agenda_cache, obtener_organizador_usuario, calcular_dias_restantes
+    from src.crawler.student_canvas import obtener_datos_canvas_estudiante
+
+    base_eventos = cargar_agenda_cache()
+    org_u = obtener_organizador_usuario(username)
+    overrides = org_u.get("overrides", {})
+    items_propios = org_u.get("items_propios", [])
+
+    datos_est = obtener_datos_canvas_estudiante(username)
+    por_asig_fecha = {}
+    entregas_est = datos_est.get("entregas", []) if datos_est.get("config", {}).get("conectado") else []
+    for e_user in entregas_est:
+        f_dia = (e_user.get("fecha_iso") or "")[:10]
+        asig_k = (e_user.get("asignatura") or "").lower().strip()
+        if asig_k and f_dia:
+            por_asig_fecha[(asig_k, f_dia)] = e_user
+
+    combinados = []
+    usados_ids = set()
+
+    for ev in base_eventos + items_propios:
+        ev_c = dict(ev)
+        iid = ev_c.get("id", "")
+        ov = overrides.get(iid, {})
+        if ov.get("oculto"):
+            continue
+
+        # Estado base según tipo si no lo trae aún
+        cat = ov.get("categoria") or ev_c.get("categoria") or ("Clase" if ev_c.get("tipo") == "clase_directo" else ("Actividad" if ev_c.get("tipo") == "tarea" else "Tema"))
+        ev_c["categoria"] = cat
+        if not ev_c.get("estado"):
+            ev_c["estado"] = "No vista" if cat in ("Clase", "Tutoría") else ("No entregado" if cat in ("Actividad", "Entrega", "Práctica", "Examen", "Proyecto", "FFE", "Formulario") else "No hecho")
+
+        # Aplicar overrides personales de esta cuenta (título, asignatura, categoría, estado, fecha, hora, recordatorio, nota, comentario)
+        if ov.get("titulo"):
+            ev_c["titulo"] = ov["titulo"]
+        if ov.get("asignatura"):
+            ev_c["asignatura"] = ov["asignatura"]
+        if ov.get("categoria"):
+            ev_c["categoria"] = ov["categoria"]
+            if ov["categoria"] in ("Clase", "Tutoría"):
+                ev_c["tipo"] = "clase_directo"
+            elif ov["categoria"] in ("Actividad", "Entrega", "Práctica", "Examen", "Proyecto", "FFE", "Formulario"):
+                ev_c["tipo"] = "tarea"
+            else:
+                ev_c["tipo"] = "tema"
+        if ov.get("estado"):
+            ev_c["estado"] = ov["estado"]
+        if ov.get("hora_inicio"):
+            ev_c["hora_inicio"] = ov["hora_inicio"]
+        if "recordatorio" in ov and ov["recordatorio"] is not None:
+            ev_c["recordatorio"] = bool(ov["recordatorio"])
+        if ov.get("fecha_dia"):
+            ev_c["fecha_dia"] = ov["fecha_dia"]
+            hora_i = ev_c.get("hora_inicio") or "23:59"
+            ev_c["fecha_iso"] = f"{ov['fecha_dia']}T{hora_i}:00Z"
+            dias_r, plazo_t = calcular_dias_restantes(ev_c["fecha_iso"])
+            ev_c["dias_restantes"] = dias_r
+            ev_c["plazo_texto"] = plazo_t
+        if "nota_personal" in ov and ov["nota_personal"] is not None:
+            ev_c["nota_personal"] = ov["nota_personal"]
+            ev_c["nota"] = ov["nota_personal"]
+        if "comentario" in ov and ov["comentario"] is not None:
+            ev_c["comentario"] = ov["comentario"]
+
+        # Si el alumno conectó Canvas y esta entrega figura entregada/calificada en su Canvas
+        if ev_c.get("tipo") == "tarea":
+            asig_k = (ev_c.get("asignatura") or "").lower().strip()
+            f_dia = ev_c.get("fecha_dia") or (ev_c.get("fecha_iso") or "")[:10]
+            match = por_asig_fecha.get((asig_k, f_dia))
+            if match:
+                usados_ids.add(match.get("id"))
+                ev_c["entregada"] = match.get("entregada", False)
+                ev_c["calificada"] = match.get("calificada", False)
+                ev_c["nota"] = match.get("nota")
+                if match.get("entregada") and not ov.get("estado"):
+                    ev_c["estado"] = "Hecho"
+                if match.get("nota") is not None and ev_c.get("nota_personal") is None:
+                    ev_c["nota_personal"] = match.get("nota")
+                if match.get("plazo_texto"):
+                    ev_c["plazo_texto"] = match["plazo_texto"]
+                if match.get("url"):
+                    ev_c["url"] = match["url"]
+
+        if ev_c.get("estado") in ("Hecho", "Vista", "Vista no relevante"):
+            ev_c["entregada"] = True
+
+        combinados.append(ev_c)
+
+    # Añadir entregas personales adicionales del alumno en Canvas
+    for e_user in entregas_est:
+        if e_user.get("id") not in usados_ids:
+            e_copia = dict(e_user)
+            f_iso = e_copia.get("fecha_iso") or ""
+            e_copia["fecha_dia"] = f_iso[:10] if len(f_iso) >= 10 else ""
+            e_copia["hora_inicio"] = f_iso[11:16] if len(f_iso) >= 16 else "23:59"
+            e_copia["categoria"] = "Actividad"
+            e_copia["estado"] = "Hecho" if e_copia.get("entregada") else "No entregado"
+            combinados.append(e_copia)
+
+    return combinados
+
+
 @app.get("/api/agenda")
-def api_agenda():
-    """Devuelve las próximas entregas, PACs y eventos académicos de Canvas."""
-    from src.crawler.agenda_sync import cargar_agenda_cache
-    return cargar_agenda_cache()
+def api_agenda(request: Request):
+    """Devuelve el calendario completo (clases, entregas, temas, tests) con el estado personal del estudiante."""
+    return _combinar_agenda_oficial_y_estudiante(_username_actual(request))
+
+
+@app.post("/api/agenda/item/actualizar")
+def api_actualizar_item_agenda(req: ActualizarItemAgendaReq, request: Request):
+    """Guarda el título, asignatura, categoría, estado ('Vista', 'Hecho', etc.), fecha movida, hora, recordatorio, nota o comentario del alumno."""
+    from src.crawler.agenda_sync import actualizar_item_organizador_usuario
+    username = _username_actual(request)
+    cambios = {}
+    if req.titulo is not None and req.titulo.strip():
+        cambios["titulo"] = req.titulo.strip()
+    if req.asignatura is not None and req.asignatura.strip():
+        cambios["asignatura"] = req.asignatura.strip()
+    if req.categoria is not None and req.categoria.strip():
+        cambios["categoria"] = req.categoria.strip()
+    if req.estado is not None:
+        cambios["estado"] = req.estado
+    if req.fecha_dia is not None:
+        cambios["fecha_dia"] = req.fecha_dia
+    if req.hora_inicio is not None:
+        cambios["hora_inicio"] = req.hora_inicio.strip()
+    if req.recordatorio is not None:
+        cambios["recordatorio"] = bool(req.recordatorio)
+    nota_val = req.nota_personal if req.nota_personal is not None else req.nota
+    if nota_val is not None:
+        cambios["nota_personal"] = nota_val
+    if req.comentario is not None:
+        cambios["comentario"] = req.comentario
+    actualizar_item_organizador_usuario(username, req.item_id, cambios)
+    return {"status": "ok"}
+
+
+@app.post("/api/agenda/item/crear")
+def api_crear_item_agenda(req: CrearItemAgendaReq, request: Request):
+    """Crea un nuevo tema, tarea o recordatorio en el calendario personal del estudiante."""
+    from src.crawler.agenda_sync import crear_item_organizador_usuario
+    username = _username_actual(request)
+    item = crear_item_organizador_usuario(username, req.model_dump())
+    return {"status": "ok", "item": item}
+
+
+@app.delete("/api/agenda/item/{item_id}")
+def api_eliminar_item_agenda(item_id: str, request: Request):
+    """Elimina un ítem propio creado por el estudiante."""
+    from src.crawler.agenda_sync import eliminar_item_organizador_usuario
+    username = _username_actual(request)
+    ok = eliminar_item_organizador_usuario(username, item_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Solo puedes eliminar ítems creados manualmente por ti.")
+    return {"status": "ok"}
+
+
+@app.get("/api/temas-estado")
+def api_obtener_temas_estado(request: Request):
+    """Devuelve los estados personales guardados por el alumno para cada tema de cada asignatura."""
+    from src.crawler.agenda_sync import obtener_organizador_usuario
+    username = _username_actual(request)
+    org = obtener_organizador_usuario(username)
+    return org.get("temas_estado", {})
+
+
+@app.post("/api/asignatura/tema/estado")
+def api_actualizar_estado_tema(req: EstadoTemaReq, request: Request):
+    """Guarda el estado de un tema (Hecho, En proceso, Por hacer) y lo sincroniza con la agenda personal."""
+    import re
+    from src.crawler.agenda_sync import (
+        _archivo_organizador_usuario,
+        obtener_organizador_usuario,
+        cargar_agenda_cache,
+        escribir_json_atomico
+    )
+    username = _username_actual(request)
+    org = obtener_organizador_usuario(username)
+    f = _archivo_organizador_usuario(username)
+
+    asig = req.asignatura.strip()
+    temas_est = org.setdefault("temas_estado", {})
+    asig_temas = temas_est.setdefault(asig, {})
+    asig_temas[str(req.tema_num)] = req.estado
+
+    estado_agenda = "Hecho" if req.estado == "Hecho" else ("En proceso" if req.estado == "En proceso" else "No hecho")
+
+    base_eventos = cargar_agenda_cache()
+    items_propios = org.setdefault("items_propios", [])
+    overrides = org.setdefault("overrides", {})
+
+    encontrado_id = None
+    asig_k = asig.lower()
+
+    # 1. Comprobar en items propios del usuario
+    for it in items_propios:
+        if (it.get("asignatura") or "").lower() == asig_k:
+            tit = (it.get("titulo") or "").lower()
+            if re.search(rf"(?:tema|tem|t)\s*0*{req.tema_num}(?:\b|[^\d])", tit):
+                it["estado"] = estado_agenda
+                if req.estado == "Hecho":
+                    it["entregada"] = True
+                if req.fecha_dia:
+                    it["fecha_dia"] = req.fecha_dia
+                encontrado_id = it.get("id")
+                break
+
+    # 2. Comprobar en eventos base de la agenda
+    if not encontrado_id:
+        for ev in base_eventos:
+            if (ev.get("asignatura") or "").lower() == asig_k:
+                tit = (ev.get("titulo") or "").lower()
+                if re.search(rf"(?:tema|tem|t)\s*0*{req.tema_num}(?:\b|[^\d])", tit):
+                    eid = ev.get("id")
+                    ov = overrides.setdefault(eid, {})
+                    ov["estado"] = estado_agenda
+                    if req.fecha_dia:
+                        ov["fecha_dia"] = req.fecha_dia
+                    encontrado_id = eid
+                    break
+
+    # 3. Si se especificó fecha_dia y no había evento en ningún lado, crear uno propio
+    if req.fecha_dia and not encontrado_id:
+        from src.crawler.agenda_sync import crear_item_organizador_usuario
+        crear_item_organizador_usuario(username, {
+            "titulo": f"Tema {req.tema_num}: {req.tema_titulo or ('Tema ' + str(req.tema_num))}",
+            "asignatura": asig,
+            "categoria": "Tema",
+            "estado": estado_agenda,
+            "fecha_dia": req.fecha_dia
+        })
+
+    escribir_json_atomico(f, org)
+    try:
+        from src.core.cloud_sync import respaldar_archivo_en_hf_async
+        respaldar_archivo_en_hf_async(f)
+    except Exception:
+        pass
+
+    return {"status": "ok", "estado": req.estado, "temas_estado": org.get("temas_estado", {})}
 
 
 @app.post("/api/sincronizar-agenda")
-def api_sincronizar_agenda():
-    """Sincroniza en directo la agenda y PACs con Canvas LMS."""
+def api_sincronizar_agenda(request: Request):
+    """Sincroniza en directo el calendario oficial y el Canvas personal del estudiante."""
+    from src.crawler.student_canvas import obtener_config_canvas_usuario, sincronizar_canvas_estudiante
     from src.crawler.agenda_sync import sincronizar_agenda_canvas
-    eventos = sincronizar_agenda_canvas() or []
+    username = _username_actual(request)
+    cfg = obtener_config_canvas_usuario(username)
+    if cfg.get("conectado"):
+        sincronizar_canvas_estudiante(username=username)
+    sincronizar_agenda_canvas()
+    eventos = _combinar_agenda_oficial_y_estudiante(username)
     return {"status": "ok", "total": len(eventos), "eventos": eventos}
 
 
@@ -1781,17 +2178,119 @@ def dashboard_html():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NOVA Study Hub — Plataforma Inteligente Multi-Titulación</title>
+  <script>
+    /* ===== TEMAS DE COLOR DE NOVA (cada alumno elige el suyo; se guarda en su navegador) ===== */
+    window.NOVA_PALETAS = {
+      gray:    '#f9fafb #f3f4f6 #e5e7eb #d1d5db #9ca3af #6b7280 #4b5563 #374151 #1f2937 #111827 #030712',
+      zinc:    '#fafafa #f4f4f5 #e4e4e7 #d4d4d8 #a1a1aa #71717a #52525b #3f3f46 #27272a #18181b #09090b',
+      neutral: '#fafafa #f5f5f5 #e5e5e5 #d4d4d4 #a3a3a3 #737373 #525252 #404040 #262626 #171717 #0a0a0a',
+      stone:   '#fafaf9 #f5f5f4 #e7e5e4 #d6d3d1 #a8a29e #78716c #57534e #44403c #292524 #1c1917 #0c0a09',
+      slate:   '#f8fafc #f1f5f9 #e2e8f0 #cbd5e1 #94a3b8 #64748b #475569 #334155 #1e293b #0f172a #020617',
+      cyan:    '#ecfeff #cffafe #a5f3fc #67e8f9 #22d3ee #06b6d4 #0891b2 #0e7490 #155e75 #164e63 #083344',
+      sky:     '#f0f9ff #e0f2fe #bae6fd #7dd3fc #38bdf8 #0ea5e9 #0284c7 #0369a1 #075985 #0c4a6e #082f49',
+      indigo:  '#eef2ff #e0e7ff #c7d2fe #a5b4fc #818cf8 #6366f1 #4f46e5 #4338ca #3730a3 #312e81 #1e1b4b',
+      violet:  '#f5f3ff #ede9fe #ddd6fe #c4b5fd #a78bfa #8b5cf6 #7c3aed #6d28d9 #5b21b6 #4c1d95 #2e1065',
+      purple:  '#faf5ff #f3e8ff #e9d5ff #d8b4fe #c084fc #a855f7 #9333ea #7e22ce #6b21a8 #581c87 #3b0764',
+      fuchsia: '#fdf4ff #fae8ff #f5d0fe #f0abfc #e879f9 #d946ef #c026d3 #a21caf #86198f #701a75 #4a044e',
+      pink:    '#fdf2f8 #fce7f3 #fbcfe8 #f9a8d4 #f472b6 #ec4899 #db2777 #be185d #9d174d #831843 #500724',
+      rose:    '#fff1f2 #ffe4e6 #fecdd3 #fda4af #fb7185 #f43f5e #e11d48 #be123c #9f1239 #881337 #4c0519',
+      emerald: '#ecfdf5 #d1fae5 #a7f3d0 #6ee7b7 #34d399 #10b981 #059669 #047857 #065f46 #064e3b #022c22',
+      teal:    '#f0fdfa #ccfbf1 #99f6e4 #5eead4 #2dd4bf #14b8a6 #0d9488 #0f766e #115e59 #134e4a #042f2e',
+      green:   '#f0fdf4 #dcfce7 #bbf7d0 #86efac #4ade80 #22c55e #16a34a #15803d #166534 #14532d #052e16',
+      amber:   '#fffbeb #fef3c7 #fde68a #fcd34d #fbbf24 #f59e0b #d97706 #b45309 #92400e #78350f #451a03',
+      orange:  '#fff7ed #ffedd5 #fed7aa #fdba74 #fb923c #f97316 #ea580c #c2410c #9a3412 #7c2d12 #431407',
+      blue:    '#eff6ff #dbeafe #bfdbfe #93c5fd #60a5fa #3b82f6 #2563eb #1d4ed8 #1e40af #1e3a8a #172554'
+    };
+    /* Cada tema reasigna: grises (fondos/textos), acento principal (cyan), secundario (sky) y terciario (indigo).
+       Los colores de estado (rojo entregas, verde hecho, ámbar pendiente) NO cambian para no perder su significado. */
+    window.NOVA_TEMAS = [
+      { id: 'nova',      nombre: 'Nova (Azul)',        desc: 'El estándar: azul cian',      gray: 'gray',    cyan: 'cyan',    sky: 'sky',     indigo: 'indigo',
+        surf: '#0b0f19 #0d131f #0d1526 #0f172a #111722 #131722 #18191d #172554 #1a1433' },
+      { id: 'nebulosa',  nombre: 'Nebulosa (Violeta)', desc: 'Morado y fucsia',             gray: 'zinc',    cyan: 'fuchsia', sky: 'violet',  indigo: 'purple',
+        surf: '#0d0a14 #110d1b #140f22 #170f28 #150f1f #181224 #1b1720 #2e1065 #1f1433' },
+      { id: 'bosque',    nombre: 'Bosque (Verde)',     desc: 'Verde esmeralda tranquilo',   gray: 'stone',   cyan: 'teal',    sky: 'emerald', indigo: 'green',
+        surf: '#08100d #0a1511 #0b1914 #0c1c16 #0e1814 #101a16 #151a17 #052e16 #0f1f18' },
+      { id: 'atardecer', nombre: 'Atardecer (Ámbar)',  desc: 'Tonos cálidos naranja',       gray: 'stone',   cyan: 'orange',  sky: 'amber',   indigo: 'rose',
+        surf: '#110c09 #160f0b #19110c #1c130d #1a140f #1c1611 #1d1a17 #431407 #24150f' },
+      { id: 'sakura',    nombre: 'Sakura (Rosa)',      desc: 'Rosa suave',                  gray: 'zinc',    cyan: 'pink',    sky: 'rose',    indigo: 'fuchsia',
+        surf: '#120a0e #170c12 #1a0e15 #1d0f17 #190f14 #1b1117 #1d181b #500724 #26101c' },
+      { id: 'oceano',    nombre: 'Océano (Azul real)', desc: 'Azul profundo',               gray: 'slate',   cyan: 'blue',    sky: 'sky',     indigo: 'violet',
+        surf: '#060b16 #08101e #091326 #0b162d #0b1322 #0d1527 #111827 #172554 #141433' },
+      { id: 'grafito',   nombre: 'Grafito (Neutro)',   desc: 'Gris minimalista sin color',  gray: 'neutral', cyan: 'zinc',    sky: 'neutral', indigo: 'zinc',
+        surf: '#0a0a0a #0f0f0f #121212 #141414 #151515 #171717 #1a1a1a #262626 #1c1c1c' }
+    ];
+    window.novaHexARgb = function (h) {
+      h = h.replace('#', '');
+      return parseInt(h.slice(0, 2), 16) + ' ' + parseInt(h.slice(2, 4), 16) + ' ' + parseInt(h.slice(4, 6), 16);
+    };
+    window.novaAplicarTema = function (id) {
+      const tema = window.NOVA_TEMAS.find(t => t.id === id) || window.NOVA_TEMAS[0];
+      const raiz = document.documentElement;
+      const pasos = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+      ['gray', 'cyan', 'sky', 'indigo'].forEach(rol => {
+        const hexes = window.NOVA_PALETAS[tema[rol]].split(' ');
+        pasos.forEach((p, i) => raiz.style.setProperty('--c-' + rol + '-' + p, window.novaHexARgb(hexes[i])));
+      });
+      tema.surf.split(' ').forEach((hx, i) => raiz.style.setProperty('--surface-' + i, window.novaHexARgb(hx)));
+      raiz.setAttribute('data-tema', tema.id);
+      const meta = document.querySelector('meta[name=theme-color]');
+      if (meta) meta.setAttribute('content', tema.surf.split(' ')[0]);
+      return tema.id;
+    };
+    window.novaAplicarTema(localStorage.getItem('nova_tema') || 'nova');
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    (function () {
+      const pasos = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+      const paleta = rol => Object.fromEntries(pasos.map(p => [p, 'rgb(var(--c-' + rol + '-' + p + ') / <alpha-value>)']));
+      const surface = {};
+      for (let i = 0; i <= 8; i++) surface[i] = 'rgb(var(--surface-' + i + ') / <alpha-value>)';
+      tailwind.config = {
+        darkMode: 'class',
+        theme: { extend: { colors: { gray: paleta('gray'), cyan: paleta('cyan'), sky: paleta('sky'), indigo: paleta('indigo'), surface: surface } } }
+      };
+    })();
+  </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-    body { font-family: 'Inter', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+    body { font-family: 'Inter', sans-serif; background-color: rgb(var(--surface-0)); color: rgb(var(--c-gray-100)); transition: background-color .25s ease; }
     code, pre { font-family: 'JetBrains Mono', monospace; }
-    .glass { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
-    .glass-card { background: rgba(31, 41, 55, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); }
+    .glass { background: rgb(var(--c-gray-900) / 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-card { background: rgb(var(--c-gray-800) / 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.05); }
+
+    /* Efecto 3D Flip real de Flashcards */
+    .flashcard-perspective {
+      perspective: 1200px;
+    }
+    .flashcard-inner {
+      position: relative;
+      width: 100%;
+      min-height: 320px;
+      transition: transform 0.5s cubic-bezier(0.4, 0.2, 0.2, 1);
+      transform-style: preserve-3d;
+    }
+    .flashcard-inner.flipped {
+      transform: rotateY(180deg);
+    }
+    .flashcard-face {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .flashcard-back {
+      transform: rotateY(180deg);
+    }
 
     /* Ajuste responsivo de texto para evitar cortes y barras horizontales */
     .markdown-content {
@@ -1800,20 +2299,20 @@ def dashboard_html():
       white-space: normal;
       line-height: 1.7;
     }
-    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: #38bdf8; line-height: 1.4; margin-top: 1.4rem; margin-bottom: 0.8rem; word-break: break-word; }
-    .markdown-content h2 { font-size: 1.25rem; font-weight: 700; color: #818cf8; line-height: 1.4; margin-top: 1.2rem; margin-bottom: 0.6rem; word-break: break-word; }
-    .markdown-content h3 { font-size: 1.1rem; font-weight: 600; color: #a5b4fc; line-height: 1.35; margin-top: 1rem; margin-bottom: 0.5rem; word-break: break-word; }
+    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: rgb(var(--c-sky-400)); line-height: 1.4; margin-top: 1.4rem; margin-bottom: 0.8rem; word-break: break-word; }
+    .markdown-content h2 { font-size: 1.25rem; font-weight: 700; color: rgb(var(--c-indigo-400)); line-height: 1.4; margin-top: 1.2rem; margin-bottom: 0.6rem; word-break: break-word; }
+    .markdown-content h3 { font-size: 1.1rem; font-weight: 600; color: rgb(var(--c-indigo-300)); line-height: 1.35; margin-top: 1rem; margin-bottom: 0.5rem; word-break: break-word; }
     .markdown-content p { margin-bottom: 0.9rem; line-height: 1.75; color: #e2e8f0; word-break: break-word; overflow-wrap: anywhere; }
     .markdown-content ul, .markdown-content ol { margin-bottom: 1rem; padding-left: 1.5rem; line-height: 1.65; word-break: break-word; }
     .markdown-content li { margin-bottom: 0.35rem; word-break: break-word; }
     
     /* Bloques de código y citas: auto-wrap para no forzar scroll horizontal */
     .markdown-content pre {
-      background: #111827;
+      background: rgb(var(--c-gray-900));
       padding: 1rem;
       border-radius: 0.5rem;
       margin-bottom: 1rem;
-      border: 1px solid #374151;
+      border: 1px solid rgb(var(--c-gray-700));
       line-height: 1.55;
       white-space: pre-wrap !important;
       word-break: break-word !important;
@@ -1821,17 +2320,17 @@ def dashboard_html():
       overflow-x: hidden !important;
     }
     .markdown-content code {
-      background: #1f2937;
+      background: rgb(var(--c-gray-800));
       padding: 0.15rem 0.35rem;
       border-radius: 0.25rem;
       font-size: 0.875rem;
-      color: #38bdf8;
+      color: rgb(var(--c-sky-400));
       white-space: pre-wrap !important;
       word-break: break-word !important;
       overflow-wrap: anywhere !important;
     }
     .markdown-content blockquote {
-      border-left: 3px solid #38bdf8;
+      border-left: 3px solid rgb(var(--c-sky-400));
       padding-left: 1rem;
       color: #94a3b8;
       margin-bottom: 1rem;
@@ -1846,13 +2345,13 @@ def dashboard_html():
       word-break: break-word;
       table-layout: auto;
     }
-    .markdown-content th, .markdown-content td { border: 1px solid #374151; padding: 0.5rem 0.75rem; text-align: left; word-break: break-word; }
-    .markdown-content th { background: #1f2937; color: #e5e7eb; }
+    .markdown-content th, .markdown-content td { border: 1px solid rgb(var(--c-gray-700)); padding: 0.5rem 0.75rem; text-align: left; word-break: break-word; }
+    .markdown-content th { background: rgb(var(--c-gray-800)); color: #e5e7eb; }
 
     /* Cajas interactivas de Active Recall (Cornell Method) */
     .markdown-content details {
       background: rgba(17, 24, 39, 0.7);
-      border: 1px solid rgba(56, 189, 248, 0.25);
+      border: 1px solid rgb(var(--c-sky-400) / 0.25);
       border-radius: 0.85rem;
       padding: 0.85rem 1.15rem;
       margin: 1.15rem 0;
@@ -1861,29 +2360,29 @@ def dashboard_html():
     }
     .markdown-content details[open] {
       background: rgba(15, 23, 42, 0.95);
-      border-color: rgba(56, 189, 248, 0.5);
+      border-color: rgb(var(--c-sky-400) / 0.5);
     }
     .markdown-content summary {
       cursor: pointer;
       font-weight: 600;
-      color: #38bdf8;
+      color: rgb(var(--c-sky-400));
       outline: none;
       user-select: none;
       padding: 0.2rem 0;
     }
     .markdown-content summary:hover {
-      color: #7dd3fc;
+      color: rgb(var(--c-sky-300));
     }
     .markdown-content details[open] summary {
       margin-bottom: 0.75rem;
-      border-bottom: 1px dashed rgba(56, 189, 248, 0.2);
+      border-bottom: 1px dashed rgb(var(--c-sky-400) / 0.2);
       padding-bottom: 0.5rem;
     }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0b0f19; }
-    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    ::-webkit-scrollbar-track { background: rgb(var(--surface-0)); }
+    ::-webkit-scrollbar-thumb { background: rgb(var(--c-gray-700)); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-gray-600)); }
 
     /* Ajustes específicos de fluidez para móviles y tablets */
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -1896,7 +2395,7 @@ def dashboard_html():
     }
   </style>
 </head>
-<body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-[#0b0f19] text-gray-100 overflow-x-hidden">
+<body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-surface-0 text-gray-100 overflow-x-hidden">
 
   <!-- BACKDROP OVERLAY PARA MÓVIL CUANDO EL MENÚ ESTÁ ABIERTO -->
   <div x-show="sidebarVisible" 
@@ -1918,7 +2417,7 @@ def dashboard_html():
          x-transition:leave="transition-all ease-in duration-200"
          x-transition:leave-start="translate-x-0 opacity-100"
          x-transition:leave-end="-translate-x-full opacity-0"
-         class="w-72 bg-[#0f172a]/98 border-r border-gray-800 flex flex-col shrink-0 min-h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 select-none shadow-2xl md:shadow-xl">
+         class="w-72 bg-surface-3/98 border-r border-gray-800 flex flex-col shrink-0 min-h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 select-none shadow-2xl md:shadow-xl">
     
     <!-- BRAND / LOGO -->
     <div class="p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between">
@@ -2012,21 +2511,6 @@ def dashboard_html():
               <span>Videoclases y Transcripciones</span>
             </button>
             <a href="/?tab=clases" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
-
-          <div class="flex items-center group/item">
-            <button @click="irASeccion('agenda')"
-                    :class="tab === 'agenda' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
-              <div class="flex items-center space-x-2.5">
-                <i class="fa-solid fa-calendar-check w-4 text-center text-rose-400"></i>
-                <span>Agenda y PACs Canvas</span>
-              </div>
-              <span x-show="agendaEventos.length > 0" class="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded-full font-bold" x-text="agendaEventos.length"></span>
-            </button>
-            <a href="/?tab=agenda" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-rose-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
@@ -2133,6 +2617,16 @@ def dashboard_html():
           <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">Consultar </span><span>NOVA</span>
         </button>
 
+        <!-- BOTÓN CONECTAR MI CAMPUS UNIR (CANVAS PERSONAL) -->
+        <button @click="abrirModalMiCampus()"
+                :class="miCampusConfig?.conectado ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-indigo-300 hover:border-indigo-500/30'"
+                class="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
+                :title="miCampusConfig?.conectado ? ('Campus UNIR conectado: ' + (miCampusConfig?.alumno_nombre || 'Activo')) : 'Conectar mi cuenta personal del Campus UNIR (Canvas)'">
+          <span class="h-2 w-2 rounded-full" :class="miCampusConfig?.conectado ? 'bg-indigo-400 animate-pulse' : 'bg-gray-500'"></span>
+          <i class="fa-solid fa-building-columns text-[10px]" :class="miCampusConfig?.conectado ? 'text-indigo-400' : 'text-gray-400'"></i>
+          <span class="hidden sm:inline font-medium" x-text="miCampusConfig?.conectado ? 'Mi Campus' : 'Conectar Campus'"></span>
+        </button>
+
         <!-- BOTÓN MI KEY / TOKENS PRIVADOS (BYOK) -->
         <button @click="abrirModalApiKey()" 
                 :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
@@ -2142,6 +2636,43 @@ def dashboard_html():
           <i class="fa-solid fa-key text-[10px]" :class="userGeminiKey ? 'text-emerald-400' : 'text-amber-400'"></i>
           <span class="hidden sm:inline font-medium" x-text="userGeminiKey ? 'Mi Key' : 'Mi Key'"></span>
         </button>
+
+        <!-- SELECTOR DE TEMA DE COLORES (PERSONALIZACIÓN) -->
+        <div class="relative shrink-0" @click.outside="menuTemaAbierto = false" @keydown.escape.window="menuTemaAbierto = false">
+          <button @click="menuTemaAbierto = !menuTemaAbierto"
+                  :class="menuTemaAbierto ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
+                  class="px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shadow-sm"
+                  title="Cambiar el tema de colores de la web">
+            <i class="fa-solid fa-palette text-[11px]"></i>
+            <span class="hidden lg:inline font-medium">Tema</span>
+          </button>
+          <div x-show="menuTemaAbierto" x-transition.opacity.duration.150ms style="display: none;"
+               class="absolute right-0 mt-2 w-72 p-3 rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl shadow-black/60 z-[60]">
+            <div class="flex items-center justify-between mb-2 px-1">
+              <p class="text-xs font-extrabold text-white flex items-center gap-1.5"><i class="fa-solid fa-palette text-cyan-400"></i> Tema de colores</p>
+              <span class="text-[9px] text-gray-500">Se guarda en tu navegador</span>
+            </div>
+            <div class="space-y-1">
+              <template x-for="t in temasDisponibles" :key="t.id">
+                <button @click="cambiarTema(t.id)"
+                        :class="temaActual === t.id ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-transparent hover:bg-gray-800/70'"
+                        class="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl border transition text-left">
+                  <span class="flex shrink-0 rounded-lg overflow-hidden border border-white/10 h-7 w-12">
+                    <template x-for="c in previewTema(t)">
+                      <span class="flex-1 h-full" :style="'background:' + c"></span>
+                    </template>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-xs font-bold text-gray-100 truncate" x-text="t.nombre"></span>
+                    <span class="block text-[10px] text-gray-400 truncate" x-text="t.desc"></span>
+                  </span>
+                  <i x-show="temaActual === t.id" class="fa-solid fa-circle-check text-cyan-400 text-sm"></i>
+                </button>
+              </template>
+            </div>
+            <p class="text-[9px] text-gray-500 mt-2 px-1 leading-snug">Los colores de estado (rojo = entrega, verde = hecho, ámbar = pendiente) se mantienen en todos los temas.</p>
+          </div>
+        </div>
 
         <!-- USUARIO ACTIVO Y BOTÓN CERRAR SESIÓN -->
         <div x-show="usuarioActual && usuarioActual.autenticado" class="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-gray-800 shrink-0">
@@ -2159,7 +2690,7 @@ def dashboard_html():
     </header>
 
     <!-- CUERPO DE LA APLICACIÓN -->
-    <main class="flex-1 p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto max-w-7xl w-full mx-auto pb-24 md:pb-8">
+    <main class="flex-1 p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-6 overflow-y-auto max-w-[1680px] w-full mx-auto pb-24 md:pb-8">
 
       <!-- ==================== 1. VISTA DASHBOARD ==================== -->
       <div x-show="tab === 'dashboard' && !asigSeleccionada" x-transition class="space-y-6">
@@ -2183,10 +2714,12 @@ def dashboard_html():
               </div>
             </div>
 
-            <!-- ACCIONES Y CURSO SELECTOR RÁPIDO -->
+            <!-- ACCIONES RÁPIDAS (SOLO CANVAS DIRECTO, SIN SATURAR LA CABECERA) -->
             <div class="flex flex-wrap items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-gray-800/80">
               <div class="flex items-center space-x-2">
-                <button @click="sincronizarRespaldoLocal()" :disabled="sincronizandoRespaldo"
+                <!-- BOTÓN IMPORTAR RESPALDO LOCAL: VISIBLE ÚNICAMENTE PARA ALEX / ADMINISTRADOR -->
+                <button x-show="usuarioActual?.es_admin"
+                        @click="sincronizarRespaldoLocal()" :disabled="sincronizandoRespaldo"
                         class="px-2.5 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition flex items-center space-x-1.5 shadow-sm"
                         :title="'Sincronizar carpetas locales de estudio (/home/alexllorca/Respaldo_Estudios)'">
                   <i :class="sincronizandoRespaldo ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-folder-tree'"></i>
@@ -2200,188 +2733,554 @@ def dashboard_html():
                   <span x-text="descargandoCanvas ? '...' : '🌐 Canvas'"></span>
                 </button>
               </div>
-
-              <!-- CURSO SELECTOR RÁPIDO -->
-              <div x-show="programaActual?.cursos && programaActual?.cursos.length > 1" class="flex items-center space-x-1 bg-gray-900/90 p-1 rounded-2xl border border-gray-800">
-                <button @click="filtrarCurso('todos')"
-                        :class="cursoFiltro === 'todos' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                        class="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition border border-transparent">
-                  Todo
-                </button>
-                <template x-for="c in programaActual?.cursos" :key="c.id">
-                  <button @click="filtrarCurso(c.id)"
-                          :class="cursoFiltro === c.id ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' : 'text-gray-400 hover:text-gray-200'"
-                          class="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition border border-transparent" x-text="c.nombre">
-                  </button>
-                </template>
-              </div>
             </div>
           </div>
         </div>
 
-        <!-- AGENDA & PACs WIDGET (CANVAS ALERT BANNER) -->
-        <div x-show="agendaEventos.length > 0" class="glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-rose-500/30 bg-gradient-to-r from-rose-950/20 via-gray-900/60 to-purple-950/20">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-            <div class="flex items-center space-x-3">
-              <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs sm:text-sm font-bold animate-pulse shrink-0">
-                <i class="fa-solid fa-bell"></i>
-              </span>
-              <div>
-                <h3 class="text-xs sm:text-sm font-extrabold text-white flex items-center space-x-2">
-                  <span>Próximas Entregas y PACs</span>
-                  <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-mono font-bold" x-text="agendaEventos.length + ' en calendario'"></span>
-                </h3>
-                <p class="text-[10px] sm:text-[11px] text-gray-400">Actividades evaluables y plazos oficiales</p>
+        <!-- WORKSPACE ORGANIZADOR ESTILO NOTION (TO-DO HOY + TO-DO SEMANA + CALENDARIO CON TARJETAS DE ESTADO) -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+
+          <!-- COLUMNA IZQUIERDA (3 COLS): TO-DO HOY & TO-DO SEMANA (COMO EN EL VÍDEO DE NOTION) -->
+          <div class="xl:col-span-3 flex flex-col gap-4">
+
+            <!-- AVISO ACTIVO DE RECORDATORIOS Y CITAS PRÓXIMAS (HOY / MAÑANA) -->
+            <div x-show="recordatoriosActivosHoyManana.length > 0"
+                 class="p-3.5 rounded-2xl border border-purple-500/50 bg-gradient-to-br from-purple-950/80 via-surface-8/90 to-surface-2 shadow-lg shadow-purple-950/30 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-xs font-extrabold text-purple-200">
+                  <i class="fa-solid fa-bell text-amber-400 animate-bounce"></i>
+                  <span>Recordatorios y Citas</span>
+                  <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/30 text-purple-200 font-mono" x-text="recordatoriosActivosHoyManana.length"></span>
+                </div>
+                <button @click="solicitarPermisoNotificaciones()"
+                        x-show="notificacionesSoportadas && permisoNotificaciones !== 'granted'"
+                        class="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold transition"
+                        title="Activar avisos emergentes del navegador">
+                  🔔 Avisarme en PC
+                </button>
+              </div>
+              <div class="space-y-1.5">
+                <template x-for="rec in recordatoriosActivosHoyManana" :key="'rec-alert-' + rec.id">
+                  <div @click="abrirModalItemAgenda(rec)"
+                       class="p-2 rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-400/30 cursor-pointer transition flex items-center justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[11px] font-extrabold text-white truncate" x-text="rec.titulo"></span>
+                        <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold shrink-0"
+                              x-text="rec.dias_restantes === 0 ? '¡HOY!' : (rec.dias_restantes === 1 ? 'Mañana' : rec.plazo_texto)"></span>
+                      </div>
+                      <p class="text-[10px] text-purple-200/80 flex items-center gap-1.5 mt-0.5">
+                        <span x-show="rec.hora_inicio && rec.hora_inicio !== '23:59'" class="font-mono font-bold text-amber-300" x-text="'🕒 ' + rec.hora_inicio"></span>
+                        <span class="truncate" x-text="rec.asignatura"></span>
+                      </p>
+                    </div>
+                    <button @click.stop="marcarItemRapidoHecho(rec)"
+                            title="Marcar recordatorio como completado"
+                            class="w-6 h-6 rounded-lg bg-black/30 hover:bg-emerald-500/30 text-gray-300 hover:text-emerald-300 flex items-center justify-center text-[10px] transition shrink-0">
+                      <i class="fa-solid fa-check"></i>
+                    </button>
+                  </div>
+                </template>
               </div>
             </div>
-            <div class="flex items-center space-x-2 self-end sm:self-auto">
-              <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 transition flex items-center space-x-1.5 border border-gray-700">
-                <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
-                <span x-text="sincronizandoAgenda ? '...' : 'Refrescar'"></span>
-              </button>
-              <button @click="tab = 'agenda'" class="px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition flex items-center space-x-1">
-                <span>Ver Agenda</span>
-                <i class="fa-solid fa-arrow-right text-[10px]"></i>
-              </button>
+
+            <!-- 1. TO-DO HOY -->
+            <div class="glass-card p-4 rounded-2xl border border-sky-500/30 bg-surface-2/95 flex flex-col">
+              <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-gray-800">
+                <div class="flex items-center space-x-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                  <h3 class="text-xs sm:text-sm font-extrabold text-sky-300">To-do hoy</h3>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono font-bold" x-text="todoHoyLista.length"></span>
+                </div>
+              </div>
+              <p class="text-[10px] text-gray-400 mb-2">Eventos de hoy + citas y temas en «Pendiente de empezar» o «En proceso»</p>
+
+              <div x-show="todoHoyLista.length === 0" class="py-5 text-center text-[11px] text-gray-500">
+                <i class="fa-solid fa-check-double text-emerald-400/60 text-base mb-1 block"></i>
+                ¡Todo al día por hoy! Usa «+ Añadir al Calendario» para crear una tarea, tema o cita.
+              </div>
+
+              <div x-show="todoHoyLista.length > 0" class="space-y-1.5 max-h-[230px] overflow-y-auto pr-1">
+                <template x-for="ev in todoHoyLista" :key="'hoy-' + ev.id">
+                  <div @click="abrirModalItemAgenda(ev)"
+                       draggable="true"
+                       @dragstart="iniciarArrastreItem($event, ev)"
+                       @dragend="finalizarArrastreItem()"
+                       class="p-2.5 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2 group"
+                       :class="claseColorTarjetaNotion(ev)">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[10px]"></i>
+                        <span class="text-xs font-extrabold text-white break-words" x-text="ev.titulo"></span>
+                        <span x-show="ev.hora_inicio && ev.hora_inicio !== '23:59'" class="text-[9px] font-mono text-amber-200 bg-black/30 px-1 rounded" x-text="ev.hora_inicio"></span>
+                        <span class="text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
+                      </div>
+                      <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1">
+                        <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
+                        <span class="break-words" x-text="ev.asignatura"></span>
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0" @click.stop="">
+                      <button @click="moverItemDias(ev, -1)" title="Pasar al día anterior (-1 día)" class="px-1.5 py-1 rounded bg-black/30 hover:bg-black/60 text-[9px] text-gray-300 hover:text-white">◀</button>
+                      <button @click="moverItemDias(ev, 1)" title="Pasar al día siguiente (+1 día)" class="px-1.5 py-1 rounded bg-black/30 hover:bg-black/60 text-[9px] text-gray-300 hover:text-white">▶</button>
+                      <button @click="marcarItemRapidoHecho(ev)"
+                              title="Marcar como Vista / Hecho"
+                              class="w-6 h-6 rounded-lg bg-black/30 hover:bg-emerald-500/30 text-gray-300 hover:text-emerald-300 flex items-center justify-center text-[10px] transition">
+                        <i class="fa-solid fa-check"></i>
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- 2. TO-DO SEMANA (Y PENDIENTES DE SEMANAS ANTERIORES) -->
+            <div class="glass-card p-4 rounded-2xl border border-indigo-500/30 bg-surface-2/95 flex-1 flex flex-col">
+              <div class="flex items-center justify-between pb-2 mb-1.5 border-b border-gray-800 gap-1">
+                <div class="flex items-center space-x-2">
+                  <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+                  <h3 class="text-xs sm:text-sm font-extrabold text-indigo-300">To-do semana</h3>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-bold" x-text="todoSemanaLista.length"></span>
+                </div>
+                <button @click="incluirAtrasadosTodo = !incluirAtrasadosTodo"
+                        :class="incluirAtrasadosTodo ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : 'bg-gray-900 text-gray-400 border-gray-800 hover:text-gray-200'"
+                        class="px-2 py-0.5 rounded-lg border text-[10px] font-bold transition"
+                        title="Incluir clases o temas de semanas anteriores que aún no hayas marcado como vistos/hechos">
+                  <span x-text="incluirAtrasadosTodo ? 'Ocultar anteriores' : '+ Pendientes anteriores'"></span>
+                </button>
+              </div>
+              <p class="text-[10px] text-gray-400 mb-2">
+                <span x-show="!incluirAtrasadosTodo">Clases, entregas, citas y temas pendientes de esta semana</span>
+                <span x-show="incluirAtrasadosTodo" class="text-rose-300/90">Mostrando esta semana + pendientes de semanas pasadas sin marcar</span>
+              </p>
+
+              <div x-show="todoSemanaLista.length === 0" class="py-6 text-center text-[11px] text-gray-500 my-auto">
+                Sin tareas ni clases pendientes esta semana.
+              </div>
+
+              <div x-show="todoSemanaLista.length > 0" class="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+                <template x-for="ev in todoSemanaLista" :key="'sem-' + ev.id">
+                  <div @click="abrirModalItemAgenda(ev)"
+                       draggable="true"
+                       @dragstart="iniciarArrastreItem($event, ev)"
+                       @dragend="finalizarArrastreItem()"
+                       class="p-2.5 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2 group"
+                       :class="claseColorTarjetaNotion(ev)">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <div class="flex items-center gap-1 min-w-0">
+                          <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[10px] shrink-0"></i>
+                          <span class="text-xs font-extrabold text-white truncate" x-text="ev.titulo"></span>
+                        </div>
+                        <span class="text-[9px] text-gray-300 font-mono shrink-0" x-text="(ev.fecha_dia || '').slice(5)"></span>
+                      </div>
+                      <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1">
+                        <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
+                        <span class="break-words" x-text="ev.asignatura"></span>
+                      </p>
+                      <div class="flex items-center justify-between gap-1 mt-1">
+                        <span class="text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
+                        <div class="flex items-center gap-0.5 opacity-80 group-hover:opacity-100" @click.stop="">
+                          <button @click="moverItemDias(ev, -1)" title="Pasar al día anterior (-1 día)" class="px-1.5 py-0.5 rounded bg-black/30 hover:bg-black/60 text-[9px] text-gray-300 hover:text-white">◀</button>
+                          <button @click="moverItemDias(ev, 1)" title="Pasar al día siguiente (+1 día)" class="px-1.5 py-0.5 rounded bg-black/30 hover:bg-black/60 text-[9px] text-gray-300 hover:text-white">▶</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-1 shrink-0" @click.stop="">
+                      <button @click="marcarItemRapidoHecho(ev)"
+                              title="Marcar Vista / Hecho"
+                              class="w-6 h-6 rounded-lg bg-black/30 hover:bg-emerald-500/30 text-gray-300 hover:text-emerald-300 flex items-center justify-center text-[10px] transition">
+                        <i class="fa-solid fa-check"></i>
+                      </button>
+                      <button x-show="ev.categoria === 'Clase'"
+                              @click="cambiarEstadoItemDirecto(ev, 'Vista no relevante')"
+                              title="Marcar como Vista no relevante"
+                              class="w-6 h-6 rounded-lg bg-black/30 hover:bg-amber-500/30 text-gray-400 hover:text-amber-300 flex items-center justify-center text-[10px] transition">
+                        <i class="fa-solid fa-eye-slash"></i>
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- COLUMNA DERECHA (9 COLS): CALENDARIO INTERACTIVO CON TARJETAS DE ESTADO (SEMANAL / MENSUAL) -->
+          <div class="xl:col-span-9 glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-800/90 bg-surface-1/95 flex flex-col justify-between">
+            <!-- CABECERA DEL CALENDARIO (TODO EN LÍNEA) -->
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-3.5 border-b border-gray-800">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-calendar-days text-cyan-400 text-base"></i>
+                  <h3 class="text-sm sm:text-base font-extrabold text-white capitalize whitespace-nowrap" x-text="nombreMesCalendario"></h3>
+                  <button @click="verEntregasDelMes()"
+                          class="text-[10px] px-2.5 py-0.5 rounded-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 hover:border-rose-500/60 font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 group"
+                          :title="'Ver las ' + entregasMesActual.length + ' entregas de ' + nombreMesCalendario">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400 group-hover:animate-ping"></span>
+                    <span x-text="entregasMesActual.length + (entregasMesActual.length === 1 ? ' entrega este mes' : ' entregas este mes')"></span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-70 group-hover:opacity-100"></i>
+                  </button>
+                  <button @click="abrirModalNuevoItemAgenda('Tema', '', '', 'calendario')"
+                          class="px-3 py-1 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] sm:text-[11px] font-bold transition flex items-center gap-1.5 whitespace-nowrap">
+                    <i class="fa-solid fa-plus text-[9px]"></i>
+                    <span>Añadir al Calendario</span>
+                  </button>
+                </div>
+                <p class="text-[10px] text-gray-400 mt-1 hidden sm:block">💡 Arrastra cualquier etiqueta a otro día, usa el botón «+» de cada día o haz clic para editarla</p>
+              </div>
+
+              <!-- FILTROS POR TIPO + SELECTOR DE VISTA + NAVEGACIÓN DE SEMANA/MES EN UNA SOLA LÍNEA -->
+              <div class="flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
+                <!-- PÍLDORAS DE TIPO (CLASE, ACTIVIDAD, TEMA, TEST) -->
+                <div class="flex items-center bg-gray-950/90 p-1 rounded-xl border border-gray-800 text-[10px] sm:text-[11px] shrink-0">
+                  <button @click="calFiltroTipo = 'todos'"
+                          :class="calFiltroTipo === 'todos' ? 'bg-gray-800 text-white font-bold' : 'text-gray-400 hover:text-gray-200'"
+                          class="px-2 py-1 rounded-lg transition">Todo</button>
+                  <button @click="calFiltroTipo = 'clase_directo'"
+                          :class="calFiltroTipo === 'clase_directo' ? 'bg-sky-500/25 text-sky-300 font-bold border border-sky-500/40' : 'text-gray-400 hover:text-sky-300'"
+                          class="px-2 py-1 rounded-lg transition">Clases</button>
+                  <button @click="calFiltroTipo = 'tarea'"
+                          :class="calFiltroTipo === 'tarea' ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-500/40' : 'text-gray-400 hover:text-rose-300'"
+                          class="px-2 py-1 rounded-lg transition">Entregas</button>
+                  <button @click="calFiltroTipo = 'tema'"
+                          :class="calFiltroTipo === 'tema' ? 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40' : 'text-gray-400 hover:text-amber-300'"
+                          class="px-2 py-1 rounded-lg transition">Temas / Citas</button>
+                </div>
+
+                <!-- VISTA: 2 SEMANAS (DETALLE NOTION) vs MES COMPLETO -->
+                <div class="flex items-center bg-gray-950/90 p-1 rounded-xl border border-gray-800 text-[10px] sm:text-[11px] shrink-0">
+                  <button @click="calModoVista = 'quincena'"
+                          :class="calModoVista === 'quincena' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-gray-400 hover:text-white'"
+                          class="px-2.5 py-1 rounded-lg transition whitespace-nowrap">Lun-Vie (Detalle)</button>
+                  <button @click="calModoVista = 'mes'"
+                          :class="calModoVista === 'mes' ? 'bg-cyan-500/20 text-cyan-300 font-bold' : 'text-gray-400 hover:text-white'"
+                          class="px-2.5 py-1 rounded-lg transition">Mes</button>
+                </div>
+
+                <!-- NAVEGACIÓN < RANGO ACTUAL / SEMANA / MES > EN LÍNEA -->
+                <div class="flex items-center space-x-1 bg-gray-950/90 p-1 rounded-xl border border-gray-800 shrink-0">
+                  <button @click="navegarCalendario(-1)" title="Anterior" class="p-1 px-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition text-xs">
+                    <i class="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button @click="irAHoyCalendario()"
+                          :title="esPeriodoActualCalendario ? 'Estás viendo el periodo actual' : 'Pulsa para volver a Hoy'"
+                          :class="esPeriodoActualCalendario ? 'text-cyan-400' : 'text-amber-300 bg-amber-500/15 border border-amber-500/30'"
+                          class="px-2.5 py-1 rounded-lg text-[11px] font-bold hover:bg-cyan-500/10 transition whitespace-nowrap">
+                    <span x-text="etiquetaPeriodoCalendario"></span>
+                  </button>
+                  <button @click="navegarCalendario(1)" title="Siguiente" class="p-1 px-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition text-xs">
+                    <i class="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- REJILLA DEL CALENDARIO ESTILO NOTION (CON SOPORTE DRAG & DROP ENTRE DÍAS) -->
+            <div class="mt-3">
+              <!-- CABECERA DÍAS DE LA SEMANA -->
+              <div class="grid gap-1.5 text-center text-[10px] sm:text-[11px] font-bold lowercase tracking-wider text-gray-400 mb-1.5"
+                   :class="calModoVista === 'quincena' ? 'grid-cols-5' : 'grid-cols-7'">
+                <div>lun</div><div>mar</div><div>mié</div><div>jue</div><div>vie</div>
+                <template x-if="calModoVista === 'mes'"><div>sáb</div></template>
+                <template x-if="calModoVista === 'mes'"><div>dom</div></template>
+              </div>
+
+              <!-- CELDAS CON TARJETAS DE COLORES ESTILO NOTION -->
+              <div class="grid gap-1.5" :class="calModoVista === 'quincena' ? 'grid-cols-1 sm:grid-cols-5' : 'grid-cols-7'">
+                <template x-for="celda in celdasCalendarioVisibles" :key="celda.key">
+                  <div @dragover.prevent="if (celda.fechaStr) diaArrastreSobre = celda.fechaStr"
+                       @dragleave="if (diaArrastreSobre === celda.fechaStr) diaArrastreSobre = ''"
+                       @drop.prevent="soltarItemEnDia(celda.fechaStr)"
+                       :class="[
+                         !celda.esMesActual && calModoVista === 'mes' ? 'opacity-30 bg-gray-950/20 border-gray-900' : 'bg-surface-4 border-gray-800/90',
+                         celda.esHoy ? 'ring-2 ring-rose-500/80 border-rose-500' : '',
+                         celda.tieneEntregaRoja ? 'border-rose-500/60' : '',
+                         diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/30 border-cyan-400' : ''
+                       ]"
+                       class="min-h-[120px] sm:min-h-[165px] p-1.5 rounded-xl border flex flex-col justify-between transition">
+                    <div>
+                      <!-- NÚMERO DE DÍA + BOTÓN + -->
+                      <div class="flex items-center justify-between mb-1.5 px-0.5 group/day">
+                        <button @click="abrirModalNuevoItemAgenda('Tema', '', celda.fechaStr, 'calendario')"
+                                x-show="celda.fechaStr"
+                                title="Añadir tema, tarea o cita en este día"
+                                class="opacity-60 group-hover/day:opacity-100 w-5 h-5 rounded bg-gray-800 hover:bg-cyan-500 hover:text-black text-gray-300 flex items-center justify-center text-[10px] transition">
+                          <i class="fa-solid fa-plus"></i>
+                        </button>
+                        <span class="text-[11px] font-bold px-1.5 py-0.5 rounded-full ml-auto"
+                              :class="celda.esHoy ? 'bg-rose-500 text-white font-extrabold' : 'text-gray-400'"
+                              x-text="celda.dia"></span>
+                      </div>
+
+                      <!-- LISTA DE TARJETAS NOTION DENTRO DEL DÍA -->
+                      <div class="space-y-1.5 max-h-[250px] overflow-y-auto pr-0.5">
+                        <template x-for="ev in celda.eventos" :key="ev.id">
+                          <div @click="abrirModalItemAgenda(ev)"
+                               draggable="true"
+                               @dragstart="iniciarArrastreItem($event, ev)"
+                               @dragend="finalizarArrastreItem()"
+                               title="Arrastra a otro día para moverlo o haz clic para editar nombre, asignatura, fecha y estado"
+                               class="p-2 rounded-lg border cursor-grab active:cursor-grabbing transition hover:brightness-110 text-left space-y-1 shadow-sm group/card"
+                               :class="claseColorTarjetaNotion(ev)">
+                            <div class="flex items-start justify-between gap-1">
+                              <p class="text-[11px] font-extrabold text-white leading-tight break-words flex items-center gap-1">
+                                <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[9px] shrink-0"></i>
+                                <span x-text="ev.titulo"></span>
+                              </p>
+                              <span x-show="ev.hora_inicio && ev.hora_inicio !== '23:59'"
+                                    class="text-[9px] text-gray-200 font-mono shrink-0 bg-black/25 px-1 rounded"
+                                    x-text="ev.hora_inicio"></span>
+                            </div>
+                            <div class="flex items-start gap-1 text-[10px] text-gray-200/95 leading-snug">
+                              <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
+                              <span class="break-words font-medium" x-text="ev.asignatura"></span>
+                            </div>
+                            <div class="flex items-center justify-between gap-1 pt-0.5">
+                              <span class="text-[9px] px-1.5 py-0.2 rounded font-bold inline-block"
+                                    :class="claseBadgeEstadoNotion(ev.estado)"
+                                    x-text="ev.estado"></span>
+                              <div class="flex items-center gap-1">
+                                <span x-show="ev.nota_personal !== null && ev.nota_personal !== undefined"
+                                      class="text-[9px] font-mono font-bold text-emerald-300"
+                                      x-text="ev.nota_personal + '/10'"></span>
+                                <!-- Botones rápidos para pasar de un día a otro en 1 clic -->
+                                <div class="hidden group-hover/card:flex items-center gap-0.5" @click.stop="">
+                                  <button @click="moverItemDias(ev, -1)" title="Pasar al día anterior (-1 día)" class="px-1 py-0.2 rounded bg-black/40 hover:bg-black/70 text-[9px] text-gray-200">◀</button>
+                                  <button @click="moverItemDias(ev, 1)" title="Pasar al día siguiente (+1 día)" class="px-1 py-0.2 rounded bg-black/40 hover:bg-black/70 text-[9px] text-gray-200">▶</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- BARRA INFERIOR DE PRÓXIMAS ENTREGAS EN ROJO Y RECORDATORIOS PERSONALES -->
+            <div x-show="proximasEntregasRojas.length > 0 || proximosRecordatorios.length > 0" class="mt-4 pt-3 border-t border-gray-800 space-y-2">
+              <div x-show="proximasEntregasRojas.length > 0" class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-xs font-extrabold text-rose-400">
+                  <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                  <span>Próximas entregas PAC en rojo:</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <template x-for="ev in proximasEntregasRojas.slice(0, 4)" :key="'red-' + ev.id">
+                    <button @click="abrirModalItemAgenda(ev)"
+                            class="px-2.5 py-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/50 text-rose-200 text-[11px] font-bold transition flex items-center gap-1.5">
+                      <span x-text="ev.asignatura + ': ' + ev.titulo"></span>
+                      <span class="px-1.5 py-0.2 rounded bg-rose-500 text-white text-[9px] font-extrabold" x-text="ev.plazo_texto"></span>
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <div x-show="proximosRecordatorios.length > 0" class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-xs font-extrabold text-purple-300">
+                  <i class="fa-solid fa-bell text-amber-400"></i>
+                  <span>Tus próximas citas y recordatorios:</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <template x-for="rec in proximosRecordatorios.slice(0, 4)" :key="'prox-rec-' + rec.id">
+                    <button @click="abrirModalItemAgenda(rec)"
+                            class="px-2.5 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-100 text-[11px] font-bold transition flex items-center gap-1.5">
+                      <span x-text="rec.titulo"></span>
+                      <span x-show="rec.hora_inicio && rec.hora_inicio !== '23:59'" class="font-mono text-[10px] text-amber-300" x-text="rec.hora_inicio"></span>
+                      <span class="px-1.5 py-0.2 rounded bg-purple-600 text-white text-[9px] font-extrabold" x-text="rec.fecha_dia"></span>
+                    </button>
+                  </template>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <template x-for="ev in agendaEventos.slice(0, 3)" :key="ev.id">
-              <div class="p-3.5 rounded-2xl bg-gray-900/80 border border-gray-800 hover:border-rose-500/40 transition flex flex-col justify-between">
-                <div>
-                  <div class="flex items-center justify-between text-[11px] mb-1.5">
-                    <span class="font-bold uppercase tracking-wider text-[10px] text-gray-400 truncate max-w-[150px]" x-text="ev.asignatura"></span>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
-                          :class="ev.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : (ev.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40')"
-                          x-text="ev.plazo_texto"></span>
-                  </div>
-                  <h4 class="text-xs font-bold text-white line-clamp-1" x-text="ev.titulo"></h4>
-                  <p class="text-[11px] text-gray-400 mt-1 line-clamp-2" x-text="ev.descripcion"></p>
+        </div>
+
+        <!-- ACCESO RÁPIDO: CONTINUAR DONDE LO DEJÉ -->
+        <div x-show="actividadReciente.length > 0" class="glass p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-cyan-500/20">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-clock-rotate-left text-cyan-400 text-xs"></i>
+              <h3 class="text-xs sm:text-sm font-bold text-white">Continuar donde lo dejé</h3>
+            </div>
+            <button @click="limpiarActividadReciente()" class="text-[10px] text-gray-500 hover:text-gray-300 transition">Limpiar historial</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <template x-for="item in actividadReciente.slice(0, 4)" :key="item.id">
+              <div @click="abrirItemReciente(item)" class="p-3 rounded-xl bg-gray-900/70 border border-gray-800 hover:border-cyan-500/40 cursor-pointer transition flex items-center space-x-3 group">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs"
+                     :class="item.tipo === 'pdf' ? 'bg-rose-500/15 text-rose-400' : (item.tipo === 'guia' ? 'bg-cyan-500/15 text-cyan-400' : 'bg-emerald-500/15 text-emerald-400')">
+                  <i :class="item.tipo === 'pdf' ? 'fa-regular fa-file-pdf' : (item.tipo === 'guia' ? 'fa-solid fa-book-open' : 'fa-solid fa-bullseye')"></i>
                 </div>
-                <div class="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[10px]">
-                  <span class="text-gray-400 font-mono" x-text="ev.puntos ? (ev.puntos + ' pts') : 'Evaluación'"></span>
-                  <a :href="ev.url || 'https://campusfp.unir.net'" target="_blank" class="text-cyan-400 hover:underline flex items-center space-x-1">
-                    <span>Abrir en Canvas</span>
-                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
-                  </a>
+                <div class="min-w-0 flex-1">
+                  <p class="text-[10px] text-gray-400 truncate" x-text="item.asignatura"></p>
+                  <p class="text-xs font-bold text-white truncate group-hover:text-cyan-300 transition" x-text="item.titulo"></p>
                 </div>
+                <i class="fa-solid fa-chevron-right text-[10px] text-gray-600 group-hover:text-cyan-400"></i>
               </div>
             </template>
           </div>
         </div>
 
-        <!-- STATS HERO CARDS -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Módulos</p>
-                <h3 class="text-xl sm:text-3xl font-extrabold text-white mt-1" x-text="catalogoFiltrado.length">0</h3>
-              </div>
-              <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-base sm:text-xl shrink-0">
-                <i class="fa-solid fa-layer-group"></i>
-              </div>
-            </div>
-            <div class="mt-3 sm:mt-4 flex items-center text-[10px] sm:text-xs text-cyan-400 truncate">
-              <i class="fa-solid fa-check-circle mr-1 shrink-0"></i>
-              <span class="truncate">Estructura limpia</span>
-            </div>
-          </div>
-
-          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-indigo-500/30 transition">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Temarios</p>
-                <h3 class="text-xl sm:text-3xl font-extrabold text-white mt-1" x-text="totalMaterialesPrograma">0</h3>
-              </div>
-              <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-base sm:text-xl shrink-0">
-                <i class="fa-solid fa-file-pdf"></i>
-              </div>
-            </div>
-            <div class="mt-3 sm:mt-4 flex items-center text-[10px] sm:text-xs text-indigo-400 truncate">
-              <i class="fa-solid fa-folder-open mr-1 shrink-0"></i>
-              <span class="truncate">PDFs sin duplicar</span>
-            </div>
-          </div>
-
-          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Clases</p>
-                <h3 class="text-xl sm:text-3xl font-extrabold text-white mt-1" x-text="totalClasesPrograma">0</h3>
-              </div>
-              <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-base sm:text-xl shrink-0">
-                <i class="fa-solid fa-video"></i>
-              </div>
-            </div>
-            <div class="mt-3 sm:mt-4 flex items-center text-[10px] sm:text-xs text-amber-400 truncate">
-              <i class="fa-solid fa-file-lines mr-1 shrink-0"></i>
-              <span class="truncate">Transcripciones</span>
-            </div>
-          </div>
-
-          <div class="glass-card p-3.5 sm:p-5 rounded-2xl relative overflow-hidden group hover:border-emerald-500/30 transition">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-[10px] sm:text-xs uppercase tracking-wider text-gray-400 font-semibold truncate">Simulacros</p>
-                <h3 class="text-3xl font-extrabold text-white mt-1" x-text="totalTestsPrograma">0</h3>
-              </div>
-              <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl">
-                <i class="fa-solid fa-bullseye"></i>
-              </div>
-            </div>
-            <div class="mt-4 flex items-center text-xs text-emerald-400">
-              <i class="fa-solid fa-bolt mr-1.5"></i>
-              <span>Simulador web interactivo</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- SEMÁFORO Y CATÁLOGO DE ASIGNATURAS -->
-        <div class="glass rounded-3xl p-6">
-          <div class="flex items-center justify-between mb-6">
+        <!-- SEMÁFORO Y CATÁLOGO DE ASIGNATURAS (ESTILO GALERÍA VISUAL CON PORTADAS) -->
+        <div class="glass rounded-3xl p-6 border border-gray-800/80">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6 pb-4 border-b border-gray-800/80">
             <div>
-              <h3 class="text-lg font-bold text-white flex items-center space-x-2">
-                <i class="fa-solid fa-grid-2 text-cyan-400"></i>
+              <h3 class="text-xl font-extrabold text-white flex items-center space-x-2.5">
+                <i class="fa-solid fa-layer-group text-cyan-400"></i>
                 <span>Materias y Módulos de <span x-text="programaActual?.nombre"></span></span>
               </h3>
-              <p class="text-xs text-gray-400">Haz clic en cualquier tarjeta para abrir sus temarios, clases magistrales y tests</p>
+              <p class="text-xs text-gray-400 mt-1">Usa la estrella ⭐ para fijar tus asignaturas matriculadas o filtra por curso para encontrar todo al instante</p>
             </div>
-            <span class="text-xs bg-gray-900 text-gray-400 px-3 py-1.5 rounded-xl border border-gray-800" x-text="catalogoFiltrado.length + ' materias'"></span>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <!-- Buscador rápido de asignaturas -->
+              <div class="relative">
+                <i class="fa-solid fa-magnifying-glass text-gray-500 text-xs absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input type="text"
+                       x-model="busquedaTexto"
+                       @input="aplicarFiltroCatalogo()"
+                       placeholder="Buscar asignatura..."
+                       class="bg-gray-950/90 border border-gray-800 focus:border-cyan-500/60 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none w-44 sm:w-52 transition">
+              </div>
+
+              <!-- Filtro por Curso (Todos / 2º Curso / 1º Curso) -->
+              <div x-show="programaActivoId === 'dam'" class="flex items-center bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs">
+                <button @click="filtrarCurso('todos')"
+                        :class="cursoFiltro === 'todos' ? 'bg-gray-800 text-white font-bold shadow' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-2.5 py-1 rounded-lg transition">Todos</button>
+                <button @click="filtrarCurso('2dam')"
+                        :class="cursoFiltro === '2dam' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-2.5 py-1 rounded-lg transition">2º Curso</button>
+                <button @click="filtrarCurso('1dam')"
+                        :class="cursoFiltro === '1dam' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-2.5 py-1 rounded-lg transition">1º Curso</button>
+              </div>
+
+              <button @click="toggleSoloFavoritas()"
+                      :class="mostrarSoloFavoritas ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-gray-950 text-gray-400 border-gray-800 hover:text-gray-200'"
+                      class="text-xs px-3 py-1.5 rounded-xl border font-bold transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-star text-[11px]" :class="mostrarSoloFavoritas ? 'text-amber-400' : 'text-gray-500'"></i>
+                <span x-text="mostrarSoloFavoritas ? ('Mis Asignaturas (' + asignaturasFavoritas.length + ')') : 'Filtrar Mis Asignaturas'"></span>
+              </button>
+              <span class="text-xs bg-gray-950 text-gray-300 font-semibold px-3 py-1.5 rounded-xl border border-gray-800" x-text="catalogoFiltrado.length + ' materias'"></span>
+            </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-              <div @click="abrirAsignatura(asig)" class="glass-card p-5 rounded-2xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/60 transition group flex flex-col justify-between relative">
+              <div @click="abrirAsignatura(asig)"
+                   class="group rounded-2xl overflow-hidden bg-surface-5 border border-gray-800/90 hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/30 transition-all duration-200 cursor-pointer flex flex-col justify-between relative">
+
+                <!-- PORTADA ILUSTRADA / IMAGEN DE LA ASIGNATURA -->
                 <div>
-                  <div class="flex items-start justify-between">
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700" x-text="asig.curso"></span>
-                    <div class="flex items-center space-x-1.5">
-                      <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" class="p-1 text-gray-500 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition rounded-lg hover:bg-gray-800">
-                        <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
-                      </a>
-                      <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                            :class="asig.progreso.total_evaluados > 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-400'"
-                            x-text="asig.progreso.total_evaluados > 0 ? asig.progreso.estado : 'Sin evaluar'">
-                      </span>
+                  <div class="h-28 relative overflow-hidden">
+                    <!-- Imagen temática de alta resolución de la asignatura -->
+                    <img :src="temaVisualAsignatura(asig.nombre).imagen"
+                         :alt="asig.nombre"
+                         loading="lazy"
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 opacity-65">
+                    <!-- Gradiente de color propio de la asignatura para legibilidad perfecta -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-surface-5 via-surface-5/45 to-transparent"></div>
+                    <div class="absolute inset-0 opacity-45 mix-blend-overlay" :class="temaVisualAsignatura(asig.nombre).gradiente"></div>
+
+                    <!-- Barra superior sobre la imagen: Estrella + Curso + Estado/Nota -->
+                    <div class="absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
+                      <div class="flex items-center gap-1.5">
+                        <button @click.stop="toggleAsignaturaFavorita(asig.nombre)"
+                                :title="esAsignaturaFavorita(asig.nombre) ? 'Quitar de Mis Asignaturas' : 'Fijar en Mis Asignaturas'"
+                                class="w-7 h-7 rounded-lg bg-gray-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-gray-900 transition">
+                          <i class="fa-star text-xs transition"
+                             :class="esAsignaturaFavorita(asig.nombre) ? 'fa-solid text-amber-400' : 'fa-regular text-gray-300 hover:text-amber-300'"></i>
+                        </button>
+                        <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-100 border border-white/10" x-text="asig.curso"></span>
+                      </div>
+
+                      <div class="flex items-center gap-1.5">
+                        <template x-if="notaCampusDeAsignatura(asig.nombre) !== null">
+                          <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-indigo-950/90 backdrop-blur-md text-indigo-200 border border-indigo-400/40"
+                                x-text="'🏛️ ' + notaCampusDeAsignatura(asig.nombre) + '%'"></span>
+                        </template>
+                        <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold backdrop-blur-md"
+                              :class="asig.progreso.total_evaluados > 0 ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/40' : 'bg-gray-950/80 text-gray-300 border border-white/10'"
+                              x-text="asig.progreso.total_evaluados > 0 ? asig.progreso.estado : 'Sin evaluar'">
+                        </span>
+                        <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva" class="w-7 h-7 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-300 hover:text-cyan-300 flex items-center justify-center border border-white/10 opacity-0 group-hover:opacity-100 transition">
+                          <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                        </a>
+                      </div>
+                    </div>
+
+                    <!-- Icono 3D y Siglas de la Asignatura sobre el borde inferior de la portada -->
+                    <div class="absolute bottom-2 left-4 right-4 flex items-end justify-between z-10">
+                      <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-white/20 backdrop-blur-md text-white text-base"
+                             :class="temaVisualAsignatura(asig.nombre).badgeBg">
+                          <i :class="temaVisualAsignatura(asig.nombre).icono"></i>
+                        </div>
+                        <span class="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border backdrop-blur-md"
+                              :class="temaVisualAsignatura(asig.nombre).chipClase"
+                              x-text="temaVisualAsignatura(asig.nombre).siglas"></span>
+                      </div>
                     </div>
                   </div>
-                  <h4 class="font-bold text-white text-sm mt-3 group-hover:text-cyan-400 transition" x-text="asig.nombre"></h4>
+
+                  <!-- TÍTULO GRANDE Y SUBTÍTULO DESCRIPTIVO CLARO -->
+                  <div class="px-5 pt-2 pb-1">
+                    <h4 class="font-extrabold text-white text-base leading-snug group-hover:text-cyan-300 transition" x-text="asig.nombre"></h4>
+                    <p class="text-[11px] text-gray-400 mt-0.5 line-clamp-1" x-text="temaVisualAsignatura(asig.nombre).subtitulo"></p>
+                  </div>
                 </div>
 
-                <div class="mt-5 pt-3 border-t border-gray-800/80 grid grid-cols-3 gap-2 text-xs text-gray-400">
-                  <div class="flex items-center space-x-1.5">
-                    <i class="fa-regular fa-file-pdf text-rose-400"></i>
-                    <span x-text="asig.total_materiales + ' pdfs'"></span>
+                <!-- CONTADORES CON ETIQUETAS CLARAS + ACCIONES RÁPIDAS -->
+                <div class="px-5 pb-4 pt-3 space-y-3">
+                  <div class="grid grid-cols-4 gap-1.5 text-center">
+                    <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                      <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                        <i class="fa-regular fa-file-pdf text-rose-400 text-[11px]"></i>
+                        <span x-text="asig.total_materiales"></span>
+                      </div>
+                      <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">PDFs</div>
+                    </div>
+                    <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                      <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-video text-amber-400 text-[11px]"></i>
+                        <span x-text="asig.total_clases"></span>
+                      </div>
+                      <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Clases</div>
+                    </div>
+                    <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                      <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-book-open text-cyan-400 text-[11px]"></i>
+                        <span x-text="(asig.guias?.length || 0)"></span>
+                      </div>
+                      <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Guías</div>
+                    </div>
+                    <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                      <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-bolt text-emerald-400 text-[11px]"></i>
+                        <span x-text="(asig.tests?.length || 0)"></span>
+                      </div>
+                      <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Tests</div>
+                    </div>
                   </div>
-                  <div class="flex items-center space-x-1.5">
-                    <i class="fa-solid fa-video text-amber-400"></i>
-                    <span x-text="asig.total_clases + ' clases'"></span>
-                  </div>
-                  <div class="flex items-center space-x-1.5">
-                    <i class="fa-solid fa-bolt text-emerald-400"></i>
-                    <span x-text="asig.tests.length + ' tests'"></span>
+
+                  <!-- ACCIONES RÁPIDAS EN 1 CLIC -->
+                  <div class="flex items-center justify-between gap-2 pt-0.5" @click.stop="">
+                    <button @click="abrirAsignatura(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-gray-200 hover:text-white text-xs font-bold transition border border-gray-700/80 flex items-center justify-center space-x-1.5">
+                      <i class="fa-solid fa-folder-open text-cyan-400 text-[11px]"></i>
+                      <span>Temario</span>
+                    </button>
+                    <button @click="abrirGeneradorDirecto(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold transition border border-emerald-500/30 flex items-center justify-center space-x-1.5" title="Generar Guía o Test IA directamente">
+                      <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
+                      <span>Crear IA</span>
+                    </button>
+                    <button @click="abrirChatConAsignatura(asig.nombre)" class="py-2 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 text-xs font-bold transition border border-indigo-500/30 flex items-center justify-center" title="Consultar dudas de esta materia con NOVA">
+                      <i class="fa-solid fa-robot text-xs"></i>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2394,46 +3293,379 @@ def dashboard_html():
       <!-- ==================== 2. VISTA EXPLORADOR DE TEMARIOS ==================== -->
       <div x-show="tab === 'asignaturas' || asigSeleccionada" x-transition class="space-y-6">
         
-        <!-- DETALLE DE ASIGNATURA SELECCIONADA -->
+        <!-- DETALLE DE ASIGNATURA SELECCIONADA (CON PORTADA VISUAL) -->
         <div x-show="asigSeleccionada" class="space-y-6">
-          <div class="glass p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-gray-800">
-            <div class="flex items-center space-x-4">
-              <button @click="asigSeleccionada = null; irASeccion('asignaturas')" class="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 flex items-center justify-center transition">
-                <i class="fa-solid fa-arrow-left"></i>
-              </button>
-              <div>
-                <div class="flex items-center space-x-2">
-                  <h2 class="text-2xl font-extrabold text-white" x-text="asigSeleccionada?.nombre"></h2>
-                  <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" x-text="asigSeleccionada?.curso"></span>
-                </div>
-                <p class="text-xs text-gray-400 mt-0.5">Explora temarios oficiales, videoclases magistrales y simulacros de examen</p>
-              </div>
+          <div class="rounded-3xl overflow-hidden border border-gray-800 bg-surface-5 relative shadow-xl">
+            <div class="h-32 relative overflow-hidden">
+              <img :src="temaVisualAsignatura(asigSeleccionada?.nombre).imagen"
+                   :alt="asigSeleccionada?.nombre"
+                   class="w-full h-full object-cover object-center opacity-55">
+              <div class="absolute inset-0 bg-gradient-to-t from-surface-5 via-surface-5/60 to-transparent"></div>
+              <div class="absolute inset-0 opacity-40 mix-blend-overlay" :class="temaVisualAsignatura(asigSeleccionada?.nombre).gradiente"></div>
             </div>
-            
-            <div class="flex items-center space-x-3">
-              <button @click="modalGenerador = true" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl text-xs font-bold text-gray-900 hover:shadow-lg hover:shadow-emerald-500/20 transition flex items-center space-x-2">
-                <i class="fa-solid fa-wand-magic-sparkles"></i><span>Generar Guía / Test IA</span>
-              </button>
-              <button @click="abrirChatConAsignatura(asigSeleccionada?.nombre)" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
-                <i class="fa-solid fa-robot"></i><span>Consultar con NOVA</span>
-              </button>
+            <div class="px-6 pb-6 -mt-12 relative z-10 flex flex-wrap items-end justify-between gap-4">
+              <div class="flex items-center space-x-4">
+                <button @click="asigSeleccionada = null; irASeccion('asignaturas')" class="w-11 h-11 rounded-2xl bg-gray-900/90 hover:bg-gray-800 text-gray-200 border border-gray-700 flex items-center justify-center transition shadow-lg">
+                  <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl border border-white/20 text-white text-xl"
+                     :class="temaVisualAsignatura(asigSeleccionada?.nombre).badgeBg">
+                  <i :class="temaVisualAsignatura(asigSeleccionada?.nombre).icono"></i>
+                </div>
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-[11px] font-black uppercase px-2 py-0.5 rounded-md border"
+                          :class="temaVisualAsignatura(asigSeleccionada?.nombre).chipClase"
+                          x-text="temaVisualAsignatura(asigSeleccionada?.nombre).siglas"></span>
+                    <h2 class="text-2xl font-extrabold text-white" x-text="asigSeleccionada?.nombre"></h2>
+                    <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" x-text="asigSeleccionada?.curso"></span>
+                  </div>
+                  <p class="text-xs text-gray-300 mt-1" x-text="temaVisualAsignatura(asigSeleccionada?.nombre).subtitulo"></p>
+                </div>
+              </div>
+              
+              <div class="flex flex-wrap items-center gap-2">
+                <button @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, '', 'calendario')" class="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-xl text-xs font-semibold text-gray-200 transition flex items-center space-x-1.5">
+                  <i class="fa-solid fa-calendar-plus text-cyan-400"></i><span>+ Tema / Tarea al Calendario</span>
+                </button>
+                <button @click="modalGenerador = true" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl text-xs font-bold text-gray-900 hover:shadow-lg hover:shadow-emerald-500/20 transition flex items-center space-x-2">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i><span>Generar Guía / Test IA</span>
+                </button>
+                <button @click="abrirChatConAsignatura(asigSeleccionada?.nombre)" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
+                  <i class="fa-solid fa-robot"></i><span>Consultar con NOVA</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- 3 COLUMNAS: VIDEOCLASES | TEMARIO/GUÍAS | TESTS -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <!-- COLUMNA 1: VIDEOCLASES Y TRANSCRIPCIONES -->
-            <div class="glass p-5 rounded-3xl space-y-4">
+          <!-- ORGANIZADOR NOTION EXCLUSIVO DE ESTA ASIGNATURA: CALENDARIO DE LA ASIGNATURA + ACTIVIDADES PAC + TEMAS CON ESTADO -->
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+            <!-- MINI-CALENDARIO EXCLUSIVO DE ESTA ASIGNATURA (8 COLS) -->
+            <div class="xl:col-span-8 glass p-5 rounded-3xl border border-gray-800 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-800">
+                <div>
+                  <h3 class="font-extrabold text-white text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-week text-cyan-400"></i>
+                    <span>Calendario de <span x-text="asigSeleccionada?.nombre"></span></span>
+                  </h3>
+                  <p class="text-[11px] text-gray-400">Arrastra cualquier Tema o Clase a otro día, usa ◀ ▶ o haz clic para editarlo a tu gusto</p>
+                </div>
+                <div class="flex items-center space-x-1 bg-gray-950/90 p-1 rounded-xl border border-gray-800">
+                  <button @click="navegarCalendario(-1)" class="p-1 px-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 text-xs">
+                    <i class="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button @click="irAHoyCalendario()"
+                          :class="esPeriodoActualCalendario ? 'text-cyan-400' : 'text-amber-300 bg-amber-500/15 border border-amber-500/30'"
+                          class="px-2.5 py-0.5 rounded-lg text-[11px] font-bold hover:bg-cyan-500/10 whitespace-nowrap">
+                    <span x-text="etiquetaPeriodoCalendario"></span>
+                  </button>
+                  <button @click="navegarCalendario(1)" class="p-1 px-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 text-xs">
+                    <i class="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold lowercase text-gray-400">
+                <div>lun</div><div>mar</div><div>mié</div><div>jue</div><div>vie</div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-5 gap-1.5 pb-1">
+                <template x-for="celda in diasCalendarioAsignaturaActual" :key="'asig-cal-' + celda.key">
+                  <div @dragover.prevent="if (celda.fechaStr) diaArrastreSobre = celda.fechaStr"
+                       @dragleave="if (diaArrastreSobre === celda.fechaStr) diaArrastreSobre = ''"
+                       @drop.prevent="soltarItemEnDia(celda.fechaStr)"
+                       :class="[
+                         'bg-surface-4 border-gray-800',
+                         celda.esHoy ? 'ring-1 ring-rose-500 border-rose-500' : '',
+                         diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/30 border-cyan-400' : ''
+                       ]"
+                       class="min-h-[96px] p-1.5 rounded-xl border flex flex-col justify-between transition">
+                    <div class="flex items-center justify-between text-[10px] text-gray-400 mb-1">
+                      <button x-show="celda.fechaStr" @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, celda.fechaStr, 'calendario')" class="text-gray-500 hover:text-cyan-400 text-[10px] font-bold px-1 rounded hover:bg-gray-800" title="Planificar tema o tarea aquí">+</button>
+                      <span class="font-bold ml-auto" :class="celda.esHoy ? 'text-rose-400 font-extrabold' : ''" x-text="celda.dia"></span>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="ev in celda.eventos" :key="'ac-' + ev.id">
+                        <div @click="abrirModalItemAgenda(ev)"
+                             draggable="true"
+                             @dragstart="iniciarArrastreItem($event, ev)"
+                             @dragend="finalizarArrastreItem()"
+                             class="p-1.5 rounded-lg border cursor-grab active:cursor-grabbing text-[10px] leading-tight transition hover:brightness-110 group/acard"
+                             :class="claseColorTarjetaNotion(ev)">
+                          <p class="font-bold text-white break-words" x-text="ev.titulo"></p>
+                          <div class="flex items-center justify-between gap-1 mt-1">
+                            <span class="text-[8px] px-1 py-0.2 rounded font-bold inline-block" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
+                            <div class="hidden group-hover/acard:flex items-center gap-0.5" @click.stop="">
+                              <button @click="moverItemDias(ev, -1)" title="-1 día" class="px-1 rounded bg-black/40 hover:bg-black/70 text-[8px] text-gray-200">◀</button>
+                              <button @click="moverItemDias(ev, 1)" title="+1 día" class="px-1 rounded bg-black/40 hover:bg-black/70 text-[8px] text-gray-200">▶</button>
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- ACTIVIDADES EVALUABLES (PACs) Y ESTADO DE TEMAS DE ESTA ASIGNATURA (4 COLS) -->
+            <div class="xl:col-span-4 glass p-5 rounded-3xl border border-gray-800 flex flex-col justify-between space-y-4">
+              <!-- ACTIVIDADES (PACs) DE LA ASIGNATURA -->
+              <div>
+                <h3 class="font-extrabold text-white text-sm flex items-center justify-between pb-2.5 border-b border-gray-800">
+                  <span class="flex items-center gap-2"><i class="fa-solid fa-flag-checkered text-rose-400"></i><span>Actividades Evaluables (PACs)</span></span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 font-mono" x-text="actividadesAsignaturaActual.length"></span>
+                </h3>
+                <div class="space-y-2 mt-2.5 max-h-[155px] overflow-y-auto pr-1">
+                  <template x-for="act in actividadesAsignaturaActual" :key="'act-' + act.id">
+                    <div @click="abrirModalItemAgenda(act)"
+                         draggable="true"
+                         @dragstart="iniciarArrastreItem($event, act)"
+                         @dragend="finalizarArrastreItem()"
+                         class="p-2.5 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2"
+                         :class="claseColorTarjetaNotion(act)">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-xs font-extrabold text-white break-words" x-text="act.titulo"></p>
+                        <p class="text-[10px] text-gray-300 font-mono mt-0.5" x-text="'Entrega: ' + (act.fecha_dia || 'Pendiente') + ' • ' + (act.plazo_texto || '')"></p>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <span class="text-[9px] px-1.5 py-0.5 rounded font-bold block" :class="claseBadgeEstadoNotion(act.estado)" x-text="act.estado"></span>
+                        <span x-show="act.nota_personal !== null && act.nota_personal !== undefined" class="text-[10px] font-bold text-emerald-300 font-mono mt-0.5 block" x-text="act.nota_personal + '/10'"></span>
+                      </div>
+                    </div>
+                  </template>
+                  <div x-show="actividadesAsignaturaActual.length === 0" class="text-xs text-gray-500 py-3 text-center">
+                    Sin entregas PAC registradas en esta materia.
+                  </div>
+                </div>
+              </div>
+
+              <!-- SEGUIMIENTO DE TEMAS (TO-DO TEMARIO ESTILO NOTION) -->
+              <div class="pt-3 border-t border-gray-800 flex-1 flex flex-col">
+                <h3 class="font-extrabold text-white text-sm flex items-center justify-between pb-2">
+                  <span class="flex items-center gap-2"><i class="fa-solid fa-list-check text-amber-400"></i><span>Progreso por Temas</span></span>
+                  <span class="text-[10px] text-gray-400" x-text="temasAsignaturaActual.length + ' temas (arrástralos al calendario)'"></span>
+                </h3>
+                <div class="space-y-1.5 max-h-[175px] overflow-y-auto pr-1">
+                  <template x-for="tm in temasAsignaturaActual" :key="'tm-' + tm.id">
+                    <div @click="abrirModalItemAgenda(tm)"
+                         draggable="true"
+                         @dragstart="iniciarArrastreItem($event, tm)"
+                         @dragend="finalizarArrastreItem()"
+                         class="p-2 rounded-xl border cursor-grab active:cursor-grabbing transition flex items-center justify-between gap-2 group/tm"
+                         :class="claseColorTarjetaNotion(tm)">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-xs font-bold text-white break-words" x-text="tm.titulo"></p>
+                        <p class="text-[9px] text-gray-300 font-mono" x-text="tm.fecha_dia ? ('Día: ' + tm.fecha_dia) : 'Arrástralo a un día o haz clic'"></p>
+                      </div>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <div class="hidden group-hover/tm:flex items-center gap-0.5 mr-1" @click.stop="">
+                          <button @click="moverItemDias(tm, -1)" title="-1 día" class="px-1 py-0.5 rounded bg-black/40 hover:bg-black/70 text-[9px] text-gray-200">◀</button>
+                          <button @click="moverItemDias(tm, 1)" title="+1 día" class="px-1 py-0.5 rounded bg-black/40 hover:bg-black/70 text-[9px] text-gray-200">▶</button>
+                        </div>
+                        <span x-show="tm.nota_personal !== null && tm.nota_personal !== undefined" class="text-[10px] font-mono font-bold text-emerald-300" x-text="tm.nota_personal + '/10'"></span>
+                        <span class="text-[9px] px-1.5 py-0.5 rounded font-bold" :class="claseBadgeEstadoNotion(tm.estado)" x-text="tm.estado"></span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECCIÓN PRINCIPAL: UNIDADES Y TEMARIOS UNIFICADOS (PDF + GUÍA IA + SIMULACRO EN CADA TEMA) -->
+          <div class="space-y-6">
+            <div class="glass p-5 sm:p-6 rounded-3xl border border-gray-800 space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-800">
+                <div class="flex items-center space-x-3">
+                  <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center text-lg shadow-lg shadow-cyan-500/20 shrink-0">
+                    <i class="fa-solid fa-layer-group"></i>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h3 class="font-extrabold text-white text-base">Unidades de Estudio y Temario</h3>
+                      <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold"
+                            x-text="(unidadesUnificadasAsignaturaActual.temas?.length || 0) + ' temas'"></span>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-0.5">Cada tema reúne en un solo lugar su temario oficial, su guía resumen con IA y su simulacro tipo test</p>
+                  </div>
+                </div>
+
+                <!-- BANCO DE FALLOS RÁPIDO (SI TIENE PREGUNTAS PENDIENTES) -->
+                <div x-show="fallosDeAsignatura(asigSeleccionada?.nombre).length > 0">
+                  <button @click="iniciarRepasoFallos(asigSeleccionada.nombre)"
+                          class="px-3.5 py-2 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-fire-flame-curved text-rose-400"></i>
+                    <span x-text="'Repasar ' + fallosDeAsignatura(asigSeleccionada?.nombre).length + ' fallos'"></span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- LISTADO DE TEMAS UNIFICADOS (TARJETA MODULAR POR TEMA) -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <template x-for="tm in unidadesUnificadasAsignaturaActual.temas" :key="'unidad-' + tm.numero">
+                  <div draggable="true"
+                       @dragstart="iniciarArrastreTema($event, tm)"
+                       @dragend="finalizarArrastreItem()"
+                       :class="[
+                         tm.estado === 'Hecho' ? 'border-emerald-500/40 bg-emerald-950/15 shadow-sm shadow-emerald-950/30' :
+                         (tm.estado === 'En proceso' ? 'border-cyan-500/40 bg-cyan-950/15 shadow-sm shadow-cyan-950/30' : 'border-gray-800/80 bg-gray-900/40'),
+                         'hover:border-cyan-500/50'
+                       ]"
+                       class="glass-card p-4 rounded-2xl border transition flex flex-col justify-between space-y-3 group cursor-default">
+                    <div>
+                      <div class="flex items-center justify-between gap-2 text-[10px] mb-2">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span class="font-black px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono uppercase tracking-wider"
+                                x-text="'Tema ' + tm.numero"></span>
+
+                          <!-- SELECTOR DE ESTADO INTERACTIVO: Por hacer / En proceso / Hecho -->
+                          <div class="relative" x-data="{ openMenu: false }" @click.outside="openMenu = false">
+                            <button @click.stop="openMenu = !openMenu"
+                                    :class="claseBadgeEstadoTema(tm.estado)"
+                                    class="px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer border shadow-sm"
+                                    title="Cambiar estado: Por hacer, En proceso o Hecho">
+                              <i :class="iconoEstadoTema(tm.estado)" class="text-[9px]"></i>
+                              <span x-text="tm.estado"></span>
+                              <i class="fa-solid fa-chevron-down text-[8px] opacity-60"></i>
+                            </button>
+
+                            <!-- Menú de selección rápida -->
+                            <div x-show="openMenu"
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100"
+                                 class="absolute left-0 top-full mt-1.5 bg-surface-6 border border-gray-700/90 rounded-xl shadow-2xl p-1.5 z-30 min-w-[135px] space-y-1"
+                                 style="display: none;">
+                              <button @click.stop="cambiarEstadoTema(tm, 'Por hacer'); openMenu = false"
+                                      class="w-full text-left px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-2 hover:bg-gray-800 text-gray-300 transition"
+                                      :class="tm.estado === 'Por hacer' ? 'bg-gray-800 font-bold text-white' : ''">
+                                <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                                <span>Por hacer</span>
+                              </button>
+                              <button @click.stop="cambiarEstadoTema(tm, 'En proceso'); openMenu = false"
+                                      class="w-full text-left px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-2 hover:bg-cyan-500/20 text-cyan-300 transition"
+                                      :class="tm.estado === 'En proceso' ? 'bg-cyan-500/15 font-bold' : ''">
+                                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                                <span>En proceso</span>
+                              </button>
+                              <button @click.stop="cambiarEstadoTema(tm, 'Hecho'); openMenu = false"
+                                      class="w-full text-left px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-2 hover:bg-emerald-500/20 text-emerald-300 transition"
+                                      :class="tm.estado === 'Hecho' ? 'bg-emerald-500/15 font-bold' : ''">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                <span>Hecho</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- RECURSOS DISPONIBLES (PDF / GUÍA IA / TEST) -->
+                        <div class="flex items-center gap-1.5 font-bold shrink-0">
+                          <span x-show="tm.pdf" class="text-[9px] px-1.5 py-0.2 rounded bg-black/40 text-gray-400">PDF</span>
+                          <span x-show="tm.guia" class="text-[9px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300">Guía IA</span>
+                          <span x-show="tm.test" class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">Test</span>
+                        </div>
+                      </div>
+                      <h4 class="text-sm font-bold text-white group-hover:text-cyan-200 transition break-words" x-text="tm.titulo"></h4>
+                    </div>
+
+                    <!-- BOTONES UNIFICADOS DEL TEMA (PDF | GUÍA IA | CALENDARIO | SIMULACRO TEST) -->
+                    <div class="pt-2.5 border-t border-gray-800/80 flex flex-wrap items-center gap-2">
+                      <!-- 1. VER PDF OFICIAL -->
+                      <button x-show="tm.pdf"
+                              @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + tm.pdf, tm.pdf)"
+                              class="px-2.5 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white text-xs font-semibold transition flex items-center gap-1.5">
+                        <i class="fa-regular fa-file-pdf text-rose-400 text-xs"></i>
+                        <span>PDF Oficial</span>
+                      </button>
+
+                      <!-- 2. GUÍA DE ESTUDIO IA -->
+                      <template x-if="tm.guia">
+                        <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + tm.guia)"
+                                class="px-2.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold transition flex items-center gap-1.5">
+                          <i class="fa-solid fa-book-open text-sky-400 text-xs"></i>
+                          <span>Guía IA</span>
+                        </button>
+                      </template>
+                      <template x-if="!tm.guia && tm.pdf">
+                        <button @click="generarGuiaDesdePdf(tm.pdf)"
+                                class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-sky-500/20 text-gray-400 hover:text-sky-300 text-xs font-medium transition flex items-center gap-1.5"
+                                title="Crear guía resumen con Inteligencia Artificial">
+                          <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                          <span>Crear Guía</span>
+                        </button>
+                      </template>
+
+                      <!-- 3. CALENDARIO / PLANIFICACIÓN -->
+                      <template x-if="tm.fecha_dia">
+                        <button @click="tm.eventoAgenda ? abrirModalItemAgenda(tm.eventoAgenda) : planificarTemaEnCalendario(tm)"
+                                class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 group/cal"
+                                :title="'Planificado para el ' + tm.fecha_dia + '. Clic para editar o mover en el calendario'">
+                          <i class="fa-regular fa-calendar-check text-amber-400 text-xs"></i>
+                          <span x-text="formatearFechaCorta(tm.fecha_dia)"></span>
+                          <i class="fa-solid fa-pen text-[9px] opacity-60 group-hover/cal:opacity-100"></i>
+                        </button>
+                      </template>
+                      <template x-if="!tm.fecha_dia">
+                        <button @click="planificarTemaEnCalendario(tm)"
+                                class="px-2.5 py-1.5 rounded-xl bg-gray-800 hover:bg-amber-500/20 border border-gray-700/80 hover:border-amber-500/40 text-gray-300 hover:text-amber-300 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
+                                title="Añadir a mi calendario / planificar fecha de estudio (o arrastra la tarjeta al día del calendario arriba)">
+                          <i class="fa-regular fa-calendar-plus text-amber-400 text-xs"></i>
+                          <span>+ Calendario</span>
+                        </button>
+                      </template>
+
+                      <!-- 4. SIMULACRO DE EXAMEN (TEST) -->
+                      <template x-if="tm.test">
+                        <button @click="iniciarTestWeb(asigSeleccionada.nombre, tm.test)"
+                                class="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm ml-auto">
+                          <i class="fa-solid fa-bullseye text-emerald-400 text-xs"></i>
+                          <span>Hacer Test</span>
+                        </button>
+                      </template>
+                      <template x-if="!tm.test && tm.pdf">
+                        <button @click="generarGuiaDesdePdf(tm.pdf)"
+                                class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-300 text-xs font-medium transition flex items-center gap-1.5 ml-auto"
+                                title="Crear test tipo examen con Inteligencia Artificial">
+                          <i class="fa-solid fa-plus text-[10px]"></i>
+                          <span>Crear Test</span>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <!-- OTROS DOCUMENTOS ADJUNTOS (PRÁCTICAS, GUÍA DOCENTE, CRITERIOS...) -->
+              <div x-show="unidadesUnificadasAsignaturaActual.otrosDocumentos?.length > 0" class="pt-4 border-t border-gray-800">
+                <p class="text-[11px] uppercase font-bold text-gray-400 mb-2 flex items-center gap-1.5">
+                  <i class="fa-solid fa-paperclip text-xs"></i>
+                  <span>Otros Documentos, Prácticas y Enunciados</span>
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                  <template x-for="doc in unidadesUnificadasAsignaturaActual.otrosDocumentos" :key="'otro-doc-' + doc">
+                    <div @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + doc, doc)"
+                         class="p-2.5 rounded-xl bg-gray-900/60 border border-gray-800/90 hover:border-gray-700 text-gray-300 hover:text-white transition flex items-center justify-between cursor-pointer gap-2 group">
+                      <div class="flex items-center space-x-2 truncate">
+                        <i class="fa-regular fa-file-lines text-gray-400 group-hover:text-cyan-400 text-xs shrink-0"></i>
+                        <span class="text-xs truncate" x-text="doc"></span>
+                      </div>
+                      <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-gray-500 group-hover:text-cyan-300 shrink-0"></i>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <!-- VIDEOCLASES OFICIALES (SI TIENE CLASES GRABADAS LA ASIGNATURA) -->
+            <div x-show="asigSeleccionada?.clases && asigSeleccionada?.clases.length > 0" class="glass p-5 rounded-3xl border border-gray-800 space-y-4">
               <div class="flex items-center justify-between border-b border-gray-800 pb-3">
                 <h3 class="font-bold text-white flex items-center space-x-2 text-sm">
                   <i class="fa-solid fa-video text-amber-400"></i>
-                  <span>Videoclases Oficiales</span>
+                  <span>Videoclases Oficiales y Transcripciones</span>
                 </h3>
                 <span class="text-[11px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.clases.length + ' clases'"></span>
               </div>
-
-              <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <template x-for="clase in asigSeleccionada?.clases" :key="clase.nombre">
                   <div class="glass-card p-3 rounded-xl hover:border-amber-500/30 transition flex items-center justify-between">
                     <div class="overflow-hidden pr-2 flex-1">
@@ -2444,161 +3676,59 @@ def dashboard_html():
                       <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition">
                         Leer
                       </button>
-                      <a :href="'/?guia=' + encodeURIComponent(clase.archivo) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-gray-800 rounded-lg transition text-xs">
+                      <a :href="'/?guia=' + encodeURIComponent(clase.archivo) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir en pestaña nueva" class="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-gray-800 rounded-lg transition text-xs">
                         <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
                       </a>
                     </div>
                   </div>
                 </template>
-                <div x-show="asigSeleccionada?.clases.length === 0" class="text-center py-10 text-gray-500 text-xs">
-                  <i class="fa-solid fa-video-slash text-2xl mb-2 opacity-40"></i>
-                  <p>Sin videoclases sincronizadas para esta materia.</p>
-                </div>
               </div>
             </div>
-
-            <!-- COLUMNA 2: TEMARIO Y GUÍAS DE ESTUDIO -->
-            <div class="glass p-5 rounded-3xl space-y-4">
-              <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-                <h3 class="font-bold text-white flex items-center space-x-2 text-sm">
-                  <i class="fa-solid fa-book-open text-cyan-400"></i>
-                  <span>Guías de Estudio & PDFs</span>
-                </h3>
-                <span class="text-[11px] bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.total_materiales + ' docs'"></span>
-              </div>
-
-              <div class="space-y-2 max-h-[520px] overflow-y-auto pr-1">
-                <!-- GUÍAS RESUMIDAS IA -->
-                <template x-for="guia in ordenarNatural(asigSeleccionada?.guias)" :key="guia">
-                  <div class="glass-card p-3 rounded-xl hover:border-cyan-500/30 transition flex items-center justify-between group">
-                    <div class="overflow-hidden pr-2 flex-1">
-                      <p class="text-[10px] text-cyan-400 font-bold">Guía de Alto Rendimiento</p>
-                      <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="guia.replace('_guia.md', '').replaceAll('_', ' ')"></h5>
-                    </div>
-                    <div class="flex items-center space-x-1 shrink-0 ml-2">
-                      <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia)" class="px-2.5 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 rounded-lg text-xs font-semibold transition shrink-0">
-                        Estudiar
-                      </button>
-                      <a :href="'/?guia=' + encodeURIComponent('data/procesado/guias/' + asigSeleccionada.nombre + '/' + guia) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-cyan-400 hover:bg-gray-800 rounded-lg transition text-xs shrink-0">
-                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                      </a>
-                      <button @click="eliminarGuia(asigSeleccionada.nombre, guia)" title="Eliminar guía" class="p-1.5 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition text-xs shrink-0">
-                        <i class="fa-solid fa-trash-can"></i>
-                      </button>
-                    </div>
-                  </div>
-                </template>
-
-                <!-- PDFs OFICIALES -->
-                <div class="pt-3 border-t border-gray-800">
-                  <p class="text-[10px] uppercase text-gray-400 font-bold mb-2">Temarios Oficiales</p>
-                  <template x-for="m in asigSeleccionada?.materiales" :key="m">
-                    <div class="p-2 text-xs text-gray-300 hover:text-white flex items-center justify-between bg-gray-900/40 rounded-lg mb-1 group">
-                      <div class="flex items-center space-x-2 pr-2 overflow-hidden flex-1 cursor-pointer" @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + m, m)">
-                        <i class="fa-regular fa-file-pdf text-rose-400 shrink-0"></i>
-                        <span class="break-words line-clamp-2 text-left group-hover:text-cyan-300 transition" x-text="m"></span>
-                      </div>
-                      <div class="flex items-center space-x-1 shrink-0">
-                        <button @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + m, m)" title="Visualizar PDF integrado" class="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px] transition font-semibold hover:bg-cyan-500/30">
-                          👁️ Ver
-                        </button>
-                        <a :href="'/api/archivo-raw?ruta=' + encodeURIComponent('data/materiales/' + asigSeleccionada.nombre + '/' + m)" target="_blank" title="Abrir PDF en pestaña nueva del navegador" class="px-1.5 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-[10px] transition font-semibold flex items-center">
-                          <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
-                        </a>
-                        <button @click="generarGuiaDesdePdf(m)" title="Generar Guía y Test IA de este tema" class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded text-[10px] transition hover:bg-emerald-500/30 font-semibold flex items-center space-x-1">
-                          <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
-                          <span>IA</span>
-                        </button>
-                      </div>
-                    </div>
-                  </template>
-                  <div x-show="asigSeleccionada?.materiales.length === 0" class="text-center py-6 text-gray-500 text-xs">
-                    <p>Sin documentos locales todavía.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- COLUMNA 3: TESTS Y EXÁMENES INTERACTIVOS -->
-            <div class="glass p-5 rounded-3xl space-y-4">
-              <div class="flex items-center justify-between border-b border-gray-800 pb-3">
-                <h3 class="font-bold text-white flex items-center space-x-2 text-sm">
-                  <i class="fa-solid fa-bullseye text-emerald-400"></i>
-                  <span>Simulacros de Examen</span>
-                </h3>
-                <span class="text-[11px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.tests.length + ' tests'"></span>
-              </div>
-
-              <!-- BANCO DE FALLOS DE ESTA ASIGNATURA -->
-              <div x-show="fallosDeAsignatura(asigSeleccionada?.nombre).length > 0"
-                   class="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-500/40 flex items-center justify-between gap-3 shadow-lg">
-                <div class="flex items-center space-x-2.5">
-                  <div class="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
-                    <i class="fa-solid fa-fire-flame-curved text-sm"></i>
-                  </div>
-                  <div>
-                    <h5 class="text-xs font-bold text-rose-200" x-text="fallosDeAsignatura(asigSeleccionada?.nombre).length + ' preguntas falladas pendientes'"></h5>
-                    <p class="text-[10px] text-rose-300/80">Aciértalas en modo repaso para limpiarlas de tu expediente</p>
-                  </div>
-                </div>
-                <button @click="iniciarRepasoFallos(asigSeleccionada.nombre)"
-                        class="px-3 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-bold rounded-xl text-xs transition shrink-0 shadow-md shadow-rose-500/20">
-                  Repasar Fallos
-                </button>
-              </div>
-
-              <div class="space-y-3">
-                <template x-for="test in ordenarNatural(asigSeleccionada?.tests)" :key="test">
-                  <div class="glass-card p-4 rounded-2xl border-l-4 border-emerald-400 hover:bg-gray-800/50 transition">
-                    <div class="flex items-start justify-between gap-2">
-                      <h5 class="font-bold text-white text-xs flex-1 break-words" x-text="test.replace('_test', '').replaceAll('_', ' ')"></h5>
-                      <button @click="eliminarTest(asigSeleccionada.nombre, test)" title="Eliminar simulacro" class="text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 p-1.5 rounded-lg transition text-xs shrink-0">
-                        <i class="fa-solid fa-trash-can"></i>
-                      </button>
-                    </div>
-                    <p class="text-[11px] text-gray-400 mt-1">Simulacro interactivo con baremo oficial (+1 / -0.33)</p>
-                    <div class="mt-3 flex items-center space-x-2">
-                      <button @click="iniciarTestWeb(asigSeleccionada.nombre, test)" class="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 text-gray-900 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20">
-                        Comenzar Simulacro
-                      </button>
-                      <a :href="'/?test=' + encodeURIComponent(test) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir simulacro en pestaña nueva del navegador" class="p-2 bg-gray-800 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-400 rounded-xl transition border border-gray-700/80">
-                        <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
-                      </a>
-                    </div>
-                  </div>
-                </template>
-                <div x-show="asigSeleccionada?.tests.length === 0" class="text-center py-10 text-gray-500 text-xs">
-                  <i class="fa-solid fa-list-check text-2xl mb-2 opacity-40"></i>
-                  <p>No hay tests generados aún.</p>
-                  <button @click="modalGenerador = true" class="mt-3 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg text-xs font-semibold hover:bg-emerald-500/30 transition">
-                    Crear Test con IA
-                  </button>
-                </div>
-              </div>
-            </div>
-
           </div>
+        </div>
         </div>
 
         <!-- REJILLA GENERAL SI NO HAY ASIGNATURA SELECCIONADA -->
         <div x-show="!asigSeleccionada" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <template x-for="asig in catalogoFiltrado" :key="asig.nombre">
-            <div @click="abrirAsignatura(asig)" class="glass p-6 rounded-3xl cursor-pointer hover:border-cyan-500/40 hover:bg-gray-800/40 transition group relative">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full" x-text="asig.curso"></span>
-                <div class="flex items-center space-x-1.5">
-                  <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva del navegador" class="p-1 text-gray-500 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition rounded-lg hover:bg-gray-800">
-                    <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
-                  </a>
-                  <i class="fa-solid fa-chevron-right text-gray-500 group-hover:text-cyan-400 transition"></i>
+          <template x-for="asig in catalogoFiltrado" :key="'tab-asig-' + asig.nombre">
+            <div @click="abrirAsignatura(asig)"
+                 class="group rounded-3xl overflow-hidden bg-surface-5 border border-gray-800/90 hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/30 transition-all duration-200 cursor-pointer flex flex-col justify-between relative">
+              <div>
+                <div class="h-32 relative overflow-hidden">
+                  <img :src="temaVisualAsignatura(asig.nombre).imagen"
+                       :alt="asig.nombre"
+                       loading="lazy"
+                       class="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 opacity-65">
+                  <div class="absolute inset-0 bg-gradient-to-t from-surface-5 via-surface-5/45 to-transparent"></div>
+                  <div class="absolute inset-0 opacity-45 mix-blend-overlay" :class="temaVisualAsignatura(asig.nombre).gradiente"></div>
+                  <div class="absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
+                    <span class="text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-100 border border-white/10" x-text="asig.curso"></span>
+                    <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva" class="w-7 h-7 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-300 hover:text-cyan-300 flex items-center justify-center border border-white/10">
+                      <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                    </a>
+                  </div>
+                  <div class="absolute bottom-2 left-5 right-5 flex items-end justify-between z-10">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-white/20 backdrop-blur-md text-white text-base"
+                           :class="temaVisualAsignatura(asig.nombre).badgeBg">
+                        <i :class="temaVisualAsignatura(asig.nombre).icono"></i>
+                      </div>
+                      <span class="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border backdrop-blur-md"
+                            :class="temaVisualAsignatura(asig.nombre).chipClase"
+                            x-text="temaVisualAsignatura(asig.nombre).siglas"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="px-5 pt-2 pb-1">
+                  <h3 class="text-base font-extrabold text-white group-hover:text-cyan-300 transition" x-text="asig.nombre"></h3>
+                  <p class="text-xs text-gray-400 mt-0.5 line-clamp-1" x-text="temaVisualAsignatura(asig.nombre).subtitulo"></p>
                 </div>
               </div>
-              <h3 class="text-base font-bold text-white mt-3 group-hover:text-cyan-300 transition" x-text="asig.nombre"></h3>
-              
-              <div class="mt-5 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
-                <span x-text="asig.total_materiales + ' temarios'"></span>
-                <span x-text="asig.total_clases + ' videoclases'"></span>
-                <span class="text-emerald-400 font-semibold" x-text="asig.tests.length + ' tests'"></span>
+
+              <div class="px-5 pb-5 pt-3 mt-2 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-300 font-semibold">
+                <span class="flex items-center gap-1.5"><i class="fa-regular fa-file-pdf text-rose-400"></i><span x-text="asig.total_materiales + ' PDFs'"></span></span>
+                <span class="flex items-center gap-1.5"><i class="fa-solid fa-video text-amber-400"></i><span x-text="asig.total_clases + ' clases'"></span></span>
+                <span class="text-emerald-400 font-bold flex items-center gap-1.5"><i class="fa-solid fa-bolt"></i><span x-text="asig.tests.length + ' tests'"></span></span>
               </div>
             </div>
           </template>
@@ -2664,6 +3794,131 @@ def dashboard_html():
               </div>
             </div>
           </div>
+
+          <!-- CALIFICACIONES OFICIALES DEL CAMPUS UNIR (SI EL ALUMNO CONECTÓ SU CUENTA CANVAS) -->
+          <div class="mt-8 pt-6 border-t border-gray-800">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+              <div>
+                <h4 class="text-sm font-bold text-white flex items-center space-x-2">
+                  <i class="fa-solid fa-building-columns text-indigo-400"></i>
+                  <span>Calificaciones Oficiales en Mi Campus UNIR (Canvas)</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold ml-1"
+                        x-text="calificacionesFiltradas.length + ' notas'"></span>
+                </h4>
+                <p class="text-xs text-gray-400 mt-0.5">Notas reales publicadas por tus profesores en PACs y actividades evaluables</p>
+              </div>
+
+              <!-- CONTROLES Y FILTROS DE CALIFICACIONES -->
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- BUSCADOR POR TÍTULO/ACTIVIDAD -->
+                <div class="relative w-40 sm:w-48">
+                  <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-[11px] text-gray-500"></i>
+                  <input type="text"
+                         x-model="filtroCalTexto"
+                         placeholder="Buscar actividad..."
+                         class="w-full bg-gray-900/90 text-white placeholder-gray-500 text-xs pl-8 pr-2.5 py-1.5 rounded-xl border border-gray-800 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <!-- FILTRO POR ASIGNATURA -->
+                <select x-model="filtroCalAsignatura"
+                        class="bg-gray-900/90 border border-gray-800 rounded-xl px-2.5 py-1.5 text-xs text-indigo-300 outline-none focus:border-indigo-500 max-w-[180px] truncate">
+                  <option value="todas">Todas las asignaturas</option>
+                  <template x-for="asig in asignaturasConCalificaciones" :key="asig">
+                    <option :value="asig" x-text="asig"></option>
+                  </template>
+                </select>
+
+                <!-- FILTRO POR CURSO (TODOS / 2º / 1º) -->
+                <div class="flex items-center bg-gray-900/90 p-0.5 rounded-xl border border-gray-800 text-[11px]">
+                  <button @click="filtroCalCurso = 'todos'"
+                          :class="filtroCalCurso === 'todos' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:text-white'"
+                          class="px-2 py-1 rounded-lg transition">Todos</button>
+                  <button @click="filtroCalCurso = '2dam'"
+                          :class="filtroCalCurso === '2dam' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:text-white'"
+                          class="px-2 py-1 rounded-lg transition">2º</button>
+                  <button @click="filtroCalCurso = '1dam'"
+                          :class="filtroCalCurso === '1dam' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:text-white'"
+                          class="px-2 py-1 rounded-lg transition">1º</button>
+                </div>
+
+                <!-- BOTÓN ACTUALIZAR CAMPUS -->
+                <button @click="abrirModalMiCampus()" class="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-xs font-semibold transition border border-indigo-500/30 shrink-0">
+                  <span x-text="miCampusConfig?.conectado ? '🔄 Actualizar' : '🔗 Conectar'"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- CONTENEDOR POR ASIGNATURAS (AGRUPADO, LIMPIO Y ORDENADO) -->
+            <div x-show="calificacionesAgrupadasPorAsignatura.length > 0" class="space-y-3.5 max-h-[640px] overflow-y-auto pr-1">
+              <template x-for="grupo in calificacionesAgrupadasPorAsignatura" :key="grupo.asignatura">
+                <div class="glass-card rounded-2xl border border-gray-800/80 bg-gray-900/60 overflow-hidden transition hover:border-indigo-500/30">
+                  <!-- CABECERA DE LA ASIGNATURA -->
+                  <div @click="toggleExpandirAsignaturaCal(grupo.asignatura)"
+                       class="p-3.5 sm:p-4 flex items-center justify-between cursor-pointer select-none bg-gray-900/80 hover:bg-gray-850 transition">
+                    <div class="flex items-center space-x-3 min-w-0">
+                      <span class="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0"
+                            :class="grupo.es_primero ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30' : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'"
+                            x-text="iconoAsignatura(grupo.asignatura)"></span>
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                          <h5 class="text-xs sm:text-sm font-bold text-white truncate" x-text="grupo.asignatura"></h5>
+                          <span class="text-[9px] px-2 py-0.2 rounded-full font-bold uppercase tracking-wider"
+                                :class="grupo.es_primero ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'"
+                                x-text="grupo.es_primero ? '1º Curso' : '2º Curso'"></span>
+                        </div>
+                        <p class="text-[11px] text-gray-400 mt-0.5" x-text="grupo.notas.length + (grupo.notas.length === 1 ? ' actividad calificada' : ' actividades calificadas')"></p>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center space-x-3 shrink-0">
+                      <!-- MEDIA DE LA ASIGNATURA -->
+                      <div class="text-right" x-show="grupo.media !== null">
+                        <span class="text-[10px] text-gray-400 block font-medium">Media</span>
+                        <span class="text-xs sm:text-sm font-black px-2.5 py-0.5 rounded-lg border font-mono"
+                              :class="grupo.media >= 9 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : (grupo.media >= 5 ? 'bg-sky-500/20 text-sky-300 border-sky-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40')"
+                              x-text="grupo.media.toFixed(1) + ' / 10'"></span>
+                      </div>
+                      <i class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-200"
+                         :class="(asignaturaExpandidaCal === grupo.asignatura || calificacionesAgrupadasPorAsignatura.length <= 4) ? 'rotate-180 text-cyan-400' : ''"></i>
+                    </div>
+                  </div>
+
+                  <!-- LISTADO DE ACTIVIDADES DE LA ASIGNATURA -->
+                  <div x-show="asignaturaExpandidaCal === grupo.asignatura || calificacionesAgrupadasPorAsignatura.length <= 4"
+                       x-transition.opacity.duration.200ms
+                       class="p-3 sm:p-4 pt-1 border-t border-gray-800/60 bg-black/20">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      <template x-for="cal in grupo.notas" :key="cal.titulo">
+                        <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800 flex items-center justify-between gap-3 hover:border-gray-700 transition">
+                          <div class="min-w-0 flex-1">
+                            <h6 class="text-xs font-semibold text-gray-200 truncate" x-text="cal.titulo"></h6>
+                            <p class="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1.5">
+                              <i class="fa-regular fa-calendar text-[10px] text-gray-500"></i>
+                              <span x-text="'Calificada: ' + (cal.fecha_calificacion || 'Reciente')"></span>
+                            </p>
+                          </div>
+                          <div class="text-right shrink-0">
+                            <span class="text-xs sm:text-sm font-bold px-2.5 py-1 rounded-lg border font-mono"
+                                  :class="(cal.nota_sobre_10 !== null ? cal.nota_sobre_10 : cal.score) >= 9 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : ((cal.nota_sobre_10 !== null ? cal.nota_sobre_10 : cal.score) >= 5 ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-rose-500/15 text-rose-300 border-rose-500/30')"
+                                  x-text="(cal.nota_sobre_10 !== null ? cal.nota_sobre_10 : cal.score) + ' / 10'"></span>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <div x-show="miCampusCalificaciones.length > 0 && calificacionesFiltradas.length === 0" class="text-center py-8 text-gray-400 text-xs bg-gray-900/40 rounded-2xl border border-gray-800/60">
+              <i class="fa-solid fa-filter-circle-xmark text-lg text-gray-500 mb-1 block"></i>
+              No hay calificaciones que coincidan con los filtros seleccionados.
+            </div>
+
+            <div x-show="miCampusCalificaciones.length === 0" class="text-center py-6 text-gray-500 text-xs bg-gray-900/40 rounded-2xl border border-gray-800/60">
+              <p x-text="miCampusConfig?.conectado ? 'Todavía no hay actividades calificadas en tu cuenta de Canvas.' : 'Conecta tu cuenta de Canvas UNIR para consultar tus notas oficiales de PACs aquí.'"></p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2715,86 +3970,309 @@ def dashboard_html():
         </div>
       </div>
 
-      <!-- ==================== VISTA FLASHCARDS / REPASO ACTIVO ==================== -->
-      <div x-show="tab === 'flashcards'" x-transition class="space-y-6">
-        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
-          <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-lg">
+      <!-- ==================== VISTA FLASHCARDS / REPASO ACTIVO PROFESIONAL ==================== -->
+      <div x-show="tab === 'flashcards'"
+           x-transition
+           @keydown.window="
+             if (tab === 'flashcards' && !modalGenerarFlashcards) {
+               if ($event.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT'].includes($event.target.tagName)) {
+                 $event.preventDefault();
+                 flashcardVolteada = !flashcardVolteada;
+               } else if ($event.key === 'ArrowRight') {
+                 siguienteFlashcard();
+               } else if ($event.key === 'ArrowLeft') {
+                 anteriorFlashcard();
+               } else if (flashcardVolteada) {
+                 if ($event.key === '1') calificarTarjeta('dificil');
+                 else if ($event.key === '2') calificarTarjeta('medio');
+                 else if ($event.key === '3') calificarTarjeta('facil');
+               }
+             }
+           "
+           class="space-y-6">
+
+        <!-- CABECERA PRINCIPAL CON CONTROLES Y PESTAÑAS -->
+        <div class="glass p-5 sm:p-6 rounded-3xl border border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+          <div class="flex items-center space-x-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-lg shadow-purple-500/25 shrink-0">
               <i class="fa-solid fa-clone"></i>
             </div>
             <div>
-              <h2 class="text-xl font-bold text-white">Tarjetas de Repaso Activo (Flashcards / Anki)</h2>
-              <p class="text-xs text-gray-400">Técnica de memorización activa y repetición espaciada para conceptos de examen</p>
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg sm:text-xl font-black text-white">Mazo de Repaso Activo (Flashcards)</h2>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold"
+                      x-text="flashcardsFiltradas.length + ' tarjetas'"></span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Técnica de memorización activa espaciada para preparar los exámenes oficiales</p>
             </div>
           </div>
-          <div class="flex items-center space-x-3">
-            <select x-model="flashcardFiltroAsig" @change="filtrarFlashcards()" class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2.5 rounded-xl border border-gray-800 outline-none">
+
+          <!-- SELECTORES Y ACCIONES -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <!-- PESTAÑAS: MODO ESTUDIO vs VER TODAS EN CUADRÍCULA -->
+            <div class="flex items-center bg-gray-900/90 p-1 rounded-2xl border border-gray-800 text-xs">
+              <button @click="flashcardVistaModo = 'estudio'"
+                      :class="flashcardVistaModo === 'estudio' ? 'bg-purple-500/25 text-purple-300 font-bold border border-purple-500/40 shadow-sm' : 'text-gray-400 hover:text-white'"
+                      class="px-3 py-1.5 rounded-xl transition flex items-center gap-1.5">
+                <i class="fa-solid fa-play text-[10px]"></i>
+                <span>Estudiar</span>
+              </button>
+              <button @click="flashcardVistaModo = 'catalogo'"
+                      :class="flashcardVistaModo === 'catalogo' ? 'bg-purple-500/25 text-purple-300 font-bold border border-purple-500/40 shadow-sm' : 'text-gray-400 hover:text-white'"
+                      class="px-3 py-1.5 rounded-xl transition flex items-center gap-1.5">
+                <i class="fa-solid fa-border-all text-[10px]"></i>
+                <span>Ver Mazo</span>
+              </button>
+            </div>
+
+            <!-- SELECTOR DE ASIGNATURA -->
+            <select x-model="flashcardFiltroAsig" @change="filtrarFlashcards()"
+                    class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2 rounded-xl border border-gray-800 outline-none focus:border-purple-500 max-w-[200px] truncate">
               <option value="">Todas las materias</option>
               <template x-for="asig in asignaturasConFlashcards" :key="asig">
                 <option :value="asig" x-text="asig"></option>
               </template>
             </select>
-            <button @click="abrirModalGenerarCards()" class="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-purple-500/20">
-              <i class="fa-solid fa-wand-magic-sparkles"></i>
+
+            <!-- BOTÓN GENERAR CON IA -->
+            <button @click="abrirModalGenerarCards()"
+                    class="px-3.5 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 shadow-lg shadow-purple-500/25 shrink-0">
+              <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
               <span>Crear con IA</span>
             </button>
           </div>
         </div>
 
-        <div x-show="flashcardsFiltradas.length > 0" class="max-w-2xl mx-auto space-y-6">
-          <div class="flex items-center justify-between text-xs text-gray-400">
-            <span x-text="'Tarjeta ' + (flashcardIndice + 1) + ' de ' + flashcardsFiltradas.length"></span>
-            <span class="text-purple-400 font-semibold" x-text="tarjetaActual?.asignatura"></span>
+        <!-- ==================== MODO 1: SESIÓN DE ESTUDIO (1 A 1) ==================== -->
+        <div x-show="flashcardVistaModo === 'estudio' && flashcardsFiltradas.length > 0 && !flashcardSesionCompletada"
+             class="max-w-3xl mx-auto space-y-4">
+
+          <!-- BARRA DE PROGRESO DE LA SESIÓN -->
+          <div class="glass-card p-3 rounded-2xl border border-gray-800/90 flex items-center justify-between gap-4 text-xs">
+            <div class="flex items-center space-x-2 shrink-0">
+              <span class="font-extrabold text-white text-xs" x-text="'Tarjeta ' + (flashcardIndice + 1) + ' / ' + flashcardsFiltradas.length"></span>
+              <span class="text-[10px] px-2 py-0.2 rounded-full bg-gray-800 text-gray-300 font-mono" x-text="flashcardsPorcentajeProgreso + '%'"></span>
+            </div>
+
+            <!-- BARRA VISUAL -->
+            <div class="flex-1 h-2 bg-gray-950 rounded-full overflow-hidden border border-gray-800">
+              <div class="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300 rounded-full"
+                   :style="'width: ' + flashcardsPorcentajeProgreso + '%'"></div>
+            </div>
+
+            <!-- CONTADORES DE ESTUDIO -->
+            <div class="flex items-center gap-1.5 shrink-0 text-[11px] font-bold">
+              <span class="px-1.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" title="Dominadas" x-text="'🟢 ' + flashcardStatsSesion.facil"></span>
+              <span class="px-1.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30" title="En repaso" x-text="'🟡 ' + flashcardStatsSesion.medio"></span>
+              <span class="px-1.5 py-0.5 rounded-lg bg-rose-500/15 text-rose-300 border border-rose-500/30" title="Difíciles" x-text="'🔴 ' + flashcardStatsSesion.dificil"></span>
+            </div>
           </div>
 
-          <!-- TARJETA INTERACTIVA 3D FLIP -->
-          <div @click="flashcardVolteada = !flashcardVolteada"
-               class="min-h-[280px] p-8 rounded-3xl glass cursor-pointer border hover:border-purple-500/40 transition flex flex-col justify-between shadow-2xl relative select-none"
-               :class="flashcardVolteada ? 'border-purple-500/50 bg-purple-950/20' : 'border-gray-700 bg-gray-900/90'">
-            <div>
-              <div class="flex items-center justify-between text-xs text-gray-400 mb-4">
-                <span class="font-bold uppercase tracking-wider text-[10px]"
-                      :class="flashcardVolteada ? 'text-purple-400' : 'text-cyan-400'"
-                      x-text="flashcardVolteada ? '💡 Respuesta Técnica' : '❓ Pregunta de Concepto'"></span>
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-300" x-text="tarjetaActual?.nivel"></span>
+          <!-- TARJETA INTERACTIVA CON GIRO 3D REAL (FLIP) -->
+          <div class="flashcard-perspective cursor-pointer select-none"
+               @click="flashcardVolteada = !flashcardVolteada">
+            <div class="flashcard-inner rounded-3xl" :class="flashcardVolteada ? 'flipped' : ''">
+
+              <!-- CARA FRONTAL (ANVERSO - PREGUNTA) -->
+              <div class="flashcard-face p-7 sm:p-9 rounded-3xl border border-gray-700/80 bg-gradient-to-b from-gray-900/98 to-gray-950/95 shadow-2xl backdrop-blur-xl">
+                <div>
+                  <div class="flex items-center justify-between pb-3.5 mb-4 border-b border-gray-800">
+                    <div class="flex items-center space-x-2">
+                      <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                      <span class="font-extrabold uppercase tracking-wider text-[11px] text-cyan-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-circle-question text-xs"></i>
+                        <span>Pregunta de Concepto</span>
+                      </span>
+                    </div>
+                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-gray-800 text-gray-300 uppercase tracking-wider border border-gray-700"
+                          x-text="tarjetaActual?.nivel || 'Examen'"></span>
+                  </div>
+
+                  <p class="text-xs font-semibold text-purple-400 mb-2 flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-bookmark text-[10px]"></i>
+                    <span x-text="tarjetaActual?.asignatura"></span>
+                  </p>
+
+                  <h3 class="text-base sm:text-xl font-bold text-white leading-relaxed mt-2" x-text="tarjetaActual?.anverso"></h3>
+                </div>
+
+                <div class="pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
+                  <span class="text-[11px] text-gray-400 flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate text-cyan-400"></i>
+                    <span>Haz clic o pulsa <kbd class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-200 font-mono text-[10px]">Espacio</kbd> para voltear</span>
+                  </span>
+                  <span class="text-xs font-bold text-cyan-300 flex items-center gap-1">
+                    <span>Ver respuesta</span>
+                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                  </span>
+                </div>
               </div>
-              <h3 class="text-lg md:text-xl font-bold text-white leading-relaxed" x-show="!flashcardVolteada" x-text="tarjetaActual?.anverso"></h3>
-              <div class="markdown-content text-sm md:text-base leading-relaxed text-gray-200" x-show="flashcardVolteada" x-html="renderMarkdown(tarjetaActual?.reverso || '')"></div>
-            </div>
 
-            <div class="pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-400">
-              <span class="text-[11px]"><i class="fa-solid fa-arrows-rotate mr-1"></i>Haz clic en cualquier parte para voltear</span>
-              <span class="text-xs font-semibold text-purple-400" x-text="flashcardVolteada ? '✔ Reversa' : 'Ver respuesta'"></span>
+              <!-- CARA TRASERA (REVERSO - RESPUESTA TÉCNICA) -->
+              <div class="flashcard-face flashcard-back p-7 sm:p-9 rounded-3xl border border-purple-500/50 bg-gradient-to-b from-[#181126]/98 to-gray-950/95 shadow-2xl backdrop-blur-xl">
+                <div>
+                  <div class="flex items-center justify-between pb-3.5 mb-4 border-b border-purple-500/20">
+                    <div class="flex items-center space-x-2">
+                      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                      <span class="font-extrabold uppercase tracking-wider text-[11px] text-emerald-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-lightbulb text-xs"></i>
+                        <span>Respuesta Técnica Oficial</span>
+                      </span>
+                    </div>
+                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono"
+                          x-text="'ID: ' + (tarjetaActual?.id || '')"></span>
+                  </div>
+
+                  <div class="markdown-content text-sm sm:text-base leading-relaxed text-gray-100 max-h-[220px] overflow-y-auto pr-1"
+                       x-html="renderMarkdown(tarjetaActual?.reverso || '')"></div>
+                </div>
+
+                <div class="pt-3 border-t border-purple-500/20 flex items-center justify-between text-xs text-purple-300/80">
+                  <span class="text-[11px]">Califica con <kbd class="px-1 rounded bg-black/40 font-mono">1</kbd>, <kbd class="px-1 rounded bg-black/40 font-mono">2</kbd>, <kbd class="px-1 rounded bg-black/40 font-mono">3</kbd></span>
+                  <span class="text-[11px] text-gray-400">Clic para volver a la pregunta</span>
+                </div>
+              </div>
+
             </div>
           </div>
 
-          <!-- BOTONES DE CALIFICACIÓN ESPACIADA -->
-          <div class="grid grid-cols-3 gap-3" x-show="flashcardVolteada">
-            <button @click="calificarTarjeta('dificil')" class="py-3 px-4 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs transition border border-rose-500/30">
-              🔴 Difícil (Reforzar)
-            </button>
-            <button @click="calificarTarjeta('medio')" class="py-3 px-4 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs transition border border-amber-500/30">
-              🟡 Bien (En repaso)
-            </button>
-            <button @click="calificarTarjeta('facil')" class="py-3 px-4 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs transition border border-emerald-500/30">
-              🟢 Fácil (Dominada)
-            </button>
+          <!-- BOTONES DE CALIFICACIÓN ESPACIADA (ESTILO ANKI) -->
+          <div class="space-y-2 pt-1" x-show="flashcardVolteada" x-transition.opacity.duration.200ms>
+            <p class="text-center text-[11px] text-gray-400 font-medium">¿Qué tal te la sabías?</p>
+            <div class="grid grid-cols-3 gap-3">
+              <button @click="calificarTarjeta('dificil')"
+                      class="py-3 px-3 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold text-xs transition border border-rose-500/30 flex flex-col items-center justify-center gap-1 shadow-sm group">
+                <span class="text-base group-hover:scale-110 transition">🔴 Difícil</span>
+                <span class="text-[10px] text-rose-300/70 font-normal">Repetir pronto <kbd class="text-[9px] bg-rose-950/60 px-1 rounded font-mono">[1]</kbd></span>
+              </button>
+              <button @click="calificarTarjeta('medio')"
+                      class="py-3 px-3 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-xs transition border border-amber-500/30 flex flex-col items-center justify-center gap-1 shadow-sm group">
+                <span class="text-base group-hover:scale-110 transition">🟡 Regular</span>
+                <span class="text-[10px] text-amber-300/70 font-normal">En repaso <kbd class="text-[9px] bg-amber-950/60 px-1 rounded font-mono">[2]</kbd></span>
+              </button>
+              <button @click="calificarTarjeta('facil')"
+                      class="py-3 px-3 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-xs transition border border-emerald-500/30 flex flex-col items-center justify-center gap-1 shadow-sm group">
+                <span class="text-base group-hover:scale-110 transition">🟢 Fácil</span>
+                <span class="text-[10px] text-emerald-300/70 font-normal">Dominada <kbd class="text-[9px] bg-emerald-950/60 px-1 rounded font-mono">[3]</kbd></span>
+              </button>
+            </div>
           </div>
 
-          <!-- BOTONES DE NAVEGACIÓN -->
+          <!-- NAVEGACIÓN Y ATAJOS -->
           <div class="flex items-center justify-between pt-2">
-            <button @click="anteriorFlashcard()" :disabled="flashcardIndice === 0" class="px-4 py-2 bg-gray-800 rounded-xl text-xs text-gray-300 font-semibold disabled:opacity-40">
-              Anterior
+            <button @click="anteriorFlashcard()" :disabled="flashcardIndice === 0"
+                    class="px-4 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs text-gray-300 font-semibold disabled:opacity-30 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-arrow-left text-[10px]"></i>
+              <span>Anterior</span>
             </button>
-            <button @click="siguienteFlashcard()" class="px-5 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
-              Siguiente Tarjeta
+            <div class="hidden sm:flex items-center space-x-2 text-[10px] text-gray-500">
+              <span>Atajos:</span>
+              <kbd class="px-1.5 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-400 font-mono">Espacio</kbd>
+              <kbd class="px-1.5 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-400 font-mono">←</kbd>
+              <kbd class="px-1.5 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-400 font-mono">→</kbd>
+            </div>
+            <button @click="siguienteFlashcard()"
+                    class="px-5 py-2 bg-purple-600/30 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+              <span>Siguiente</span>
+              <i class="fa-solid fa-arrow-right text-[10px]"></i>
             </button>
           </div>
         </div>
 
-        <div x-show="flashcardsFiltradas.length === 0" class="text-center py-16 text-gray-500 text-xs">
-          <i class="fa-solid fa-clone text-3xl mb-3 opacity-30 text-purple-400"></i>
-          <p class="text-sm">No hay tarjetas de repaso para este filtro.</p>
+        <!-- ==================== PANTALLA RESUMEN DE SESIÓN COMPLETADA ==================== -->
+        <div x-show="flashcardVistaModo === 'estudio' && flashcardSesionCompletada"
+             class="max-w-xl mx-auto glass p-8 rounded-3xl border border-purple-500/30 text-center space-y-5 shadow-2xl">
+          <div class="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-3xl mx-auto shadow-lg shadow-emerald-500/20 animate-bounce">
+            <i class="fa-solid fa-trophy"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-black text-white">¡Mazo Completado con Éxito!</h3>
+            <p class="text-xs text-gray-400 mt-1">Has repasado todas las tarjetas disponibles de esta sesión.</p>
+          </div>
+
+          <!-- RESUMEN DE RETENCIÓN -->
+          <div class="grid grid-cols-3 gap-3 p-4 bg-gray-950/80 rounded-2xl border border-gray-800 text-center">
+            <div>
+              <p class="text-xl font-black text-emerald-400 font-mono" x-text="flashcardStatsSesion.facil"></p>
+              <p class="text-[10px] text-gray-400 mt-0.5">Dominadas</p>
+            </div>
+            <div>
+              <p class="text-xl font-black text-amber-400 font-mono" x-text="flashcardStatsSesion.medio"></p>
+              <p class="text-[10px] text-gray-400 mt-0.5">En repaso</p>
+            </div>
+            <div>
+              <p class="text-xl font-black text-rose-400 font-mono" x-text="flashcardStatsSesion.dificil"></p>
+              <p class="text-[10px] text-gray-400 mt-0.5">Difíciles</p>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center gap-3 pt-2">
+            <button @click="reiniciarMazoFlashcards()"
+                    class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-purple-500/20">
+              <i class="fa-solid fa-rotate-left"></i>
+              <span>Repasar el Mazo de Nuevo</span>
+            </button>
+            <button @click="flashcardVistaModo = 'catalogo'"
+                    class="px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold text-xs transition">
+              Ver Todas las Tarjetas
+            </button>
+          </div>
+        </div>
+
+        <!-- ==================== MODO 2: CATÁLOGO / VISTA DE MAZO COMPLETO EN CUADRÍCULA ==================== -->
+        <div x-show="flashcardVistaModo === 'catalogo' && flashcardsFiltradas.length > 0" class="space-y-4">
+          <!-- BUSCADOR INTERNO DENTRO DEL MAZO -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="relative flex-1 max-w-md">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-gray-500"></i>
+              <input type="text"
+                     x-model="flashcardBusqueda"
+                     placeholder="Buscar en preguntas o respuestas del mazo..."
+                     class="w-full bg-gray-900 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2 rounded-xl border border-gray-800 focus:outline-none focus:border-purple-500">
+            </div>
+            <span class="text-xs text-gray-400" x-text="flashcardsFiltradas.length + ' tarjetas encontradas'"></span>
+          </div>
+
+          <!-- GRID DE TARJETAS -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="(card, idx) in flashcardsFiltradas" :key="card.id">
+              <div class="glass-card p-5 rounded-2xl border border-gray-800/80 hover:border-purple-500/40 transition flex flex-col justify-between group space-y-3">
+                <div>
+                  <div class="flex items-center justify-between text-[10px] text-gray-400 mb-2">
+                    <span class="font-extrabold uppercase text-purple-400 tracking-wider" x-text="card.asignatura"></span>
+                    <span class="px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 font-mono" x-text="'#' + (idx + 1)"></span>
+                  </div>
+                  <h4 class="text-xs sm:text-sm font-bold text-white leading-snug group-hover:text-purple-200 transition" x-text="card.anverso"></h4>
+                  <div class="mt-2.5 pt-2.5 border-t border-gray-800/80 text-xs text-gray-300 leading-relaxed markdown-content max-h-36 overflow-y-auto pr-1"
+                       x-html="renderMarkdown(card.reverso)"></div>
+                </div>
+                <div class="flex items-center justify-between pt-2 border-t border-gray-800/60 text-[10px] text-gray-400">
+                  <span class="px-2 py-0.5 rounded-md bg-gray-950 font-mono uppercase" x-text="card.nivel || 'Básico'"></span>
+                  <button @click="flashcardIndice = idx; flashcardVolteada = false; flashcardSesionCompletada = false; flashcardVistaModo = 'estudio'"
+                          class="text-purple-400 hover:text-purple-300 font-bold flex items-center gap-1 transition">
+                    <span>Estudiar esta</span>
+                    <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- ESTADO VACÍO -->
+        <div x-show="flashcardsFiltradas.length === 0" class="text-center py-20 text-gray-500 text-xs bg-gray-900/30 rounded-3xl border border-gray-800/60 max-w-lg mx-auto space-y-3">
+          <div class="w-14 h-14 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-2xl mx-auto">
+            <i class="fa-solid fa-clone"></i>
+          </div>
+          <div>
+            <p class="text-sm font-bold text-gray-300">No hay tarjetas de repaso para este filtro</p>
+            <p class="text-xs text-gray-500 mt-1">Genera nuevas preguntas tipo examen al instante con inteligencia artificial.</p>
+          </div>
+          <button @click="abrirModalGenerarCards()"
+                  class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition inline-flex items-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+            <span>Generar Flashcards con IA</span>
+          </button>
         </div>
       </div>
 
@@ -4156,8 +5634,558 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== MODAL CONECTAR MI CAMPUS UNIR (CANVAS LMS PERSONAL) ==================== -->
+  <div x-show="modalMiCampus"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalMiCampus = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800">
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+            <i class="fa-solid fa-building-columns text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-gray-100 text-base">Conectar Mi Campus UNIR (Canvas)</h3>
+            <p class="text-xs text-gray-400">Sincroniza tus propias entregas, PACs y calificaciones sin contraseñas</p>
+          </div>
+        </div>
+        <button @click="modalMiCampus = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <!-- ESTADO ACTUAL DE LA CONEXIÓN -->
+        <template x-if="miCampusConfig?.conectado">
+          <div class="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl space-y-2">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-xs">
+                <p class="font-bold text-indigo-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                  <span x-text="'Conectado como: ' + (miCampusConfig.alumno_nombre || usuarioActual?.username)"></span>
+                </p>
+                <p class="text-[11px] text-gray-400 mt-0.5" x-text="'Última sincronización: ' + (miCampusConfig.ultima_sincronizacion || 'Ahora') + ' • ' + (miCampusCursos.length || 0) + ' cursos'"></p>
+              </div>
+              <button @click="desconectarMiCampus()" class="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-semibold transition border border-rose-500/30 shrink-0">
+                Desconectar
+              </button>
+            </div>
+
+            <!-- AVISO DE CADUCIDAD DEL TOKEN (SI APLICA) -->
+            <template x-if="miCampusConfig?.token_estado?.estado === 'por_caducar'">
+              <div class="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+                <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0 text-amber-400"></i>
+                <div class="flex-1">
+                  <p class="font-bold">Tu Token de Canvas caduca pronto (<span x-text="miCampusConfig.token_estado.dias_restantes"></span> días restantes)</p>
+                  <p class="text-[11px] text-amber-200/80 mt-0.5">Genera uno nuevo en tu perfil de Canvas y pégalo abajo para no perder la descarga de PDFs nuevos ni las notas actualizadas.</p>
+                </div>
+              </div>
+            </template>
+            <template x-if="miCampusConfig?.token_estado?.estado === 'caducado'">
+              <div class="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                <i class="fa-solid fa-clock-rotate-left mt-0.5 shrink-0 text-rose-400"></i>
+                <div class="flex-1">
+                  <p class="font-bold">Tu Token de Canvas ha caducado</p>
+                  <p class="text-[11px] text-rose-200/80 mt-0.5">Tus PDFs ya descargados se mantienen intactos. Para volver a descargar PDFs nuevos o actualizar notas, genera un nuevo token en Canvas y pégalo abajo.</p>
+                </div>
+              </div>
+            </template>
+            <template x-if="miCampusConfig?.token_estado?.estado === 'ok'">
+              <div class="text-[11px] text-emerald-400/90 flex items-center gap-1.5">
+                <i class="fa-solid fa-shield-halved text-[10px]"></i>
+                <span x-text="'Token activo (vigente hasta: ' + (miCampusConfig.token_estado.expira || '30 días') + ')'"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- OPCIÓN A: ENLACE .ICS (RECOMENDADO: NO CADUCA) -->
+        <div class="p-3.5 bg-gray-950/80 border border-gray-800 rounded-2xl text-xs text-gray-300 space-y-2">
+          <div class="flex items-center justify-between">
+            <p class="font-bold text-amber-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-check"></i>
+              <span>Opción A (Recomendada): Enlace de Calendario (.ics)</span>
+            </p>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">¡No caduca nunca!</span>
+          </div>
+          <p class="text-[11px] text-gray-400 leading-relaxed">
+            Sincroniza tus entregas, clases y sesiones automáticamente sin necesidad de renovar cada 30 días.
+            Entra en <a href="https://campusfp.unir.net/calendar" target="_blank" class="text-amber-400 hover:underline font-semibold">Calendario de Canvas</a> → abajo a la derecha pulsa <strong>«Alimentación del calendario»</strong> y pega aquí el enlace <code class="text-amber-300">.ics</code>:
+          </p>
+          <input type="text"
+                 x-model="inputCanvasIcsUrl"
+                 placeholder="https://campusfp.unir.net/feeds/calendars/user_xxxx.ics"
+                 class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-300 outline-none focus:border-amber-500 font-mono transition">
+        </div>
+
+        <!-- OPCIÓN B: TOKEN PERSONAL (DESCARGA DE PDFS Y NOTAS) -->
+        <div class="p-3.5 bg-gray-950/80 border border-gray-800 rounded-2xl text-xs text-gray-300 space-y-2">
+          <div class="flex items-center justify-between">
+            <p class="font-bold text-cyan-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-graduation-cap"></i>
+              <span>Opción B: Token de Canvas (Para PDFs y Notas)</span>
+            </p>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 font-bold">Vigencia 30 días</span>
+          </div>
+          <p class="text-[11px] text-gray-400">
+            Necesario para que el servidor pueda <strong>descargar los PDFs</strong> de tus asignaturas o traer tus <strong>calificaciones reales</strong>.
+            En tu <a href="https://campusfp.unir.net/profile/settings" target="_blank" class="text-cyan-400 hover:underline font-semibold">Perfil UNIR → Integraciones aprobadas</a> pulsa <strong>«+ Nuevo token de acceso»</strong>:
+          </p>
+          <input type="password"
+                 x-model="inputCanvasToken"
+                 placeholder="Ej: 11842~aBcDeFgHiJkLmNoPqRsTuVwXyZ..."
+                 class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3.5 py-2.5 text-xs text-indigo-300 outline-none focus:border-indigo-500 font-mono transition mt-1">
+          <div class="flex items-center gap-2 mt-2">
+            <label class="text-[10px] text-gray-400">Fecha de vencimiento (la que pusiste en Canvas):</label>
+            <input type="date"
+                   x-model="inputCanvasTokenExpira"
+                   class="bg-gray-900 border border-gray-800 rounded-lg px-2 py-1 text-[11px] text-gray-300 outline-none focus:border-cyan-500">
+          </div>
+        </div>
+
+        <!-- SECCIÓN OAUTH2 INICIAR SESIÓN CON UNIR (PREPARADO) -->
+        <template x-if="miCampusConfig?.oauth_disponible">
+          <div class="p-3.5 bg-gradient-to-r from-indigo-950/40 to-cyan-950/40 border border-indigo-500/30 rounded-2xl text-xs flex items-center justify-between gap-3">
+            <div>
+              <p class="font-bold text-indigo-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-key text-cyan-400"></i>
+                <span>Iniciar sesión oficial con UNIR (SSO)</span>
+              </p>
+              <p class="text-[11px] text-gray-400 mt-0.5">Inicio oficial sin tokens manuales (requiere Developer Key institucional).</p>
+            </div>
+            <a href="/api/canvas/oauth/iniciar" class="px-3 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs transition shadow-md shadow-indigo-500/20 shrink-0">
+              Conectar UNIR
+            </a>
+          </div>
+        </template>
+
+        <div class="p-2.5 rounded-xl bg-sky-500/5 border border-sky-500/20 text-[11px] text-sky-300/90 flex items-center gap-2">
+          <i class="fa-solid fa-moon text-sky-400"></i>
+          <span><strong>Sincronización nocturna automática activa:</strong> El servidor revisa cada madrugada las entregas y PDFs nuevos sin que tengas que pulsar nada.</span>
+        </div>
+
+        <template x-if="miCampusMensajeError">
+          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation shrink-0"></i>
+            <span x-text="miCampusMensajeError"></span>
+          </div>
+        </template>
+
+        <template x-if="miCampusMensajeExito">
+          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-check shrink-0"></i>
+            <span x-text="miCampusMensajeExito"></span>
+          </div>
+        </template>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-gray-800 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <button x-show="miCampusConfig?.conectado && miCampusConfig?.modo === 'token'"
+                  @click="sincronizarMaterialesMiCampus()"
+                  :disabled="sincronizandoMiCampus"
+                  type="button"
+                  class="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition flex items-center gap-1.5">
+            <i class="fa-solid fa-file-arrow-down"></i>
+            <span>Descargar Mis PDFs del Campus</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-2 ml-auto">
+          <button @click="modalMiCampus = false" type="button" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 hover:text-white text-xs transition">
+            Cerrar
+          </button>
+          <button @click="conectarMiCampus()"
+                  :disabled="sincronizandoMiCampus"
+                  type="button"
+                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-600 hover:from-indigo-400 hover:to-cyan-500 text-white font-bold text-xs shadow-lg shadow-indigo-500/20 transition flex items-center gap-2">
+            <i x-show="sincronizandoMiCampus" class="fa-solid fa-spinner fa-spin text-xs"></i>
+            <span x-text="sincronizandoMiCampus ? 'Sincronizando con UNIR...' : 'Conectar y Sincronizar'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL RÁPIDO: ENTREGAS DEL MES ==================== -->
+  <div x-show="modalEntregasMes"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalEntregasMes = false" class="bg-gray-900 border border-rose-500/30 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800 shrink-0">
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-calendar-check"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-extrabold text-white text-base">Entregas de <span class="text-rose-400 capitalize" x-text="nombreMesCalendario"></span></h3>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold"
+                    x-text="entregasMesActual.length + ' pendientes'"></span>
+            </div>
+            <p class="text-xs text-gray-400 mt-0.5">Haz clic en cualquier entrega para ver su detalle, cambiar estado o editarla</p>
+          </div>
+        </div>
+        <button @click="modalEntregasMes = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- LISTA DE ENTREGAS DEL MES -->
+      <div class="mt-4 space-y-2.5 overflow-y-auto flex-1 pr-1">
+        <template x-for="ev in entregasMesActual" :key="'modal-ent-' + ev.id">
+          <div @click="modalEntregasMes = false; abrirModalItemAgenda(ev)"
+               class="p-4 rounded-2xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-950/35 hover:border-rose-500/50 transition cursor-pointer flex items-center justify-between gap-3 group">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] font-bold px-2 py-0.2 rounded-md bg-rose-500 text-white uppercase tracking-wider" x-text="ev.categoria || 'Entrega'"></span>
+                <span class="text-xs font-bold text-rose-300 font-mono" x-text="ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10)"></span>
+                <span x-show="ev.plazo_texto" class="text-[10px] px-1.5 py-0.2 rounded bg-black/40 text-rose-200 border border-rose-500/30 font-medium" x-text="ev.plazo_texto"></span>
+              </div>
+              <h4 class="text-sm font-extrabold text-white group-hover:text-rose-200 transition truncate" x-text="ev.titulo"></h4>
+              <p class="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+                <span x-text="iconoAsignatura(ev.asignatura)"></span>
+                <span x-text="ev.asignatura"></span>
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button @click.stop="marcarItemRapidoHecho(ev); if(entregasMesActual.length <= 1) modalEntregasMes = false;"
+                      class="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5"
+                      title="Marcar como entregada / hecha">
+                <i class="fa-solid fa-check"></i>
+                <span class="hidden sm:inline">Completar</span>
+              </button>
+              <i class="fa-solid fa-chevron-right text-gray-500 group-hover:text-white transition text-xs"></i>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400 shrink-0">
+        <span>También puedes verlas resaltadas en el calendario cambiando el filtro a «Entregas».</span>
+        <button @click="modalEntregasMes = false" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-medium text-xs transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE ÍTEM DE CALENDARIO / TO-DO ESTILO NOTION (COMO EN EL VÍDEO) ==================== -->
+  <div x-show="modalItemAgenda"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-3 pb-4 border-b border-gray-800">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1.5">
+            <select x-model="itemEditCategoria"
+                    class="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-gray-900 border border-gray-700 text-cyan-400 outline-none focus:border-cyan-500">
+              <option value="Tema">Tema</option>
+              <option value="Clase">Clase</option>
+              <option value="Tutoría">Tutoría</option>
+              <option value="Actividad">Actividad</option>
+              <option value="Entrega">Entrega</option>
+              <option value="Práctica">Práctica</option>
+              <option value="Test">Test</option>
+              <option value="Examen">Examen</option>
+              <option value="Proyecto">Proyecto</option>
+              <option value="FFE">FFE</option>
+              <option value="Cita">📌 Cita / Personal</option>
+              <option value="Recordatorio">🔔 Recordatorio</option>
+              <option value="Otro">✨ Otro</option>
+            </select>
+            <button type="button"
+                    @click="itemEditRecordatorio = !itemEditRecordatorio"
+                    :class="itemEditRecordatorio ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-gray-900 text-gray-500 border-gray-800 hover:text-gray-300'"
+                    class="text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1">
+              <i class="fa-solid fa-bell text-[10px]" :class="itemEditRecordatorio ? 'text-amber-400' : 'text-gray-500'"></i>
+              <span x-text="itemEditRecordatorio ? 'Recordatorio activo' : 'Activar recordatorio'"></span>
+            </button>
+          </div>
+          <input type="text"
+                 x-model="itemEditTitulo"
+                 placeholder="Ej: Tema 3, Cita médico, Reunión, Examen..."
+                 class="w-full text-lg sm:text-xl font-black text-white bg-gray-900/70 hover:bg-gray-900 focus:bg-gray-900 border border-gray-800 focus:border-cyan-500 rounded-xl px-3 py-1.5 outline-none transition">
+        </div>
+        <button @click="modalItemAgenda = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- PROPIEDADES ESTILO NOTION -->
+      <div class="mt-4 space-y-3 text-xs">
+        <!-- Asignatura / Ámbito (Desplegable con TODAS tus asignaturas + Personal/General + botón para escribir nombre personalizado) -->
+        <div class="grid grid-cols-3 items-center py-1.5 border-b border-gray-800/60 gap-2">
+          <span class="text-gray-400 flex items-center gap-2"><i class="fa-solid fa-book text-[10px]"></i><span>Asignatura / Ámbito</span></span>
+          <div class="col-span-2 space-y-1.5">
+            <div class="flex items-center gap-1.5">
+              <template x-if="!modoAsignaturaPersonalizada">
+                <select x-model="itemEditAsignatura"
+                        class="flex-1 bg-gray-900 border border-gray-700 focus:border-cyan-500 rounded-xl px-3 py-1.5 text-xs font-bold text-white outline-none">
+                  <template x-for="asigNombre in listaAsignaturasCompleta" :key="'sel-edit-' + asigNombre">
+                    <option :value="asigNombre" x-text="asigNombre" :selected="itemEditAsignatura === asigNombre"></option>
+                  </template>
+                </select>
+              </template>
+              <template x-if="modoAsignaturaPersonalizada">
+                <input type="text"
+                       x-model="itemEditAsignatura"
+                       placeholder="Escribe la asignatura o categoría personal a tu gusto..."
+                       class="flex-1 bg-gray-900 border border-cyan-500 rounded-xl px-3 py-1.5 text-xs font-bold text-white outline-none">
+              </template>
+              <button @click="modoAsignaturaPersonalizada = !modoAsignaturaPersonalizada"
+                      type="button"
+                      :title="modoAsignaturaPersonalizada ? 'Elegir de la lista de asignaturas' : 'Modificar o escribir nombre a tu gusto'"
+                      class="px-2.5 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-[11px] font-semibold transition shrink-0">
+                <span x-text="modoAsignaturaPersonalizada ? '📋 Lista' : '✏️ Editar'"></span>
+              </button>
+              <button @click="irAAsignaturaDesdeModal(itemEditAsignatura || itemAgendaActivo?.asignatura)"
+                      type="button"
+                      class="text-[11px] text-cyan-400 hover:underline font-semibold shrink-0">
+                Ir →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Estado (Selector de píldoras de colores idéntico al vídeo de Notion) -->
+        <div class="grid grid-cols-3 items-start py-1.5 border-b border-gray-800/60">
+          <span class="text-gray-400 flex items-center gap-2 pt-1"><i class="fa-solid fa-bullseye text-[10px]"></i><span>Estado</span></span>
+          <div class="col-span-2 flex flex-wrap gap-1.5">
+            <template x-for="est in opcionesEstadoParaItem({ categoria: itemEditCategoria })" :key="est">
+              <button @click="itemEditEstado = est"
+                      type="button"
+                      :class="[
+                        claseBadgeEstadoNotion(est),
+                        itemEditEstado === est ? 'ring-2 ring-white scale-105' : 'opacity-65 hover:opacity-100'
+                      ]"
+                      class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition">
+                <span x-text="est"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Fecha y Hora (permite mover el Tema, Cita o Evento al día y hora que el alumno quiera) -->
+        <div class="grid grid-cols-3 items-start py-1.5 border-b border-gray-800/60">
+          <span class="text-gray-400 flex items-center gap-2 pt-1.5"><i class="fa-regular fa-calendar text-[10px]"></i><span>Fecha y hora</span></span>
+          <div class="col-span-2 space-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="date" x-model="itemEditFechaDia" class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-cyan-500">
+              <input type="time" x-model="itemEditHora" class="bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-amber-200 font-mono outline-none focus:border-cyan-500" title="Hora de la cita, clase o recordatorio">
+              <div class="flex items-center gap-1">
+                <button type="button" @click="desplazarFechaModal(-7)" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px] font-bold" title="1 semana antes">-1 sem</button>
+                <button type="button" @click="desplazarFechaModal(-1)" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-[10px] font-bold" title="Día anterior">◀ -1 día</button>
+                <button type="button" @click="itemEditFechaDia = new Date().toISOString().slice(0, 10)" class="px-2 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold">Hoy</button>
+                <button type="button" @click="desplazarFechaModal(1)" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-[10px] font-bold" title="Día siguiente">+1 día ▶</button>
+                <button type="button" @click="desplazarFechaModal(7)" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px] font-bold" title="1 semana después">+1 sem</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Puntuación / Nota -->
+        <div class="grid grid-cols-3 items-center py-1.5 border-b border-gray-800/60">
+          <span class="text-gray-400 flex items-center gap-2"><i class="fa-solid fa-hashtag text-[10px]"></i><span>Puntuación (0-10)</span></span>
+          <div class="col-span-2">
+            <input type="number" step="0.1" min="0" max="10" x-model="itemEditNota" placeholder="Ej: 8.5"
+                   class="w-32 bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-emerald-300 font-mono outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <!-- URL Campus -->
+        <div class="grid grid-cols-3 items-center py-1.5 border-b border-gray-800/60">
+          <span class="text-gray-400 flex items-center gap-2"><i class="fa-solid fa-link text-[10px]"></i><span>Enlace Campus</span></span>
+          <div class="col-span-2">
+            <a :href="itemAgendaActivo?.url || 'https://campusfp.unir.net'" target="_blank" class="text-cyan-400 hover:underline text-xs flex items-center gap-1.5">
+              <span>Abrir directamente en Canvas UNIR</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Comentarios / Apuntes rápidos -->
+        <div class="pt-2">
+          <label class="text-gray-400 font-semibold block mb-1.5">Comentarios, detalles de la cita o apuntes personales</label>
+          <textarea x-model="itemEditComentario" rows="3" placeholder="Añade aquí tus notas sobre esta clase, tema, cita o recordatorio (solo visibles en tu cuenta)..."
+                    class="w-full bg-gray-900/90 border border-gray-700 rounded-2xl p-3 text-xs text-gray-200 outline-none focus:border-cyan-500"></textarea>
+        </div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-gray-800 flex items-center justify-between gap-2">
+        <div>
+          <button @click="eliminarItemAgendaPropio(itemAgendaActivo?.id)"
+                  type="button"
+                  class="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-xs font-semibold transition border border-rose-500/30">
+            Quitar de mi calendario
+          </button>
+        </div>
+        <div class="flex items-center gap-2 ml-auto">
+          <button @click="modalItemAgenda = false" type="button" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 hover:text-white text-xs transition">
+            Cancelar
+          </button>
+          <button @click="guardarCambiosItemAgenda()"
+                  type="button"
+                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 transition">
+            Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL NUEVO TEMA / TAREA / CITA / RECORDATORIO EN CALENDARIO PERSONAL ==================== -->
+  <div x-show="modalNuevoItemAgenda"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalNuevoItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+        <h3 class="text-base font-extrabold text-white">Añadir a Mi Calendario / To-do</h3>
+        <button @click="modalNuevoItemAgenda = false" class="text-gray-400 hover:text-white p-1 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="mt-4 space-y-3 text-xs">
+        <!-- SELECTOR RÁPIDO: ¿DÓNDE QUIERES AÑADIRLO? -->
+        <div>
+          <label class="text-gray-400 block mb-1.5">¿Dónde quieres añadirlo?</label>
+          <div class="grid grid-cols-2 gap-1.5 bg-gray-950 p-1 rounded-xl border border-gray-800">
+            <button type="button"
+                    @click="cambiarDestinoNuevoItem('calendario')"
+                    :class="nuevoItemDestino === 'calendario' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-gray-400 hover:text-white'"
+                    class="py-1.5 px-2 rounded-lg text-[11px] transition flex items-center justify-center gap-1.5">
+              <i class="fa-regular fa-calendar-days"></i>
+              <span>Calendario / Semana</span>
+            </button>
+            <button type="button"
+                    @click="cambiarDestinoNuevoItem('hoy')"
+                    :class="nuevoItemDestino === 'hoy' ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 font-bold' : 'text-gray-400 hover:text-white'"
+                    class="py-1.5 px-2 rounded-lg text-[11px] transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-bolt"></i>
+              <span>To-do hoy</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-gray-400 block mb-1">Título (ej. Tema 3, Cita médico, Reunión, Examen...)</label>
+          <input type="text" x-model="nuevoItemTitulo" placeholder="Ej: Tema 3 - Ficheros XML o Cita a las 17:30" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500">
+        </div>
+        <div class="grid grid-cols-12 gap-2">
+          <div class="col-span-5">
+            <label class="text-gray-400 block mb-1">Tipo</label>
+            <select x-model="nuevoItemCategoria" @change="actualizarEstadoSegunCategoriaNuevo()" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-2 text-white outline-none">
+              <option value="Tema">Tema</option>
+              <option value="Clase">Clase</option>
+              <option value="Tutoría">Tutoría</option>
+              <option value="Actividad">Actividad</option>
+              <option value="Entrega">Entrega</option>
+              <option value="Práctica">Práctica</option>
+              <option value="Test">Test</option>
+              <option value="Examen">Examen</option>
+              <option value="Proyecto">Proyecto</option>
+              <option value="FFE">FFE</option>
+              <option value="Cita">📌 Cita / Personal</option>
+              <option value="Recordatorio">🔔 Recordatorio</option>
+              <option value="Otro">✨ Otro</option>
+            </select>
+          </div>
+          <div class="col-span-4">
+            <label class="text-gray-400 block mb-1">Fecha</label>
+            <input type="date" x-model="nuevoItemFecha" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-2 text-white outline-none">
+          </div>
+          <div class="col-span-3">
+            <label class="text-gray-400 block mb-1">Hora (opc.)</label>
+            <input type="time" x-model="nuevoItemHora" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-2 py-2 text-amber-200 font-mono outline-none">
+          </div>
+        </div>
+
+        <!-- BOTÓN DE AVISO / RECORDATORIO PERSONAL -->
+        <div class="flex items-center justify-between p-2.5 rounded-xl border transition"
+             :class="nuevoItemRecordatorio ? 'bg-purple-950/60 border-purple-500/50 text-purple-100' : 'bg-gray-900/60 border-gray-800 text-gray-400'">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-bell text-sm" :class="nuevoItemRecordatorio ? 'text-amber-400 animate-pulse' : 'text-gray-500'"></i>
+            <div>
+              <p class="font-bold text-xs leading-tight" :class="nuevoItemRecordatorio ? 'text-white' : 'text-gray-300'">Activar recordatorio / aviso</p>
+              <p class="text-[10px] opacity-80">Destaca este evento en tus alertas de Hoy y te avisa a la hora indicada</p>
+            </div>
+          </div>
+          <button type="button"
+                  @click="nuevoItemRecordatorio = !nuevoItemRecordatorio; if (nuevoItemRecordatorio) solicitarPermisoNotificaciones()"
+                  :class="nuevoItemRecordatorio ? 'bg-amber-500 text-gray-950 font-extrabold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+                  class="px-3 py-1.5 rounded-lg text-[11px] transition shrink-0">
+            <span x-text="nuevoItemRecordatorio ? '🔔 Activo' : 'Activar'"></span>
+          </button>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-gray-400">Asignatura o ámbito (ej. Personal / General)</label>
+            <button type="button"
+                    @click="modoNuevaAsignaturaPersonalizada = !modoNuevaAsignaturaPersonalizada"
+                    class="text-[10px] text-cyan-400 hover:underline font-semibold">
+              <span x-text="modoNuevaAsignaturaPersonalizada ? '📋 Elegir de la lista' : '✏️ Escribir otro a mi gusto'"></span>
+            </button>
+          </div>
+          <template x-if="!modoNuevaAsignaturaPersonalizada">
+            <select x-model="nuevoItemAsignatura" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-white font-semibold outline-none focus:border-cyan-500">
+              <template x-for="asigNombre in listaAsignaturasCompleta" :key="'sel-new-' + asigNombre">
+                <option :value="asigNombre" x-text="asigNombre" :selected="nuevoItemAsignatura === asigNombre"></option>
+              </template>
+            </select>
+          </template>
+          <template x-if="modoNuevaAsignaturaPersonalizada">
+            <input type="text" x-model="nuevoItemAsignatura" placeholder="Ej: Personal, Médico, Trabajo, Entrevista..." class="w-full bg-gray-900 border border-cyan-500 rounded-xl px-3 py-2 text-white outline-none">
+          </template>
+        </div>
+        <div>
+          <label class="text-gray-400 block mb-1.5">Estado inicial</label>
+          <div class="grid grid-cols-2 gap-2">
+            <template x-for="op in opcionesEstadoNuevoModal(nuevoItemCategoria)" :key="'est-op-' + op.valor">
+              <button type="button"
+                      @click="nuevoItemEstado = op.valor"
+                      :class="nuevoItemEstado === op.valor ? (op.claseActiva + ' ring-2 ring-white/80 shadow-lg scale-[1.01]') : 'bg-gray-900/90 border-gray-800 text-gray-400 hover:bg-gray-800/80 hover:text-gray-200'"
+                      class="p-2.5 rounded-xl border text-left transition flex items-start gap-2.5">
+                <span class="w-2.5 h-2.5 rounded-full mt-1 shrink-0" :class="op.dot"></span>
+                <div class="min-w-0 flex-1">
+                  <div class="font-bold text-xs leading-tight flex items-center justify-between gap-1">
+                    <span x-text="op.titulo"></span>
+                    <i x-show="nuevoItemEstado === op.valor" class="fa-solid fa-check text-[10px]"></i>
+                  </div>
+                  <p class="text-[10px] opacity-80 mt-0.5 truncate" x-text="op.desc"></p>
+                </div>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="mt-5 pt-3 border-t border-gray-800 flex justify-end gap-2">
+        <button @click="modalNuevoItemAgenda = false" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition">Cancelar</button>
+        <button @click="crearNuevoItemAgenda()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-400 hover:to-sky-400 text-gray-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 transition">Añadir al Calendario</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
-  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0f172a]/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
+  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-3/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
     <button @click="irASeccion('dashboard')" 
             :class="tab === 'dashboard' ? 'text-cyan-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
             class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
@@ -4170,12 +6198,11 @@ def dashboard_html():
       <i class="fa-solid fa-folder-tree text-base mb-0.5" :class="tab === 'asignaturas' ? 'text-cyan-400' : 'text-gray-400'"></i>
       <span class="text-[10px]">Materias</span>
     </button>
-    <button @click="irASeccion('agenda')" 
-            :class="tab === 'agenda' ? 'text-rose-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
-            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center relative">
-      <i class="fa-solid fa-calendar-check text-base mb-0.5" :class="tab === 'agenda' ? 'text-rose-400' : 'text-gray-400'"></i>
-      <span class="text-[10px]">Agenda</span>
-      <span x-show="agendaEventos.length > 0" class="absolute top-1 right-3 sm:right-6 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+    <button @click="irASeccion('clases')" 
+            :class="tab === 'clases' ? 'text-amber-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
+      <i class="fa-solid fa-video text-base mb-0.5" :class="tab === 'clases' ? 'text-amber-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">Clases</span>
     </button>
     <button @click="irASeccion('flashcards')" 
             :class="tab === 'flashcards' ? 'text-purple-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
@@ -4256,8 +6283,99 @@ def dashboard_html():
         apiKeyMensajeError: '',
         apiKeyMensajeExito: '',
 
+        // Conexión Personal al Campus UNIR (Canvas por Estudiante) y Dashboard Personal
+        modalEntregasMes: false,
+        verEntregasDelMes() {
+          if (this.entregasMesActual.length === 0) {
+            alert('No tienes entregas pendientes en ' + this.nombreMesCalendario);
+            return;
+          }
+          // Filtra el calendario para destacar tareas y abre el panel rápido de entregas
+          this.calFiltroTipo = 'tarea';
+          this.modalEntregasMes = true;
+        },
+        miCampusConfig: { conectado: false },
+        miCampusCursos: [],
+        miCampusCalificaciones: [],
+        filtroCalTexto: '',
+        filtroCalAsignatura: 'todas',
+        filtroCalCurso: 'todos',
+        asignaturaExpandidaCal: null,
+        toggleExpandirAsignaturaCal(asig) {
+          this.asignaturaExpandidaCal = (this.asignaturaExpandidaCal === asig ? null : asig);
+        },
+        get asignaturasConCalificaciones() {
+          const s = new Set();
+          (this.miCampusCalificaciones || []).forEach(c => { if (c.asignatura) s.add(c.asignatura); });
+          return Array.from(s).sort();
+        },
+        get calificacionesFiltradas() {
+          let lista = this.miCampusCalificaciones || [];
+          if (this.filtroCalTexto.trim()) {
+            const q = this.filtroCalTexto.toLowerCase().trim();
+            lista = lista.filter(c => (c.titulo || '').toLowerCase().includes(q) || (c.asignatura || '').toLowerCase().includes(q));
+          }
+          if (this.filtroCalAsignatura !== 'todas') {
+            lista = lista.filter(c => c.asignatura === this.filtroCalAsignatura);
+          }
+          if (this.filtroCalCurso === '2dam') {
+            lista = lista.filter(c => !(c.asignatura || '').startsWith('1º DAM'));
+          } else if (this.filtroCalCurso === '1dam') {
+            lista = lista.filter(c => (c.asignatura || '').startsWith('1º DAM'));
+          }
+          return lista;
+        },
+        get calificacionesAgrupadasPorAsignatura() {
+          const grupos = {};
+          const lista = this.calificacionesFiltradas;
+          lista.forEach(item => {
+            const asig = item.asignatura || 'Sin Asignatura';
+            if (!grupos[asig]) {
+              grupos[asig] = {
+                asignatura: asig,
+                es_primero: asig.startsWith('1º DAM'),
+                notas: [],
+                media: 0
+              };
+            }
+            grupos[asig].notas.push(item);
+          });
+          const resultado = Object.values(grupos);
+          resultado.forEach(g => {
+            const validas = g.notas.map(n => (n.nota_sobre_10 !== null ? n.nota_sobre_10 : n.score)).filter(n => typeof n === 'number' && !isNaN(n));
+            g.media = validas.length ? (validas.reduce((a, b) => a + b, 0) / validas.length) : null;
+          });
+          // Ordenar: primero asignaturas de 2º y luego las de 1º, y alfabéticamente
+          return resultado.sort((a, b) => {
+            if (a.es_primero !== b.es_primero) return a.es_primero ? 1 : -1;
+            return a.asignatura.localeCompare(b.asignatura);
+          });
+        },
+        inputCanvasToken: '',
+        inputCanvasTokenExpira: '',
+        inputCanvasIcsUrl: '',
+        sincronizandoMiCampus: false,
+        miCampusMensajeError: '',
+        miCampusMensajeExito: '',
+        asignaturasFavoritas: [],
+        mostrarSoloFavoritas: false,
+        actividadReciente: [],
+
         // Lectura por voz de NOVA (Audio Real Neuronal Edge-TTS)
         autoVozActiva: localStorage.getItem('unir_auto_voz') === 'true',
+        // Temas de color personalizables (definidos en <head> como window.NOVA_TEMAS)
+        temasDisponibles: window.NOVA_TEMAS || [],
+        temaActual: document.documentElement.getAttribute('data-tema') || 'nova',
+        menuTemaAbierto: false,
+        cambiarTema(id) {
+          this.temaActual = window.novaAplicarTema(id);
+          localStorage.setItem('nova_tema', this.temaActual);
+        },
+        previewTema(t) {
+          const p = window.NOVA_PALETAS || {};
+          const s = t.surf.split(' ');
+          return [s[2], (p[t.cyan] || '').split(' ')[4], (p[t.sky] || '').split(' ')[4], (p[t.indigo] || '').split(' ')[5]];
+        },
         vozMensajeActivoIdx: null,
         reproductorAudio: null,
 
@@ -4300,15 +6418,56 @@ def dashboard_html():
         modalVisorPdf: false,
         modalRutaPdf: '',
 
-        // Agenda Canvas LMS
+        // Agenda y Calendario Mensual Interactivo (Estilo Notion DAM)
         agendaEventos: [],
         sincronizandoAgenda: false,
+        calAnio: new Date().getFullYear(),
+        calMes: new Date().getMonth(),
+        calDiaSeleccionado: new Date().toISOString().slice(0, 10),
+        calFiltroTipo: 'todos',
+        calModoVista: 'quincena', // 'quincena' (Lun-Vie 2 semanas como el vídeo de Notion) o 'mes' (Lun-Dom mes completo)
+        calOffsetSemanas: 0,
+        incluirAtrasadosTodo: false,
+
+        // Modal Editar / Nuevo Item Agenda Notion + Drag & Drop + Recordatorios
+        modalItemAgenda: false,
+        itemAgendaActivo: null,
+        itemEditTitulo: '',
+        itemEditAsignatura: '',
+        itemEditCategoria: 'Tema',
+        itemEditEstado: '',
+        itemEditFechaDia: '',
+        itemEditHora: '',
+        itemEditRecordatorio: false,
+        itemEditNota: '',
+        itemEditComentario: '',
+        modoAsignaturaPersonalizada: false,
+        temasEstado: {},
+        itemArrastrando: null,
+        diaArrastreSobre: '',
+        modalNuevoItemAgenda: false,
+        nuevoItemDestino: 'calendario',
+        nuevoItemTitulo: '',
+        nuevoItemCategoria: 'Tema',
+        nuevoItemFecha: new Date().toISOString().slice(0, 10),
+        nuevoItemHora: '',
+        nuevoItemRecordatorio: false,
+        nuevoItemAsignatura: '',
+        nuevoItemEstado: 'No hecho',
+        modoNuevaAsignaturaPersonalizada: false,
+        notificacionesSoportadas: typeof window !== 'undefined' && ('Notification' in window),
+        permisoNotificaciones: (typeof window !== 'undefined' && ('Notification' in window)) ? Notification.permission : 'denied',
+        recordatoriosDisparadosIds: [],
 
         // Flashcards Repetición Espaciada
         flashcards: [],
         flashcardIndice: 0,
         flashcardVolteada: false,
         flashcardFiltroAsig: '',
+        flashcardVistaModo: 'estudio', // 'estudio' o 'catalogo'
+        flashcardBusqueda: '',
+        flashcardSesionCompletada: false,
+        flashcardStatsSesion: { facil: 0, medio: 0, dificil: 0 },
         modalGenerarFlashcards: false,
         nuevaCardAsig: '',
         nuevaCardTema: '',
@@ -4359,6 +6518,1093 @@ def dashboard_html():
           return this.catalogoFiltrado.reduce((acc, a) => acc + (a.tests?.length || 0), 0);
         },
 
+        get totalGuiasPrograma() {
+          return this.catalogoFiltrado.reduce((acc, a) => acc + (a.guias?.length || 0), 0);
+        },
+
+        get eventosCalendarioFiltrados() {
+          let evs = this.agendaEventos || [];
+          if (this.mostrarSoloFavoritas && this.asignaturasFavoritas.length > 0) {
+            evs = evs.filter(e => this.asignaturasFavoritas.includes(e.asignatura));
+          }
+          if (this.calFiltroTipo !== 'todos') {
+            evs = evs.filter(e => e.tipo === this.calFiltroTipo);
+          }
+          return evs;
+        },
+
+        get listaAsignaturasCompleta() {
+          const base = [
+            'Acceso a Datos',
+            'Desarrollo de Interfaces',
+            'Programación de Servicios y Procesos',
+            'Programación Multimedia y Dispositivos Móviles',
+            'Sistemas de Gestión Empresarial',
+            'Arquitecturas en la Nube',
+            'Proyecto Intermodular DAM',
+            'Digitalización Aplicada a los Sectores Productivos',
+            'Sostenibilidad Aplicada al Sistema Productivo',
+            'Fase de Formación en Empresa (FFE)',
+            'Inglés Profesional',
+            'Personal / General'
+          ];
+          const conjunto = new Set(base);
+          (this.catalogoTotal || []).forEach(a => {
+            if (a?.nombre) conjunto.add(a.nombre);
+          });
+          (this.agendaEventos || []).forEach(ev => {
+            if (ev?.asignatura) conjunto.add(ev.asignatura);
+          });
+          return Array.from(conjunto);
+        },
+
+        get esPeriodoActualCalendario() {
+          if (this.calModoVista === 'quincena') {
+            return this.calOffsetSemanas === 0;
+          }
+          const hoy = new Date();
+          return this.calAnio === hoy.getFullYear() && this.calMes === hoy.getMonth();
+        },
+
+        get etiquetaPeriodoCalendario() {
+          const mesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+          if (this.calModoVista === 'quincena') {
+            const celdas = this.celdasCalendarioVisibles;
+            if (celdas.length > 0) {
+              const ini = celdas[0].fechaStr;
+              const fin = celdas[celdas.length - 1].fechaStr;
+              if (ini && fin) {
+                const pIni = ini.split('-');
+                const pFin = fin.split('-');
+                const dIni = parseInt(pIni[2], 10);
+                const mIni = mesesCortos[parseInt(pIni[1], 10) - 1];
+                const dFin = parseInt(pFin[2], 10);
+                const mFin = mesesCortos[parseInt(pFin[1], 10) - 1];
+                const rangoStr = mIni === mFin ? `${dIni} - ${dFin} ${mFin}` : `${dIni} ${mIni} - ${dFin} ${mFin}`;
+                if (this.calOffsetSemanas === 0) {
+                  return `Hoy (${rangoStr})`;
+                }
+                const signo = this.calOffsetSemanas > 0 ? `+${this.calOffsetSemanas} sem` : `${this.calOffsetSemanas} sem`;
+                return `${rangoStr} (${signo})`;
+              }
+            }
+            return this.calOffsetSemanas === 0 ? 'Hoy' : `${this.calOffsetSemanas > 0 ? '+' : ''}${this.calOffsetSemanas} sem`;
+          }
+          const hoy = new Date();
+          const mCorto = mesesCortos[this.calMes];
+          if (this.calAnio === hoy.getFullYear() && this.calMes === hoy.getMonth()) {
+            return `Hoy (${mCorto} ${this.calAnio})`;
+          }
+          return `${mCorto} ${this.calAnio} (Ir a Hoy)`;
+        },
+
+        get nombreMesCalendario() {
+          const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+          if (this.calModoVista === 'quincena') {
+            const celdas = this.celdasCalendarioVisibles;
+            if (celdas.length > 0) {
+              const fInicio = celdas[0].fechaStr;
+              if (fInicio) {
+                const partes = fInicio.split('-');
+                const mIdx = parseInt(partes[1], 10) - 1;
+                return `${meses[mIdx]} ${partes[0]}`;
+              }
+            }
+          }
+          return `${meses[this.calMes]} ${this.calAnio}`;
+        },
+
+        get clasesMesActualCount() {
+          const prefijo = `${this.calAnio}-${String(this.calMes + 1).padStart(2, '0')}`;
+          return (this.agendaEventos || []).filter(e => e.tipo === 'clase_directo' && (e.fecha_dia || (e.fecha_iso || '').slice(0, 10)).startsWith(prefijo)).length;
+        },
+
+        get entregasMesActual() {
+          const prefijo = `${this.calAnio}-${String(this.calMes + 1).padStart(2, '0')}`;
+          let evs = (this.agendaEventos || []).filter(e => {
+            if (e.tipo !== 'tarea' || e.entregada) return false;
+            const f = e.fecha_dia || (e.fecha_iso || '').slice(0, 10);
+            return f.startsWith(prefijo);
+          });
+          if (this.mostrarSoloFavoritas && this.asignaturasFavoritas.length > 0) {
+            evs = evs.filter(e => this.asignaturasFavoritas.includes(e.asignatura));
+          }
+          return evs.sort((a, b) => (a.dias_restantes ?? 999) - (b.dias_restantes ?? 999));
+        },
+
+        get proximasEntregasRojas() {
+          let evs = (this.agendaEventos || []).filter(e => e.tipo === 'tarea' && (e.dias_restantes === undefined || e.dias_restantes >= -1) && !e.entregada);
+          if (this.mostrarSoloFavoritas && this.asignaturasFavoritas.length > 0) {
+            evs = evs.filter(e => this.asignaturasFavoritas.includes(e.asignatura));
+          }
+          return evs.sort((a, b) => (a.dias_restantes ?? 999) - (b.dias_restantes ?? 999));
+        },
+
+        get proximosRecordatorios() {
+          const hoyStr = new Date().toISOString().slice(0, 10);
+          return (this.agendaEventos || []).filter(ev => {
+            const est = ev.estado || '';
+            if (['Vista', 'Vista no relevante', 'Hecho'].includes(est) || ev.entregada) return false;
+            const esRec = Boolean(ev.recordatorio) || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria);
+            if (!esRec) return false;
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            return f >= hoyStr;
+          }).sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || ''));
+        },
+
+        get recordatoriosActivosHoyManana() {
+          return this.proximosRecordatorios.filter(ev => {
+            const d = ev.dias_restantes ?? 0;
+            return d <= 2;
+          });
+        },
+
+        // To-do hoy (estilo Notion: lo que tiene fecha de hoy + Temas/Actividades marcadas como 'Pendiente de empezar' o 'En proceso')
+        get todoHoyLista() {
+          const hoyStr = new Date().toISOString().slice(0, 10);
+          let evs = this.agendaEventos || [];
+          if (this.mostrarSoloFavoritas && this.asignaturasFavoritas.length > 0) {
+            evs = evs.filter(e => this.asignaturasFavoritas.includes(e.asignatura));
+          }
+          return evs.filter(ev => {
+            const est = ev.estado || '';
+            if (['Vista', 'Vista no relevante', 'Hecho'].includes(est) || ev.entregada) return false;
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            if (f === hoyStr) return true;
+            if (['Pendiente de empezar', 'En proceso'].includes(est)) return true;
+            return false;
+          }).sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || ''));
+        },
+
+        // To-do semana (estilo Notion: clases, tutorías, entregas y temas pendientes de esta semana + atrasados si se activa)
+        get todoSemanaLista() {
+          const hoy = new Date();
+          const diaSem = (hoy.getDay() + 6) % 7; // Lunes = 0
+          const lunes = new Date(hoy);
+          lunes.setDate(hoy.getDate() - diaSem);
+          const domingo = new Date(lunes);
+          domingo.setDate(lunes.getDate() + 6);
+          const lunesStr = lunes.toISOString().slice(0, 10);
+          const domingoStr = domingo.toISOString().slice(0, 10);
+
+          let evs = this.agendaEventos || [];
+          if (this.mostrarSoloFavoritas && this.asignaturasFavoritas.length > 0) {
+            evs = evs.filter(e => this.asignaturasFavoritas.includes(e.asignatura));
+          }
+          return evs.filter(ev => {
+            const est = ev.estado || '';
+            if (['Vista', 'Vista no relevante', 'Hecho'].includes(est) || ev.entregada) return false;
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            if (!f) return false;
+            if (f >= lunesStr && f <= domingoStr) return true;
+            if (this.incluirAtrasadosTodo && f < lunesStr) return true;
+            return false;
+          }).sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || '')).slice(0, 25);
+        },
+
+        get eventosDiaSeleccionado() {
+          if (!this.calDiaSeleccionado) return [];
+          return this.eventosCalendarioFiltrados
+            .filter(e => (e.fecha_dia || (e.fecha_iso || '').slice(0, 10)) === this.calDiaSeleccionado)
+            .sort((a, b) => {
+              if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
+              return (a.hora_inicio || '').localeCompare(b.hora_inicio || '');
+            });
+        },
+
+        // Celdas visibles en el Calendario (Lun-Vie 2 semanas en modo 'quincena', o Mes completo en modo 'mes')
+        get celdasCalendarioVisibles() {
+          if (this.calModoVista === 'mes') {
+            return this.diasCalendarioMes;
+          }
+          // Modo 'quincena' (Lun-Vie de la semana actual + siguiente semana, ajustable con calOffsetSemanas)
+          const hoy = new Date();
+          const hoyStr = hoy.toISOString().slice(0, 10);
+          const diaSem = (hoy.getDay() + 6) % 7; // Lunes = 0
+          const lunesBase = new Date(hoy);
+          lunesBase.setDate(hoy.getDate() - diaSem + (this.calOffsetSemanas * 7));
+
+          const mapaEventos = {};
+          this.eventosCalendarioFiltrados.forEach(ev => {
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            if (!f) return;
+            if (!mapaEventos[f]) mapaEventos[f] = [];
+            mapaEventos[f].push(ev);
+          });
+
+          const celdas = [];
+          for (let sem = 0; sem < 2; sem++) {
+            for (let d = 0; d < 5; d++) { // Lunes (0) a Viernes (4), además incluimos eventos del fin de semana en el Viernes si caen en Sáb/Dom
+              const fecha = new Date(lunesBase);
+              fecha.setDate(lunesBase.getDate() + (sem * 7) + d);
+              const anio = fecha.getFullYear();
+              const mes = fecha.getMonth();
+              const diaNum = fecha.getDate();
+              const fechaStr = `${anio}-${String(mes + 1).padStart(2, '0')}-${String(diaNum).padStart(2, '0')}`;
+              let evsDia = [...(mapaEventos[fechaStr] || [])];
+              // Si es viernes, añadir también entregas que venzan sábado o domingo para no perderlas en vista Lun-Vie
+              if (d === 4) {
+                for (let extra = 1; extra <= 2; extra++) {
+                  const fFin = new Date(fecha);
+                  fFin.setDate(fecha.getDate() + extra);
+                  const fFinStr = `${fFin.getFullYear()}-${String(fFin.getMonth() + 1).padStart(2, '0')}-${String(fFin.getDate()).padStart(2, '0')}`;
+                  if (mapaEventos[fFinStr]) {
+                    evsDia.push(...mapaEventos[fFinStr]);
+                  }
+                }
+              }
+              evsDia.sort((a, b) => {
+                if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
+                return (a.hora_inicio || '').localeCompare(b.hora_inicio || '');
+              });
+              const tieneEntregaRoja = evsDia.some(e => e.tipo === 'tarea' && !e.entregada);
+              celdas.push({
+                key: `q-${fechaStr}`,
+                dia: diaNum,
+                fechaStr,
+                esMesActual: true,
+                esHoy: fechaStr === hoyStr,
+                eventos: evsDia,
+                tieneEntregaRoja
+              });
+            }
+          }
+          return celdas;
+        },
+
+        get diasCalendarioMes() {
+          const anio = this.calAnio;
+          const mes = this.calMes;
+          const primerDia = new Date(anio, mes, 1);
+          const ultimoDia = new Date(anio, mes + 1, 0);
+          // Lunes = 0 ... Domingo = 6
+          const offsetInicio = (primerDia.getDay() + 6) % 7;
+          const totalDiasMes = ultimoDia.getDate();
+          const hoyStr = new Date().toISOString().slice(0, 10);
+
+          const mapaEventos = {};
+          this.eventosCalendarioFiltrados.forEach(ev => {
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            if (!f) return;
+            if (!mapaEventos[f]) mapaEventos[f] = [];
+            mapaEventos[f].push(ev);
+          });
+
+          const celdas = [];
+          const diasMesAnterior = new Date(anio, mes, 0).getDate();
+          for (let i = offsetInicio - 1; i >= 0; i--) {
+            celdas.push({
+              key: `prev-${i}`,
+              dia: diasMesAnterior - i,
+              fechaStr: '',
+              esMesActual: false,
+              esHoy: false,
+              eventos: [],
+              tieneEntregaRoja: false
+            });
+          }
+
+          for (let d = 1; d <= totalDiasMes; d++) {
+            const fechaStr = `${anio}-${String(mes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const evsDia = (mapaEventos[fechaStr] || []).sort((a, b) => {
+              if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
+              return (a.hora_inicio || '').localeCompare(b.hora_inicio || '');
+            });
+            const tieneEntregaRoja = evsDia.some(e => e.tipo === 'tarea' && !e.entregada);
+            celdas.push({
+              key: fechaStr,
+              dia: d,
+              fechaStr,
+              esMesActual: true,
+              esHoy: fechaStr === hoyStr,
+              eventos: evsDia,
+              tieneEntregaRoja
+            });
+          }
+
+          const resto = (7 - (celdas.length % 7)) % 7;
+          for (let r = 1; r <= resto; r++) {
+            celdas.push({
+              key: `next-${r}`,
+              dia: r,
+              fechaStr: '',
+              esMesActual: false,
+              esHoy: false,
+              eventos: [],
+              tieneEntregaRoja: false
+            });
+          }
+          return celdas;
+        },
+
+        // Eventos filtrados exclusivamente para la asignatura abierta actualmente
+        eventosDeAsignaturaActual() {
+          if (!this.asigSeleccionada?.nombre) return [];
+          const nombreAsig = this.asigSeleccionada.nombre.toLowerCase();
+          return (this.agendaEventos || []).filter(ev => {
+            const evAsig = (ev.asignatura || '').toLowerCase();
+            return evAsig === nombreAsig || evAsig.includes(nombreAsig) || nombreAsig.includes(evAsig);
+          });
+        },
+
+        // Mini-calendario de la asignatura (Lun-Vie 2 semanas)
+        get diasCalendarioAsignaturaActual() {
+          const hoy = new Date();
+          const hoyStr = hoy.toISOString().slice(0, 10);
+          const diaSem = (hoy.getDay() + 6) % 7;
+          const lunesBase = new Date(hoy);
+          lunesBase.setDate(hoy.getDate() - diaSem + (this.calOffsetSemanas * 7));
+
+          const mapaEventos = {};
+          this.eventosDeAsignaturaActual().forEach(ev => {
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            if (!f) return;
+            if (!mapaEventos[f]) mapaEventos[f] = [];
+            mapaEventos[f].push(ev);
+          });
+
+          const celdas = [];
+          for (let sem = 0; sem < 2; sem++) {
+            for (let d = 0; d < 5; d++) {
+              const fecha = new Date(lunesBase);
+              fecha.setDate(lunesBase.getDate() + (sem * 7) + d);
+              const fechaStr = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+              let evsDia = [...(mapaEventos[fechaStr] || [])];
+              if (d === 4) {
+                for (let extra = 1; extra <= 2; extra++) {
+                  const fFin = new Date(fecha);
+                  fFin.setDate(fecha.getDate() + extra);
+                  const fFinStr = `${fFin.getFullYear()}-${String(fFin.getMonth() + 1).padStart(2, '0')}-${String(fFin.getDate()).padStart(2, '0')}`;
+                  if (mapaEventos[fFinStr]) evsDia.push(...mapaEventos[fFinStr]);
+                }
+              }
+              celdas.push({
+                key: `asig-${fechaStr}`,
+                dia: fecha.getDate(),
+                fechaStr,
+                esHoy: fechaStr === hoyStr,
+                eventos: evsDia
+              });
+            }
+          }
+          return celdas;
+        },
+
+        get actividadesAsignaturaActual() {
+          return this.eventosDeAsignaturaActual()
+            .filter(ev => ev.tipo === 'tarea' || ['Actividad', 'Entrega', 'Práctica', 'Proyecto', 'FFE'].includes(ev.categoria))
+            .sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || ''));
+        },
+
+        get temasAsignaturaActual() {
+          return this.eventosDeAsignaturaActual()
+            .filter(ev => ev.tipo === 'tema' || ev.tipo === 'tema_estudio' || ['Tema', 'Test'].includes(ev.categoria))
+            .sort((a, b) => {
+              const numA = parseInt((a.titulo.match(/\\d+/) || [999])[0], 10);
+              const numB = parseInt((b.titulo.match(/\\d+/) || [999])[0], 10);
+              if (numA !== numB) return numA - numB;
+              return (a.titulo || '').localeCompare(b.titulo || '');
+            });
+        },
+
+        // Colores exactos de las tarjetas del calendario de Notion (Verde=Vista/Hecho, Morado=Cita/Recordatorio, Rojo=Actividad/Entrega/Práctica/Examen pendiente, Azul=Clase/Tutoría pendiente, Ámbar=Tema/Test)
+        claseColorTarjetaNotion(ev) {
+          const est = ev?.estado || '';
+          if (['Vista', 'Hecho'].includes(est) || ev?.entregada) {
+            return 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200 hover:bg-emerald-900/70';
+          }
+          if (est === 'Vista no relevante') {
+            return 'bg-gray-800/70 border-gray-600/40 text-gray-400 hover:bg-gray-800';
+          }
+          if (['Cita', 'Recordatorio', 'Otro'].includes(ev?.categoria)) {
+            return 'bg-purple-950/75 border-purple-500/60 text-purple-100 hover:bg-purple-900/80 shadow-sm shadow-purple-950/50';
+          }
+          if (ev?.tipo === 'tarea' || ['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(ev?.categoria)) {
+            return 'bg-rose-950/75 border-rose-500/60 text-rose-100 hover:bg-rose-900/80 shadow-sm shadow-rose-950/50';
+          }
+          if (ev?.tipo === 'tema' || ev?.tipo === 'tema_estudio' || ['Tema', 'Test'].includes(ev?.categoria)) {
+            return 'bg-amber-950/60 border-amber-500/45 text-amber-100 hover:bg-amber-900/70';
+          }
+          return 'bg-surface-7/70 border-blue-500/40 text-blue-100 hover:bg-blue-900/75';
+        },
+
+        claseBadgeEstadoNotion(estado) {
+          const mapa = {
+            'Vista': 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
+            'Hecho': 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
+            'Vista no relevante': 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+            'No vista': 'bg-blue-500/20 text-blue-300 border border-blue-500/40',
+            'No entregado': 'bg-rose-500/25 text-rose-300 border border-rose-500/50',
+            'No hecho': 'bg-gray-800 text-gray-400 border border-gray-700',
+            'Pendiente de empezar': 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
+            'En proceso': 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40',
+            'Entrenamientos': 'bg-purple-500/20 text-purple-300 border border-purple-500/40',
+          };
+          return mapa[estado] || 'bg-gray-800 text-gray-300 border border-gray-700';
+        },
+
+        iconoAsignatura(nombre) {
+          const n = (nombre || '').toLowerCase();
+          if (n.includes('personal') || n.includes('general') || n.includes('cita') || n.includes('recordatorio')) return '📌';
+          if (n.includes('acceso a datos')) return '🗄️';
+          if (n.includes('interfaces')) return '🖥️';
+          if (n.includes('servicios y procesos')) return '⚙️';
+          if (n.includes('multimedia') || n.includes('móviles')) return '📱';
+          if (n.includes('gestión empresarial')) return '🏢';
+          if (n.includes('proyecto')) return '🚀';
+          if (n.includes('nube')) return '☁️';
+          if (n.includes('digitalización')) return '🌐';
+          if (n.includes('sostenibilidad')) return '🌱';
+          if (n.includes('empresa') || n.includes('ffe')) return '💼';
+          if (n.includes('inglés')) return '🇬🇧';
+          return '📘';
+        },
+
+        temaVisualAsignatura(nombre) {
+          const n = (nombre || '').toLowerCase();
+          if (n.includes('acceso a datos')) {
+            return {
+              siglas: 'AD',
+              icono: 'fa-solid fa-database',
+              subtitulo: 'Ficheros XML/JSON, JDBC, ORM Hibernate y Bases de Datos NoSQL',
+              imagen: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-cyan-600/60 via-blue-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-cyan-500 to-blue-600 shadow-cyan-500/30',
+              chipClase: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
+            };
+          }
+          if (n.includes('interfaces')) {
+            return {
+              siglas: 'DI',
+              icono: 'fa-solid fa-layer-group',
+              subtitulo: 'Diseño UI/UX, Componentes Visuales, Eventos, Informes y Usabilidad',
+              imagen: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-fuchsia-600/60 via-purple-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-fuchsia-500 to-purple-600 shadow-fuchsia-500/30',
+              chipClase: 'bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/40'
+            };
+          }
+          if (n.includes('multimedia') || n.includes('móviles')) {
+            return {
+              siglas: 'PMDM',
+              icono: 'fa-solid fa-mobile-screen-button',
+              subtitulo: 'Desarrollo Android & Kotlin, Jetpack, Multimedia y Motores 2D/3D',
+              imagen: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-emerald-600/60 via-teal-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/30',
+              chipClase: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+            };
+          }
+          if (n.includes('servicios y procesos')) {
+            return {
+              siglas: 'PSP',
+              icono: 'fa-solid fa-microchip',
+              subtitulo: 'Programación Multihilo, Concurrencia, Sockets TCP/UDP y Criptografía',
+              imagen: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-amber-600/60 via-orange-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/30',
+              chipClase: 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+            };
+          }
+          if (n.includes('gestión empresarial')) {
+            return {
+              siglas: 'SGE',
+              icono: 'fa-solid fa-chart-pie',
+              subtitulo: 'Sistemas ERP/CRM, Odoo, Módulos Empresariales e Integración BI',
+              imagen: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-rose-600/60 via-pink-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-rose-500 to-pink-600 shadow-rose-500/30',
+              chipClase: 'bg-rose-500/20 text-rose-200 border-rose-400/40'
+            };
+          }
+          if (n.includes('nube')) {
+            return {
+              siglas: 'NUBE',
+              icono: 'fa-solid fa-cloud-bolt',
+              subtitulo: 'Infraestructura Cloud, AWS/Azure, Contenedores Docker y Serverless',
+              imagen: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-sky-600/60 via-indigo-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-sky-500 to-indigo-600 shadow-sky-500/30',
+              chipClase: 'bg-sky-500/20 text-sky-200 border-sky-400/40'
+            };
+          }
+          if (n.includes('proyecto')) {
+            return {
+              siglas: 'PROY',
+              icono: 'fa-solid fa-rocket',
+              subtitulo: 'Diseño, Arquitectura, Desarrollo Full-Stack y Defensa del Proyecto DAM',
+              imagen: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-violet-600/60 via-indigo-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-violet-500 to-indigo-600 shadow-violet-500/30',
+              chipClase: 'bg-violet-500/20 text-violet-200 border-violet-400/40'
+            };
+          }
+          if (n.includes('digitalización')) {
+            return {
+              siglas: 'DIG',
+              icono: 'fa-solid fa-globe',
+              subtitulo: 'Transformación Digital, Industria 4.0, IoT, IA y Ciberseguridad',
+              imagen: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-blue-600/60 via-cyan-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-blue-500 to-cyan-600 shadow-blue-500/30',
+              chipClase: 'bg-blue-500/20 text-blue-200 border-blue-400/40'
+            };
+          }
+          if (n.includes('sostenibilidad')) {
+            return {
+              siglas: 'SOST',
+              icono: 'fa-solid fa-seedling',
+              subtitulo: 'Economía Circular, ODS, Eficiencia Energética y Tecnología Sostenible',
+              imagen: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-green-600/60 via-emerald-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-green-500 to-emerald-600 shadow-green-500/30',
+              chipClase: 'bg-green-500/20 text-green-200 border-green-400/40'
+            };
+          }
+          if (n.includes('inglés')) {
+            return {
+              siglas: 'ING',
+              icono: 'fa-solid fa-earth-europe',
+              subtitulo: 'Technical English for Software Developers, Documentation & Meetings',
+              imagen: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-red-600/50 via-blue-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-blue-500 to-rose-600 shadow-blue-500/30',
+              chipClase: 'bg-blue-500/20 text-blue-200 border-blue-400/40'
+            };
+          }
+          if (n.includes('empleabilidad')) {
+            return {
+              siglas: 'IPE',
+              icono: 'fa-solid fa-user-tie',
+              subtitulo: 'Carrera Tecnológica, Emprendimiento, Derecho Laboral y Equipos Ágiles',
+              imagen: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-amber-500/50 via-yellow-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-amber-500 to-yellow-600 shadow-amber-500/30',
+              chipClase: 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+            };
+          }
+          if (n.includes('empresa') || n.includes('ffe')) {
+            return {
+              siglas: 'FFE',
+              icono: 'fa-solid fa-building-user',
+              subtitulo: 'Prácticas Profesionales en Entorno Real de Desarrollo de Software',
+              imagen: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-teal-600/60 via-cyan-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-teal-500 to-cyan-600 shadow-teal-500/30',
+              chipClase: 'bg-teal-500/20 text-teal-200 border-teal-400/40'
+            };
+          }
+          if (n.includes('bases de datos')) {
+            return {
+              siglas: 'BBDD',
+              icono: 'fa-solid fa-server',
+              subtitulo: 'Diseño Relacional E-R, SQL Avanzado, Procedimientos y Normalización',
+              imagen: 'https://images.unsplash.com/photo-1544383835-bda2bc66a55d?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-cyan-600/60 via-indigo-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-cyan-500 to-indigo-600',
+              chipClase: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
+            };
+          }
+          if (n.includes('programación')) {
+            return {
+              siglas: 'PROG',
+              icono: 'fa-solid fa-code',
+              subtitulo: 'Algoritmia, Programación Orientada a Objetos en Java y Estructuras',
+              imagen: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-emerald-600/60 via-cyan-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-emerald-500 to-cyan-600',
+              chipClase: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+            };
+          }
+          if (n.includes('sistemas informáticos')) {
+            return {
+              siglas: 'SIS',
+              icono: 'fa-solid fa-terminal',
+              subtitulo: 'Hardware, Administración Linux/Windows, Redes TCP/IP y Virtualización',
+              imagen: 'https://images.unsplash.com/photo-1629654297299-c8506221ca97?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-slate-600/60 via-blue-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-blue-500 to-slate-600',
+              chipClase: 'bg-blue-500/20 text-blue-200 border-blue-400/40'
+            };
+          }
+          if (n.includes('lenguajes de marcas')) {
+            return {
+              siglas: 'LMSGI',
+              icono: 'fa-brands fa-html5',
+              subtitulo: 'HTML5, CSS3, JavaScript, XML, XPath/XSLT y Sindicación de Contenidos',
+              imagen: 'https://images.unsplash.com/photo-1547658719-da2b51169166?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-orange-600/60 via-rose-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-orange-500 to-rose-600',
+              chipClase: 'bg-orange-500/20 text-orange-200 border-orange-400/40'
+            };
+          }
+          if (n.includes('entornos de desarrollo')) {
+            return {
+              siglas: 'ED',
+              icono: 'fa-solid fa-code-branch',
+              subtitulo: 'Control de Versiones Git, IDEs, Testing Unitario JUnit y Diagramas UML',
+              imagen: 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?auto=format&fit=crop&w=700&q=80',
+              gradiente: 'bg-gradient-to-br from-purple-600/60 via-indigo-900/60 to-slate-950',
+              badgeBg: 'bg-gradient-to-br from-purple-500 to-indigo-600',
+              chipClase: 'bg-purple-500/20 text-purple-200 border-purple-400/40'
+            };
+          }
+          return {
+            siglas: 'MOD',
+            icono: 'fa-solid fa-book-bookmark',
+            subtitulo: 'Temario oficial, videoclases transcritas y simulacros interactivos',
+            imagen: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=700&q=80',
+            gradiente: 'bg-gradient-to-br from-cyan-600/50 via-indigo-900/60 to-slate-950',
+            badgeBg: 'bg-gradient-to-br from-cyan-500 to-indigo-600',
+            chipClase: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
+          };
+        },
+
+        opcionesEstadoNuevoModal(cat) {
+          if (['Clase', 'Tutoría'].includes(cat)) {
+            return [
+              { valor: 'No vista', titulo: 'Pendiente de ver', desc: 'En azul en tu calendario', dot: 'bg-blue-400', claseActiva: 'bg-blue-950/80 border-blue-400 text-blue-100' },
+              { valor: 'Vista', titulo: 'Clase vista', desc: 'Completada en verde', dot: 'bg-emerald-400', claseActiva: 'bg-emerald-950/80 border-emerald-400 text-emerald-100' },
+              { valor: 'Vista no relevante', titulo: 'No relevante', desc: 'Omitida / Archivada', dot: 'bg-amber-400', claseActiva: 'bg-gray-800 border-amber-400/60 text-amber-200' }
+            ];
+          }
+          if (['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(cat)) {
+            return [
+              { valor: 'No entregado', titulo: 'Pendiente entrega', desc: 'Alerta roja en calendario', dot: 'bg-rose-500', claseActiva: 'bg-rose-950/80 border-rose-400 text-rose-100' },
+              { valor: 'En proceso', titulo: 'En proceso', desc: 'Fijada en To-do hoy', dot: 'bg-cyan-400', claseActiva: 'bg-cyan-950/80 border-cyan-400 text-cyan-100' },
+              { valor: 'Hecho', titulo: 'Entregada / Hecho', desc: 'Completada en verde', dot: 'bg-emerald-400', claseActiva: 'bg-emerald-950/80 border-emerald-400 text-emerald-100' }
+            ];
+          }
+          if (['Cita', 'Recordatorio', 'Otro'].includes(cat)) {
+            return [
+              { valor: 'Pendiente de empezar', titulo: 'Agendado + Aviso', desc: 'Sale en Hoy y Calendario', dot: 'bg-purple-400', claseActiva: 'bg-purple-950/80 border-purple-400 text-purple-100' },
+              { valor: 'No hecho', titulo: 'En su fecha', desc: 'Solo en el día elegido', dot: 'bg-amber-400', claseActiva: 'bg-amber-950/70 border-amber-400 text-amber-100' },
+              { valor: 'En proceso', titulo: 'En curso', desc: 'Activo ahora mismo', dot: 'bg-cyan-400', claseActiva: 'bg-cyan-950/80 border-cyan-400 text-cyan-100' },
+              { valor: 'Hecho', titulo: 'Realizado', desc: 'Completado en verde', dot: 'bg-emerald-400', claseActiva: 'bg-emerald-950/80 border-emerald-400 text-emerald-100' }
+            ];
+          }
+          return [
+            { valor: 'No hecho', titulo: 'Programado', desc: 'En su día del calendario', dot: 'bg-amber-400', claseActiva: 'bg-amber-950/70 border-amber-400 text-amber-100' },
+            { valor: 'Pendiente de empezar', titulo: 'Para hoy', desc: 'Fijado en To-do hoy', dot: 'bg-sky-400', claseActiva: 'bg-sky-950/80 border-sky-400 text-sky-100' },
+            { valor: 'En proceso', titulo: 'En proceso', desc: 'Estudiando ahora', dot: 'bg-cyan-400', claseActiva: 'bg-cyan-950/80 border-cyan-400 text-cyan-100' },
+            { valor: 'Hecho', titulo: 'Completado', desc: 'Marcado en verde', dot: 'bg-emerald-400', claseActiva: 'bg-emerald-950/80 border-emerald-400 text-emerald-100' }
+          ];
+        },
+
+        opcionesEstadoParaItem(ev) {
+          if (!ev) return ['No hecho', 'En proceso', 'Hecho'];
+          const cat = ev.categoria || '';
+          if (['Clase', 'Tutoría'].includes(cat) || ev.tipo === 'clase_directo') {
+            return ['No vista', 'Vista', 'Vista no relevante'];
+          }
+          if (['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(cat) || ev.tipo === 'tarea') {
+            return ['No entregado', 'En proceso', 'Hecho'];
+          }
+          return ['No hecho', 'Pendiente de empezar', 'En proceso', 'Entrenamientos', 'Hecho'];
+        },
+
+        abrirModalItemAgenda(ev) {
+          if (!ev) return;
+          this.itemAgendaActivo = ev;
+          this.modoAsignaturaPersonalizada = false;
+          this.itemEditTitulo = ev.titulo || '';
+          this.itemEditAsignatura = ev.asignatura || 'Acceso a Datos';
+          this.itemEditCategoria = ev.categoria || (ev.tipo === 'clase_directo' ? 'Clase' : (ev.tipo === 'tarea' ? 'Actividad' : 'Tema'));
+          this.itemEditEstado = ev.estado || (ev.tipo === 'clase_directo' ? 'No vista' : (ev.tipo === 'tarea' ? 'No entregado' : 'No hecho'));
+          this.itemEditFechaDia = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+          this.itemEditHora = (ev.hora_inicio && ev.hora_inicio !== '23:59') ? ev.hora_inicio : '';
+          this.itemEditRecordatorio = Boolean(ev.recordatorio) || ['Cita', 'Recordatorio', 'Otro'].includes(this.itemEditCategoria);
+          const nVal = ev.nota_personal !== null && ev.nota_personal !== undefined ? ev.nota_personal : ev.nota;
+          this.itemEditNota = nVal !== null && nVal !== undefined ? String(nVal) : '';
+          this.itemEditComentario = ev.comentario || '';
+          this.modalItemAgenda = true;
+        },
+
+        desplazarFechaModal(diasDelta) {
+          const baseStr = this.itemEditFechaDia || new Date().toISOString().slice(0, 10);
+          const partes = baseStr.split('-');
+          const fecha = partes.length === 3
+            ? new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10))
+            : new Date();
+          fecha.setDate(fecha.getDate() + diasDelta);
+          this.itemEditFechaDia = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+        },
+
+        iniciarArrastreItem(event, ev) {
+          this.itemArrastrando = ev;
+          if (event?.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', ev.id);
+          }
+        },
+
+        finalizarArrastreItem() {
+          this.itemArrastrando = null;
+          this.diaArrastreSobre = '';
+        },
+
+        async soltarItemEnDia(fechaDestinoStr) {
+          const ev = this.itemArrastrando;
+          this.diaArrastreSobre = '';
+          this.itemArrastrando = null;
+          if (!ev || !fechaDestinoStr) return;
+          if (ev.fecha_dia === fechaDestinoStr) return;
+
+          if (ev.esTemaUnificado) {
+            try {
+              await fetch('/api/asignatura/tema/estado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  asignatura: ev.asignatura || this.asigSeleccionada?.nombre,
+                  tema_num: ev.numero,
+                  tema_titulo: ev.titulo,
+                  estado: ev.estado || 'Por hacer',
+                  fecha_dia: fechaDestinoStr
+                })
+              });
+              await this.cargarAgenda();
+            } catch(e) {
+              console.error(e);
+            }
+            return;
+          }
+
+          ev.fecha_dia = fechaDestinoStr;
+          try {
+            await fetch('/api/agenda/item/actualizar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                item_id: ev.id,
+                fecha_dia: fechaDestinoStr
+              })
+            });
+            await this.cargarAgenda();
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        async moverItemDias(ev, diasDelta) {
+          if (!ev) return;
+          const baseStr = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+          const partes = baseStr.split('-');
+          const fecha = partes.length === 3
+            ? new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10))
+            : new Date();
+          fecha.setDate(fecha.getDate() + diasDelta);
+          const nuevaFecha = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+          ev.fecha_dia = nuevaFecha;
+          try {
+            await fetch('/api/agenda/item/actualizar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                item_id: ev.id,
+                fecha_dia: nuevaFecha
+              })
+            });
+            await this.cargarAgenda();
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        async guardarCambiosItemAgenda() {
+          if (!this.itemAgendaActivo) return;
+          const payload = {
+            item_id: this.itemAgendaActivo.id,
+            titulo: this.itemEditTitulo ? this.itemEditTitulo.trim() : null,
+            asignatura: this.itemEditAsignatura ? this.itemEditAsignatura.trim() : null,
+            categoria: this.itemEditCategoria || null,
+            estado: this.itemEditEstado,
+            fecha_dia: this.itemEditFechaDia || null,
+            hora_inicio: this.itemEditHora ? this.itemEditHora.trim() : null,
+            recordatorio: Boolean(this.itemEditRecordatorio),
+            nota_personal: this.itemEditNota !== '' ? parseFloat(this.itemEditNota) : null,
+            comentario: this.itemEditComentario
+          };
+          try {
+            const res = await fetch('/api/agenda/item/actualizar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              this.modalItemAgenda = false;
+              await this.cargarAgenda();
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        async marcarItemRapidoHecho(ev) {
+          if (!ev) return;
+          const nuevoEstado = (['Clase', 'Tutoría'].includes(ev.categoria) || ev.tipo === 'clase_directo') ? 'Vista' : 'Hecho';
+          await this.cambiarEstadoItemDirecto(ev, nuevoEstado);
+        },
+
+        async cambiarEstadoItemDirecto(ev, nuevoEstado) {
+          if (!ev) return;
+          ev.estado = nuevoEstado;
+          ev.entregada = ['Vista', 'Vista no relevante', 'Hecho'].includes(nuevoEstado);
+          try {
+            await fetch('/api/agenda/item/actualizar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                item_id: ev.id,
+                estado: nuevoEstado
+              })
+            });
+            await this.cargarAgenda();
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        abrirModalNuevoItemAgenda(categoriaPorDefecto = 'Tema', asignaturaPorDefecto = '', fechaPorDefecto = '', destino = 'calendario') {
+          this.nuevoItemTitulo = '';
+          this.modoNuevaAsignaturaPersonalizada = false;
+          this.nuevoItemDestino = destino || 'calendario';
+          this.nuevoItemCategoria = categoriaPorDefecto || 'Tema';
+          const esCita = ['Cita', 'Recordatorio', 'Otro'].includes(this.nuevoItemCategoria);
+          this.nuevoItemHora = esCita ? '17:00' : '';
+          this.nuevoItemRecordatorio = esCita || this.nuevoItemCategoria === 'Examen';
+          if (fechaPorDefecto) {
+            this.nuevoItemFecha = fechaPorDefecto;
+          } else if (destino === 'calendario') {
+            if (this.calModoVista === 'quincena' && this.calOffsetSemanas !== 0 && this.celdasCalendarioVisibles.length > 0) {
+              this.nuevoItemFecha = this.celdasCalendarioVisibles[0].fechaStr || new Date().toISOString().slice(0, 10);
+            } else if (this.calModoVista === 'mes') {
+              const hoy = new Date();
+              if (this.calAnio === hoy.getFullYear() && this.calMes === hoy.getMonth()) {
+                this.nuevoItemFecha = hoy.toISOString().slice(0, 10);
+              } else {
+                this.nuevoItemFecha = `${this.calAnio}-${String(this.calMes + 1).padStart(2, '0')}-01`;
+              }
+            } else {
+              this.nuevoItemFecha = new Date().toISOString().slice(0, 10);
+            }
+          } else {
+            this.nuevoItemFecha = new Date().toISOString().slice(0, 10);
+          }
+          if (asignaturaPorDefecto) {
+            this.nuevoItemAsignatura = asignaturaPorDefecto;
+          } else if (esCita) {
+            this.nuevoItemAsignatura = 'Personal / General';
+          } else {
+            this.nuevoItemAsignatura = (this.asigSeleccionada?.nombre) || (this.listaAsignaturasCompleta[0] || 'Acceso a Datos');
+          }
+          this.actualizarEstadoSegunCategoriaNuevo();
+          this.modalNuevoItemAgenda = true;
+        },
+
+        cambiarDestinoNuevoItem(destino) {
+          this.nuevoItemDestino = destino;
+          if (destino === 'hoy') {
+            this.nuevoItemFecha = new Date().toISOString().slice(0, 10);
+          }
+          this.actualizarEstadoSegunCategoriaNuevo();
+        },
+
+        actualizarEstadoSegunCategoriaNuevo() {
+          const cat = this.nuevoItemCategoria;
+          if (['Cita', 'Recordatorio', 'Otro'].includes(cat)) {
+            this.nuevoItemRecordatorio = true;
+            if (!this.nuevoItemHora) this.nuevoItemHora = '17:00';
+            if (this.nuevoItemAsignatura === 'Acceso a Datos') {
+              this.nuevoItemAsignatura = 'Personal / General';
+            }
+            this.nuevoItemEstado = 'Pendiente de empezar';
+          } else if (['Clase', 'Tutoría'].includes(cat)) {
+            this.nuevoItemEstado = 'No vista';
+            if (!this.nuevoItemHora) this.nuevoItemHora = '19:00';
+          } else if (['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(cat)) {
+            if (cat === 'Examen') this.nuevoItemRecordatorio = true;
+            this.nuevoItemEstado = this.nuevoItemDestino === 'hoy' ? 'En proceso' : 'No entregado';
+          } else {
+            this.nuevoItemEstado = this.nuevoItemDestino === 'hoy' ? 'Pendiente de empezar' : 'No hecho';
+          }
+        },
+
+        async solicitarPermisoNotificaciones() {
+          if (!this.notificacionesSoportadas) return;
+          try {
+            const p = await Notification.requestPermission();
+            this.permisoNotificaciones = p;
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        comprobarRecordatoriosPendientes() {
+          if (!this.notificacionesSoportadas || this.permisoNotificaciones !== 'granted') return;
+          const hoyStr = new Date().toISOString().slice(0, 10);
+          (this.recordatoriosActivosHoyManana || []).forEach(rec => {
+            if (rec.fecha_dia === hoyStr && !this.recordatoriosDisparadosIds.includes(rec.id)) {
+              this.recordatoriosDisparadosIds.push(rec.id);
+              try {
+                const horaTxt = (rec.hora_inicio && rec.hora_inicio !== '23:59') ? ` a las ${rec.hora_inicio}` : '';
+                new Notification(`🔔 Recordatorio Hoy: ${rec.titulo}`, {
+                  body: `${rec.asignatura}${horaTxt}`
+                });
+              } catch (e) {}
+            }
+          });
+        },
+
+        async crearNuevoItemAgenda() {
+          if (!this.nuevoItemTitulo.trim()) return;
+          const fechaCreada = this.nuevoItemFecha;
+          try {
+            const res = await fetch('/api/agenda/item/crear', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                titulo: this.nuevoItemTitulo.trim(),
+                asignatura: this.nuevoItemAsignatura,
+                categoria: this.nuevoItemCategoria,
+                estado: this.nuevoItemEstado,
+                fecha_dia: fechaCreada,
+                hora_inicio: this.nuevoItemHora || null,
+                recordatorio: Boolean(this.nuevoItemRecordatorio)
+              })
+            });
+            if (res.ok) {
+              this.modalNuevoItemAgenda = false;
+              await this.cargarAgenda();
+              if (fechaCreada) {
+                this.irADiaDeEvento({ fecha_dia: fechaCreada });
+              }
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        async eliminarItemAgendaPropio(itemId) {
+          if (!itemId) return;
+          try {
+            const res = await fetch(`/api/agenda/item/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+            if (res.ok) {
+              this.modalItemAgenda = false;
+              await this.cargarAgenda();
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        irAAsignaturaDesdeModal(nombreAsig) {
+          if (!nombreAsig) return;
+          const encontrada = this.catalogoTotal.find(a =>
+            a.nombre.toLowerCase() === nombreAsig.toLowerCase() ||
+            a.nombre.toLowerCase().includes(nombreAsig.toLowerCase()) ||
+            nombreAsig.toLowerCase().includes(a.nombre.toLowerCase())
+          );
+          if (encontrada) {
+            this.modalItemAgenda = false;
+            this.seleccionarAsignatura(encontrada);
+          }
+        },
+
+        navegarCalendario(delta) {
+          if (this.calModoVista === 'quincena') {
+            this.calOffsetSemanas += delta;
+          } else {
+            this.cambiarMesCalendario(delta);
+          }
+        },
+
+        cambiarMesCalendario(delta) {
+          let nuevoMes = this.calMes + delta;
+          let nuevoAnio = this.calAnio;
+          if (nuevoMes < 0) {
+            nuevoMes = 11;
+            nuevoAnio--;
+          } else if (nuevoMes > 11) {
+            nuevoMes = 0;
+            nuevoAnio++;
+          }
+          this.calMes = nuevoMes;
+          this.calAnio = nuevoAnio;
+        },
+
+        irAHoyCalendario() {
+          const hoy = new Date();
+          this.calAnio = hoy.getFullYear();
+          this.calMes = hoy.getMonth();
+          this.calOffsetSemanas = 0;
+          this.calDiaSeleccionado = hoy.toISOString().slice(0, 10);
+        },
+
+        seleccionarDiaCalendario(fechaStr) {
+          if (!fechaStr) return;
+          this.calDiaSeleccionado = fechaStr;
+        },
+
+        irADiaDeEvento(ev) {
+          const f = ev?.fecha_dia || (ev?.fecha_iso || '').slice(0, 10);
+          if (!f) return;
+          const partes = f.split('-');
+          if (partes.length === 3) {
+            const anio = parseInt(partes[0], 10);
+            const mes = parseInt(partes[1], 10) - 1;
+            const dia = parseInt(partes[2], 10);
+            this.calAnio = anio;
+            this.calMes = mes;
+            this.calDiaSeleccionado = f;
+            // Ajustar también el offset semanal si la fecha no está en las 2 semanas visibles actualmente
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            const diaSemHoy = (hoy.getDay() + 6) % 7;
+            const lunesActual = new Date(hoy);
+            lunesActual.setDate(hoy.getDate() - diaSemHoy);
+            const fechaObjetivo = new Date(anio, mes, dia);
+            fechaObjetivo.setHours(0, 0, 0, 0);
+            const diaSemObj = (fechaObjetivo.getDay() + 6) % 7;
+            const lunesObjetivo = new Date(fechaObjetivo);
+            lunesObjetivo.setDate(fechaObjetivo.getDate() - diaSemObj);
+            const diffSemanas = Math.round((lunesObjetivo.getTime() - lunesActual.getTime()) / (7 * 24 * 60 * 60 * 1000));
+            if (diffSemanas < this.calOffsetSemanas || diffSemanas > this.calOffsetSemanas + 1) {
+              this.calOffsetSemanas = diffSemanas;
+            }
+          }
+        },
+
+        formatearFechaSeleccionada(fechaStr) {
+          if (!fechaStr) return 'Selecciona un día';
+          const partes = fechaStr.split('-');
+          if (partes.length !== 3) return fechaStr;
+          const fecha = new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10));
+          const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+          const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+          return `${diasSemana[fecha.getDay()]}, ${parseInt(partes[2], 10)} ${meses[fecha.getMonth()]} ${partes[0]}`;
+        },
+
+        abreviarAsignatura(nombre) {
+          if (!nombre) return '';
+          const mapa = {
+            'Acceso a Datos': 'AD',
+            'Desarrollo de Interfaces': 'DI',
+            'Programación de Servicios y Procesos': 'PSP',
+            'Programación Multimedia y Dispositivos Móviles': 'PMDM',
+            'Sistemas de Gestión Empresarial': 'SGE',
+            'Proyecto Intermodular DAM': 'Proyecto',
+            'Proyecto Intermodular': 'Proyecto',
+            'Arquitecturas en la Nube': 'Nube',
+            'Arquitectura en la Nube': 'Nube',
+            'Digitalización Aplicada a los Sectores Productivos': 'Digitalización',
+            'Sostenibilidad Aplicada al Sistema Productivo': 'Sostenibilidad',
+            'Fase de Formación en Empresa': 'FFE',
+            'Inglés Profesional': 'Inglés'
+          };
+          return mapa[nombre] || (nombre.length > 12 ? nombre.slice(0, 10) + '…' : nombre);
+        },
+
         get videoclasesFiltradas() {
           let lista = this.todasLasClases;
           if (this.filtroClaseAsignatura) {
@@ -4391,7 +7637,16 @@ def dashboard_html():
           if (this.flashcardFiltroAsig) {
             lista = lista.filter(f => f.asignatura === this.flashcardFiltroAsig);
           }
+          if (this.flashcardBusqueda && this.flashcardBusqueda.trim()) {
+            const q = this.flashcardBusqueda.toLowerCase().trim();
+            lista = lista.filter(f => (f.anverso || '').toLowerCase().includes(q) || (f.reverso || '').toLowerCase().includes(q));
+          }
           return lista;
+        },
+
+        get flashcardsPorcentajeProgreso() {
+          if (!this.flashcardsFiltradas.length) return 0;
+          return Math.round(((this.flashcardIndice + 1) / this.flashcardsFiltradas.length) * 100);
         },
 
         get tarjetaActual() {
@@ -4409,6 +7664,192 @@ def dashboard_html():
           return [...asigs].sort();
         },
 
+        get unidadesUnificadasAsignaturaActual() {
+          if (!this.asigSeleccionada) return [];
+          const asig = this.asigSeleccionada;
+          const temasMap = {};
+          const otrosDocs = [];
+
+          // 1. Mapear PDFs de temarios
+          (asig.materiales || []).forEach(m => {
+            const mStr = String(m || '').trim();
+            const match = mStr.match(/tema\\s*(\\d+)[\\.\\s_-]*(.*?)(?:\\.pdf|$)/i);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              const nom = (match[2] || '').replace(/[\\.\\-_]/g, ' ').trim() || ('Tema ' + num);
+              if (!temasMap[num]) {
+                temasMap[num] = {
+                  numero: num,
+                  titulo: nom,
+                  pdf: mStr,
+                  guia: null,
+                  test: null
+                };
+              } else {
+                temasMap[num].pdf = mStr;
+                if (!temasMap[num].titulo) temasMap[num].titulo = nom;
+              }
+            } else {
+              otrosDocs.push(mStr);
+            }
+          });
+
+          // 2. Asociar Guías de Estudio IA
+          (asig.guias || []).forEach(g => {
+            const match = g.match(/tema_(\\d+)/i);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!temasMap[num]) {
+                temasMap[num] = { numero: num, titulo: 'Tema ' + num, pdf: null, guia: g, test: null };
+              } else {
+                temasMap[num].guia = g;
+              }
+            }
+          });
+
+          // 3. Asociar Tests y Simulacros
+          (asig.tests || []).forEach(t => {
+            const match = t.match(/tema_(\\d+)/i);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!temasMap[num]) {
+                temasMap[num] = { numero: num, titulo: 'Tema ' + num, pdf: null, guia: null, test: t };
+              } else {
+                temasMap[num].test = t;
+              }
+            }
+          });
+
+          // 4. Vincular estado personal (Por hacer, En proceso, Hecho) y fecha en el calendario
+          Object.values(temasMap).forEach(tm => {
+            const evAgenda = this.obtenerEventoAgendaDeTema(tm.numero, tm.titulo);
+            tm.eventoAgenda = evAgenda;
+            tm.fecha_dia = evAgenda?.fecha_dia || null;
+            tm.estado = this.obtenerEstadoDeTema(asig.nombre, tm.numero, evAgenda);
+          });
+
+          return {
+            temas: Object.values(temasMap).sort((a, b) => a.numero - b.numero),
+            otrosDocumentos: otrosDocs
+          };
+        },
+
+        async cargarTemasEstado() {
+          try {
+            const guardado = localStorage.getItem('nova_temas_estado');
+            if (guardado) this.temasEstado = JSON.parse(guardado);
+          } catch(e) {}
+          try {
+            const res = await fetch('/api/temas-estado');
+            if (res.ok) {
+              const data = await res.json();
+              if (data && typeof data === 'object') {
+                this.temasEstado = Object.assign({}, this.temasEstado, data);
+                try { localStorage.setItem('nova_temas_estado', JSON.stringify(this.temasEstado)); } catch(e) {}
+              }
+            }
+          } catch(e) {}
+        },
+
+        obtenerEventoAgendaDeTema(numero, titulo = '') {
+          if (!this.asigSeleccionada) return null;
+          const asigNom = (this.asigSeleccionada.nombre || '').toLowerCase().trim();
+          return (this.agendaEventos || []).find(ev => {
+            const evAsig = (ev.asignatura || '').toLowerCase().trim();
+            if (evAsig !== asigNom && !asigNom.includes(evAsig) && !evAsig.includes(asigNom)) return false;
+            const tit = (ev.titulo || '').toLowerCase();
+            const regex = new RegExp('(?:tema|tem|t)\\\\s*0*' + numero + '(?:\\\\b|[^\\\\d])', 'i');
+            return regex.test(tit);
+          }) || null;
+        },
+
+        obtenerEstadoDeTema(asigNombre, numero, evAgenda) {
+          if (this.temasEstado && this.temasEstado[asigNombre] && this.temasEstado[asigNombre][numero]) {
+            return this.temasEstado[asigNombre][numero];
+          }
+          if (evAgenda) {
+            if (['Hecho', 'Vista', 'Vista no relevante'].includes(evAgenda.estado)) return 'Hecho';
+            if (evAgenda.estado === 'En proceso') return 'En proceso';
+          }
+          return 'Por hacer';
+        },
+
+        claseBadgeEstadoTema(estado) {
+          if (estado === 'Hecho') return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30';
+          if (estado === 'En proceso') return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/30';
+          return 'bg-gray-800/90 text-gray-400 border-gray-700/80 hover:bg-gray-800 hover:text-gray-200';
+        },
+
+        iconoEstadoTema(estado) {
+          if (estado === 'Hecho') return 'fa-solid fa-circle-check text-emerald-400';
+          if (estado === 'En proceso') return 'fa-solid fa-spinner text-cyan-400';
+          return 'fa-regular fa-circle text-gray-400';
+        },
+
+        formatearFechaCorta(fechaStr) {
+          if (!fechaStr) return '';
+          const partes = fechaStr.split('-');
+          if (partes.length !== 3) return fechaStr;
+          const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+          const mesIdx = parseInt(partes[1], 10) - 1;
+          const dia = parseInt(partes[2], 10);
+          return `${dia} ${meses[mesIdx] || ''}`;
+        },
+
+        async cambiarEstadoTema(tm, nuevoEstado) {
+          if (!this.asigSeleccionada) return;
+          const asig = this.asigSeleccionada.nombre;
+          if (!this.temasEstado) this.temasEstado = {};
+          if (!this.temasEstado[asig]) this.temasEstado[asig] = {};
+          this.temasEstado[asig][tm.numero] = nuevoEstado;
+          tm.estado = nuevoEstado;
+          try {
+            localStorage.setItem('nova_temas_estado', JSON.stringify(this.temasEstado));
+          } catch(e) {}
+
+          try {
+            await fetch('/api/asignatura/tema/estado', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: asig,
+                tema_num: tm.numero,
+                tema_titulo: tm.titulo,
+                estado: nuevoEstado
+              })
+            });
+            await this.cargarAgenda();
+          } catch(e) {
+            console.error('Error al guardar estado de tema:', e);
+          }
+        },
+
+        planificarTemaEnCalendario(tm) {
+          const asigNom = this.asigSeleccionada?.nombre || '';
+          const hoyStr = new Date().toISOString().slice(0, 10);
+          this.abrirModalNuevoItemAgenda('Tema', asigNom, hoyStr, 'calendario');
+          this.nuevoItemTitulo = `Tema ${tm.numero}: ${tm.titulo}`;
+          this.nuevoItemEstado = tm.estado === 'Hecho' ? 'Hecho' : (tm.estado === 'En proceso' ? 'En proceso' : 'Pendiente de empezar');
+        },
+
+        iniciarArrastreTema(event, tm) {
+          if (tm.eventoAgenda) {
+            this.iniciarArrastreItem(event, tm.eventoAgenda);
+          } else {
+            this.itemArrastrando = {
+              esTemaUnificado: true,
+              numero: tm.numero,
+              titulo: tm.titulo,
+              estado: tm.estado,
+              asignatura: this.asigSeleccionada?.nombre || ''
+            };
+            if (event?.dataTransfer) {
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', `tema_${tm.numero}`);
+            }
+          }
+        },
+
         async init() {
           if (window.marked) {
             marked.setOptions({
@@ -4418,16 +7859,194 @@ def dashboard_html():
           }
           window.addEventListener('popstate', () => this.procesarUrlInicial());
           await this.cargarUsuarioActual();
+          await this.cargarMiCampus();
+          this.cargarActividadReciente();
           await this.cargarProgramas();
           await this.cargarCatalogo();
           await this.cargarProgreso();
           await this.cargarVideoclases();
           await this.cargarAgenda();
+          await this.cargarTemasEstado();
           await this.cargarFlashcards();
           await this.cargarFeedback();
           await this.cargarModelosIa();
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
+        },
+
+        abrirModalMiCampus() {
+          this.miCampusMensajeError = '';
+          this.miCampusMensajeExito = '';
+          this.inputCanvasIcsUrl = this.miCampusConfig?.ics_url || '';
+          this.modalMiCampus = true;
+        },
+
+        async cargarMiCampus() {
+          try {
+            const res = await fetch('/api/mi-campus');
+            if (res.ok) {
+              const data = await res.json();
+              this.miCampusConfig = data.config || { conectado: false };
+              this.miCampusCursos = data.cursos || [];
+              this.miCampusCalificaciones = data.calificaciones_campus || [];
+              this.asignaturasFavoritas = this.miCampusConfig.asignaturas_favoritas || [];
+            }
+          } catch(e) { console.error(e); }
+        },
+
+        async conectarMiCampus() {
+          this.miCampusMensajeError = '';
+          this.miCampusMensajeExito = '';
+          if (!this.inputCanvasToken.trim() && !this.inputCanvasIcsUrl.trim() && !this.miCampusConfig?.conectado) {
+            this.miCampusMensajeError = 'Introduce tu Token de Acceso de Canvas UNIR o tu enlace de Calendario (.ics).';
+            return;
+          }
+          this.sincronizandoMiCampus = true;
+          try {
+            const res = await fetch('/api/mi-campus/conectar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                canvas_token: this.inputCanvasToken.trim() || null,
+                ics_url: this.inputCanvasIcsUrl.trim() || null,
+                token_expira: this.inputCanvasTokenExpira ? this.inputCanvasTokenExpira : null
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              this.miCampusMensajeError = data.detail || 'No se pudo conectar con el Campus UNIR.';
+              return;
+            }
+            this.inputCanvasToken = '';
+            this.miCampusMensajeExito = data.mensaje || '¡Campus UNIR sincronizado con éxito!';
+            await this.cargarMiCampus();
+            await this.cargarAgenda();
+          } catch(e) {
+            this.miCampusMensajeError = 'Error de red al conectar con el servidor.';
+          } finally {
+            this.sincronizandoMiCampus = false;
+          }
+        },
+
+        async desconectarMiCampus() {
+          if (!confirm('¿Desconectar tu cuenta personal de Canvas UNIR?')) return;
+          try {
+            await fetch('/api/mi-campus/desconectar', { method: 'POST' });
+            await this.cargarMiCampus();
+            await this.cargarAgenda();
+            this.miCampusMensajeExito = 'Cuenta de Campus desconectada.';
+          } catch(e) {}
+        },
+
+        async sincronizarMaterialesMiCampus() {
+          this.miCampusMensajeError = '';
+          this.miCampusMensajeExito = '';
+          this.sincronizandoMiCampus = true;
+          try {
+            const res = await fetch('/api/mi-campus/sincronizar-materiales', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) {
+              this.miCampusMensajeError = data.detail || 'No se pudieron sincronizar los PDFs.';
+              return;
+            }
+            this.miCampusMensajeExito = data.mensaje || '¡PDFs sincronizados en tu espacio privado!';
+            await this.cargarCatalogo();
+          } catch(e) {
+            this.miCampusMensajeError = 'Error de conexión al sincronizar materiales.';
+          } finally {
+            this.sincronizandoMiCampus = false;
+          }
+        },
+
+        esAsignaturaFavorita(nombre) {
+          return this.asignaturasFavoritas.includes(nombre);
+        },
+
+        async toggleAsignaturaFavorita(nombre) {
+          if (this.asignaturasFavoritas.includes(nombre)) {
+            this.asignaturasFavoritas = this.asignaturasFavoritas.filter(a => a !== nombre);
+          } else {
+            this.asignaturasFavoritas.push(nombre);
+          }
+          if (this.asignaturasFavoritas.length === 0) {
+            this.mostrarSoloFavoritas = false;
+          }
+          this.aplicarFiltroCatalogo();
+          try {
+            await fetch('/api/mi-campus/favoritas', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ asignaturas: this.asignaturasFavoritas })
+            });
+          } catch(e) {}
+        },
+
+        toggleSoloFavoritas() {
+          if (!this.mostrarSoloFavoritas && this.asignaturasFavoritas.length === 0) {
+            alert('Primero marca con la estrella ⭐ en las tarjetas las asignaturas que estás cursando.');
+            return;
+          }
+          this.mostrarSoloFavoritas = !this.mostrarSoloFavoritas;
+          this.aplicarFiltroCatalogo();
+        },
+
+        notaCampusDeAsignatura(nombreAsig) {
+          const c = (this.miCampusCursos || []).find(x => x.asignatura === nombreAsig);
+          return (c && c.nota_actual_campus !== null && c.nota_actual_campus !== undefined) ? c.nota_actual_campus : null;
+        },
+
+        abrirGeneradorDirecto(asig) {
+          this.asigSeleccionada = asig;
+          this.generadorPdfSeleccionado = asig.materiales?.[0] || '';
+          this.generadorTemaNombre = (asig.materiales?.[0] || 'Tema 1').replace('.pdf', '').replaceAll('_', ' ');
+          this.generadorProfundidad = 'robusta';
+          this.generadorNumPreguntas = 15;
+          this.generadorTipo = 'ambos';
+          this.modalGenerador = true;
+        },
+
+        _claveRecientesUsuario() {
+          const u = (this.usuarioActual && this.usuarioActual.username) ? this.usuarioActual.username.toLowerCase() : 'anon';
+          return 'unir_recientes_' + u;
+        },
+
+        cargarActividadReciente() {
+          try {
+            const raw = localStorage.getItem(this._claveRecientesUsuario());
+            this.actividadReciente = raw ? JSON.parse(raw) : [];
+          } catch(e) {
+            this.actividadReciente = [];
+          }
+        },
+
+        registrarActividadReciente(tipo, asignatura, titulo, valor) {
+          if (!titulo) return;
+          const id = `${tipo}:${asignatura}:${valor}`;
+          const nuevo = { id, tipo, asignatura: asignatura || 'Estudio', titulo, valor };
+          this.actividadReciente = [nuevo, ...this.actividadReciente.filter(x => x.id !== id)].slice(0, 8);
+          try {
+            localStorage.setItem(this._claveRecientesUsuario(), JSON.stringify(this.actividadReciente));
+          } catch(e) {}
+        },
+
+        limpiarActividadReciente() {
+          this.actividadReciente = [];
+          try {
+            localStorage.removeItem(this._claveRecientesUsuario());
+          } catch(e) {}
+        },
+
+        abrirItemReciente(item) {
+          if (!item) return;
+          const asigObj = this.catalogoTotal.find(a => a.nombre === item.asignatura);
+          if (asigObj) this.asigSeleccionada = asigObj;
+          if (item.tipo === 'pdf') {
+            this.abrirPdf(item.valor, item.titulo);
+          } else if (item.tipo === 'guia') {
+            this.verContenidoArchivo(item.valor);
+          } else if (item.tipo === 'test') {
+            this.iniciarTestWeb(item.asignatura, item.valor);
+          }
         },
 
         async cargarModelosIa() {
@@ -4912,9 +8531,17 @@ def dashboard_html():
             const nombreCurso = this.cursoFiltro === '2dam' ? '2º Curso' : '1º Curso';
             lista = lista.filter(a => a.curso === nombreCurso);
           }
+          if (this.mostrarSoloFavoritas && this.asignaturasFavoritas.length > 0) {
+            lista = lista.filter(a => this.asignaturasFavoritas.includes(a.nombre));
+          }
           if (this.busquedaTexto.trim()) {
             const q = this.busquedaTexto.toLowerCase();
-            lista = lista.filter(a => a.nombre.toLowerCase().includes(q) || a.materiales.some(m => m.toLowerCase().includes(q)));
+            lista = lista.filter(a =>
+              a.nombre.toLowerCase().includes(q) ||
+              a.materiales.some(m => m.toLowerCase().includes(q)) ||
+              (a.guias || []).some(g => g.toLowerCase().includes(q)) ||
+              (a.tests || []).some(t => t.toLowerCase().includes(q))
+            );
           }
           this.catalogoFiltrado = lista;
         },
@@ -5355,6 +8982,7 @@ def dashboard_html():
             this.modalVisor = true;
             this.modalTest = false;
             this.modalVisorPdf = false;
+            this.registrarActividadReciente('guia', this.asigSeleccionada?.nombre || 'Guía', tituloLimpio.replace(/ guia$/i, ''), ruta);
             const url = '/?guia=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '');
             if (window.history && window.history.pushState) {
               window.history.pushState({ guia: ruta }, '', url);
@@ -5439,6 +9067,7 @@ def dashboard_html():
             this.modalTest = true;
             this.modalVisor = false;
             this.modalVisorPdf = false;
+            this.registrarActividadReciente('test', asignatura, testNombre.replace('_test', '').replaceAll('_', ' '), testNombre);
             const url = '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura);
             if (window.history && window.history.pushState) {
               window.history.pushState({ test: testNombre, asig: asignatura }, '', url);
@@ -5666,6 +9295,7 @@ def dashboard_html():
           try {
             const res = await fetch('/api/agenda');
             this.agendaEventos = await res.json();
+            this.comprobarRecordatoriosPendientes();
           } catch(e) { console.error(e); }
         },
 
@@ -5700,6 +9330,15 @@ def dashboard_html():
         filtrarFlashcards() {
           this.flashcardIndice = 0;
           this.flashcardVolteada = false;
+          this.flashcardSesionCompletada = false;
+          this.flashcardStatsSesion = { facil: 0, medio: 0, dificil: 0 };
+        },
+
+        reiniciarMazoFlashcards() {
+          this.flashcardIndice = 0;
+          this.flashcardVolteada = false;
+          this.flashcardSesionCompletada = false;
+          this.flashcardStatsSesion = { facil: 0, medio: 0, dificil: 0 };
         },
 
         siguienteFlashcard() {
@@ -5707,12 +9346,15 @@ def dashboard_html():
             this.flashcardIndice++;
             this.flashcardVolteada = false;
           } else {
-            this.flashcardIndice = 0;
-            this.flashcardVolteada = false;
+            this.flashcardSesionCompletada = true;
           }
         },
 
         anteriorFlashcard() {
+          if (this.flashcardSesionCompletada) {
+            this.flashcardSesionCompletada = false;
+            return;
+          }
           if (this.flashcardIndice > 0) {
             this.flashcardIndice--;
             this.flashcardVolteada = false;
@@ -5721,6 +9363,9 @@ def dashboard_html():
 
         async calificarTarjeta(dificultad) {
           if (!this.tarjetaActual) return;
+          if (this.flashcardStatsSesion[dificultad] !== undefined) {
+            this.flashcardStatsSesion[dificultad]++;
+          }
           try {
             await fetch('/api/flashcards/calificar', {
               method: 'POST',
@@ -5826,6 +9471,7 @@ def dashboard_html():
           this.modalVisorPdf = true;
           this.modalVisor = false;
           this.modalTest = false;
+          this.registrarActividadReciente('pdf', this.asigSeleccionada?.nombre || 'Temario', titulo, ruta);
           const url = '/?pdf=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '');
           if (window.history && window.history.pushState) {
             window.history.pushState({ pdf: ruta }, '', url);
