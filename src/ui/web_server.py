@@ -3740,53 +3740,6 @@ def dashboard_html():
             </div>
           </div>
         </div>
-        </div>
-
-        <!-- REJILLA GENERAL SI NO HAY ASIGNATURA SELECCIONADA -->
-        <div x-show="!asigSeleccionada" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <template x-for="asig in catalogoFiltrado" :key="'tab-asig-' + asig.nombre">
-            <div @click="abrirAsignatura(asig)"
-                 class="group rounded-3xl overflow-hidden bg-surface-5 border border-gray-800/90 hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/30 transition-all duration-200 cursor-pointer flex flex-col justify-between relative">
-              <div>
-                <div class="h-32 relative overflow-hidden">
-                  <img :src="temaVisualAsignatura(asig.nombre).imagen"
-                       :alt="asig.nombre"
-                       loading="lazy"
-                       class="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 opacity-65">
-                  <div class="absolute inset-0 bg-gradient-to-t from-surface-5 via-surface-5/45 to-transparent"></div>
-                  <div class="absolute inset-0 opacity-45 mix-blend-overlay" :class="temaVisualAsignatura(asig.nombre).gradiente"></div>
-                  <div class="absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
-                    <span class="text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-100 border border-white/10" x-text="asig.curso"></span>
-                    <a :href="'/?asig=' + encodeURIComponent(asig.nombre)" target="_blank" @click.stop="" title="Abrir en pestaña nueva" class="w-7 h-7 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-300 hover:text-cyan-300 flex items-center justify-center border border-white/10">
-                      <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                    </a>
-                  </div>
-                  <div class="absolute bottom-2 left-5 right-5 flex items-end justify-between z-10">
-                    <div class="flex items-center gap-2.5">
-                      <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border border-white/20 backdrop-blur-md text-white text-base"
-                           :class="temaVisualAsignatura(asig.nombre).badgeBg">
-                        <i :class="temaVisualAsignatura(asig.nombre).icono"></i>
-                      </div>
-                      <span class="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border backdrop-blur-md"
-                            :class="temaVisualAsignatura(asig.nombre).chipClase"
-                            x-text="temaVisualAsignatura(asig.nombre).siglas"></span>
-                    </div>
-                  </div>
-                </div>
-                <div class="px-5 pt-2 pb-1">
-                  <h3 class="text-base font-extrabold text-white group-hover:text-cyan-300 transition" x-text="asig.nombre"></h3>
-                  <p class="text-xs text-gray-400 mt-0.5 line-clamp-1" x-text="temaVisualAsignatura(asig.nombre).subtitulo"></p>
-                </div>
-              </div>
-
-              <div class="px-5 pb-5 pt-3 mt-2 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-300 font-semibold">
-                <span class="flex items-center gap-1.5"><i class="fa-regular fa-file-pdf text-rose-400"></i><span x-text="asig.total_materiales + ' PDFs'"></span></span>
-                <span class="flex items-center gap-1.5"><i class="fa-solid fa-video text-amber-400"></i><span x-text="asig.total_clases + ' clases'"></span></span>
-                <span class="text-emerald-400 font-bold flex items-center gap-1.5"><i class="fa-solid fa-bolt"></i><span x-text="asig.tests.length + ' tests'"></span></span>
-              </div>
-            </div>
-          </template>
-        </div>
       </div>
 
       <!-- ==================== 3. VISTA EXPEDIENTE Y CALIFICACIONES ==================== -->
