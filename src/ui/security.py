@@ -158,9 +158,9 @@ _SUFIJOS_NUBE_PERMITIDOS = (
 
 _INTENTOS_FALLIDOS: Dict[str, List[float]] = {}
 _BLOQUEOS_HASTA: Dict[str, float] = {}
-MAX_INTENTOS_FALLIDOS = 5
+MAX_INTENTOS_FALLIDOS = 10
 VENTANA_INTENTOS_SEG = 60
-DURACION_BLOQUEO_SEG = 300  # 5 minutos de bloqueo temporal
+DURACION_BLOQUEO_SEG = 180  # 3 minutos de bloqueo temporal
 
 
 def _aplicar_cabeceras_seguridad(response: Response) -> Response:
@@ -638,11 +638,14 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
                     )
                 )
 
-        if cookie_token:
-            _registrar_intento_fallido(ip_cliente)
-
+        # Si la cookie enviada ya no es válida (sesión caducada tras reinicio del servidor o logout),
+        # limpiamos la cookie de la respuesta para evitar bucles y no penalizamos como ataque de fuerza bruta.
         if request.url.path.startswith("/api/"):
-            return _aplicar_cabeceras_seguridad(
-                JSONResponse({"detail": "Se necesita iniciar sesión en la plataforma"}, status_code=401)
-            )
-        return _aplicar_cabeceras_seguridad(HTMLResponse(_PAGINA_TOKEN, status_code=401))
+            resp = JSONResponse({"detail": "Se necesita iniciar sesión en la plataforma"}, status_code=401)
+        else:
+            resp = HTMLResponse(_PAGINA_TOKEN, status_code=401)
+
+        if cookie_token:
+            resp.delete_cookie(COOKIE_TOKEN)
+
+        return _aplicar_cabeceras_seguridad(resp)
