@@ -250,7 +250,9 @@ def sincronizar_calendario_notion_dam() -> List[Dict[str, Any]]:
             val = cal_blocks.get(bid, {}).get("value", {}).get("value", {})
             props = val.get("properties", {})
             tipo_notion = "".join([t[0] for t in props.get("kcol", []) if isinstance(t, list) and t]).strip()
-            if not tipo_notion:
+            # El calendario oficial solo debe contener las Clases en directo y las Entregas reales (PACs/Proyectos).
+            # Los temas teóricos y tests no deben saturar el calendario salvo que el usuario los añada manualmente.
+            if tipo_notion not in ("Clase", "Actividad", "Proyecto", "FFE", "Formulario"):
                 continue
 
             title = "".join([t[0] for t in props.get("title", []) if isinstance(t, list) and t]).strip()

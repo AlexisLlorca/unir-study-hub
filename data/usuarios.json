@@ -2,8 +2,8 @@
   {
     "username": "alexking44",
     "nombre": "Alex (Administrador)",
-    "password_hash": "6f0d9b8d8a512d85aaf34ee25d136c5fb5e79494907416f0e2d94b271371a177",
-    "salt": "bbd956773a0976dd48eb1b38a59dcc7b",
+    "password_hash": "a2789e4af4c09e816b17de8c467c5bda857d495532245e33434b79827c836287",
+    "salt": "0448682a5e10e28be34423d5c3989060",
     "rol": "admin",
     "activo": 1,
     "creado_en": "2026-10-29 18:15:09",
