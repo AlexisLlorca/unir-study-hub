@@ -1552,12 +1552,25 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
 
         combinados.append(ev_c)
 
-    # Añadir entregas personales adicionales del alumno en Canvas
+    # Añadir exclusivamente entregas (tareas/PACs) personales adicionales del alumno en Canvas que no existan en el calendario oficial
     for e_user in entregas_est:
+        # NUNCA añadir sesiones lectivas o clases de Canvas como entregas
+        if e_user.get("tipo") != "tarea":
+            continue
         if e_user.get("id") not in usados_ids:
+            f_iso = e_user.get("fecha_iso") or ""
+            f_dia = f_iso[:10] if len(f_iso) >= 10 else ""
+            asig_k = (e_user.get("asignatura") or "").lower().strip()
+            # Evitar duplicar tareas que ya figuren en el calendario por fecha y asignatura
+            ya_existe = any(
+                (c.get("fecha_dia") == f_dia and (c.get("asignatura") or "").lower().strip() == asig_k and c.get("tipo") == "tarea")
+                for c in combinados
+            )
+            if ya_existe:
+                continue
+
             e_copia = dict(e_user)
-            f_iso = e_copia.get("fecha_iso") or ""
-            e_copia["fecha_dia"] = f_iso[:10] if len(f_iso) >= 10 else ""
+            e_copia["fecha_dia"] = f_dia
             e_copia["hora_inicio"] = f_iso[11:16] if len(f_iso) >= 16 else "23:59"
             e_copia["categoria"] = "Actividad"
             e_copia["estado"] = "Hecho" if e_copia.get("entregada") else "No entregado"
