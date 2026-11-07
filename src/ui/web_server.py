@@ -2697,12 +2697,17 @@ def dashboard_html():
 
         <!-- BOTÓN CONECTAR MI CAMPUS UNIR (CANVAS PERSONAL) -->
         <button @click="abrirModalMiCampus()"
-                :class="miCampusConfig?.conectado ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-indigo-300 hover:border-indigo-500/30'"
-                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
-                :title="miCampusConfig?.conectado ? ('Campus UNIR conectado: ' + (miCampusConfig?.alumno_nombre || 'Activo')) : 'Conectar mi cuenta personal del Campus UNIR (Canvas)'">
-          <span class="h-2 w-2 rounded-full" :class="miCampusConfig?.conectado ? 'bg-indigo-400 animate-pulse' : 'bg-gray-500'"></span>
-          <i class="fa-solid fa-building-columns text-[10px]" :class="miCampusConfig?.conectado ? 'text-indigo-400' : 'text-gray-400'"></i>
+                :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : (miCampusConfig?.conectado ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-indigo-300 hover:border-indigo-500/30'))"
+                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm relative"
+                :title="miCampusConfig?.token_estado?.estado === 'caducado' ? '¡Tu Token de Canvas ha caducado!' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? ('¡Atención! Tu Token de Canvas caduca en ' + (miCampusConfig?.token_estado?.dias_restantes ?? 0) + ' días') : (miCampusConfig?.conectado ? ('Campus UNIR: ' + (miCampusConfig?.alumno_nombre || 'Activo')) : 'Conectar mi cuenta personal del Campus UNIR (Canvas)'))">
+          <span class="h-2 w-2 rounded-full" :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'bg-rose-500 animate-ping' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? 'bg-amber-400 animate-ping' : (miCampusConfig?.conectado ? 'bg-indigo-400 animate-pulse' : 'bg-gray-500'))"></span>
+          <i class="fa-solid fa-building-columns text-[10px]" :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'text-rose-400' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? 'text-amber-400' : (miCampusConfig?.conectado ? 'text-indigo-400' : 'text-gray-400'))"></i>
           <span class="hidden sm:inline font-medium" x-text="miCampusConfig?.conectado ? 'Mi Campus' : 'Campus'"></span>
+          <span x-show="miCampusConfig?.token_estado?.estado === 'por_caducar' || miCampusConfig?.token_estado?.estado === 'caducado'"
+                class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black text-white shadow-md"
+                :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'bg-rose-600' : 'bg-amber-500'">
+            !
+          </span>
         </button>
 
         <!-- BOTÓN MI KEY / TOKENS PRIVADOS (BYOK) -->
@@ -2824,6 +2829,35 @@ def dashboard_html():
             </div>
           </div>
         </div>
+
+        <!-- BANNER DE ALERTA: TOKEN DE CANVAS POR CADUCAR O CADUCADO -->
+        <template x-if="miCampusConfig?.conectado && (miCampusConfig?.token_estado?.estado === 'por_caducar' || miCampusConfig?.token_estado?.estado === 'caducado')">
+          <div class="p-4 rounded-2xl border transition shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4"
+               :class="miCampusConfig.token_estado.estado === 'caducado' ? 'bg-rose-950/40 border-rose-500/50 text-rose-200 shadow-rose-950/20' : 'bg-amber-950/40 border-amber-500/50 text-amber-200 shadow-amber-950/20'">
+            <div class="flex items-start sm:items-center gap-3.5">
+              <div class="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 text-xl shadow-md"
+                   :class="miCampusConfig.token_estado.estado === 'caducado' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'">
+                <i :class="miCampusConfig.token_estado.estado === 'caducado' ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-clock-rotate-left'"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-extrabold text-white flex items-center gap-2">
+                  <span x-text="miCampusConfig.token_estado.estado === 'caducado' ? '⛔ Tu Token de Canvas UNIR ha caducado' : ('⚠️ Tu Token de Canvas UNIR está por caducar (' + (miCampusConfig.token_estado.dias_restantes ?? 0) + ' días restantes)')"></span>
+                </h4>
+                <p class="text-xs text-gray-300 mt-1">
+                  <span x-text="miCampusConfig.token_estado.estado === 'caducado' ? 'Tus PDFs descargados están seguros, pero necesitas renovar el token para seguir sincronizando notas, PACs y temas.' : 'Renuévalo ahora en 1 minuto para no perder la sincronización nocturna ni la descarga de nuevos materiales de estudio.'"></span>
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button @click="abrirModalMiCampus()"
+                      class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black transition shadow-lg flex items-center justify-center gap-2"
+                      :class="miCampusConfig.token_estado.estado === 'caducado' ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-amber-500 hover:bg-amber-400 text-black'">
+                <i class="fa-solid fa-key"></i>
+                <span>Renovar Token de Canvas</span>
+              </button>
+            </div>
+          </div>
+        </template>
 
         <!-- WORKSPACE ORGANIZADOR ESTILO NOTION (TO-DO HOY + TO-DO SEMANA + CALENDARIO CON TARJETAS DE ESTADO) -->
         <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
@@ -5977,47 +6011,44 @@ def dashboard_html():
           </div>
         </template>
 
-        <!-- OPCIÓN A: ENLACE .ICS (RECOMENDADO: NO CADUCA) -->
-        <div class="p-3.5 bg-gray-950/80 border border-gray-800 rounded-2xl text-xs text-gray-300 space-y-2">
+        <!-- TOKEN PERSONAL DE ACCESO DE CANVAS UNIR -->
+        <div class="p-4 bg-gray-950/90 border border-gray-800 rounded-2xl text-xs text-gray-300 space-y-3">
           <div class="flex items-center justify-between">
-            <p class="font-bold text-amber-400 flex items-center gap-1.5">
-              <i class="fa-solid fa-calendar-check"></i>
-              <span>Opción A (Recomendada): Enlace de Calendario (.ics)</span>
+            <p class="font-bold text-cyan-400 flex items-center gap-2">
+              <i class="fa-solid fa-key text-cyan-400"></i>
+              <span>Token de Acceso de Canvas UNIR</span>
             </p>
-            <span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">¡No caduca nunca!</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-bold">Vigencia 30 días</span>
           </div>
           <p class="text-[11px] text-gray-400 leading-relaxed">
-            Sincroniza tus entregas, clases y sesiones automáticamente sin necesidad de renovar cada 30 días.
-            Entra en <a href="https://campusfp.unir.net/calendar" target="_blank" class="text-amber-400 hover:underline font-semibold">Calendario de Canvas</a> → abajo a la derecha pulsa <strong>«Alimentación del calendario»</strong> y pega aquí el enlace <code class="text-amber-300">.ics</code>:
+            Conecta tu Canvas personal para sincronizar tus <strong>asignaturas</strong>, <strong>entregas/PACs</strong>, <strong>calificaciones oficiales</strong> y permitir la descarga de <strong>PDFs de temarios</strong>.
           </p>
-          <input type="text"
-                 x-model="inputCanvasIcsUrl"
-                 placeholder="https://campusfp.unir.net/feeds/calendars/user_xxxx.ics"
-                 class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3.5 py-2.5 text-xs text-amber-300 outline-none focus:border-amber-500 font-mono transition">
-        </div>
-
-        <!-- OPCIÓN B: TOKEN PERSONAL (DESCARGA DE PDFS Y NOTAS) -->
-        <div class="p-3.5 bg-gray-950/80 border border-gray-800 rounded-2xl text-xs text-gray-300 space-y-2">
-          <div class="flex items-center justify-between">
-            <p class="font-bold text-cyan-400 flex items-center gap-1.5">
-              <i class="fa-solid fa-graduation-cap"></i>
-              <span>Opción B: Token de Canvas (Para PDFs y Notas)</span>
-            </p>
-            <span class="text-[9px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 font-bold">Vigencia 30 días</span>
+          <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/80 text-[11px] text-gray-300 space-y-1">
+            <div class="font-semibold text-gray-200 flex items-center gap-1.5"><i class="fa-solid fa-circle-info text-cyan-400 text-[10px]"></i> ¿Cómo obtener tu token en 1 minuto?</div>
+            <ol class="list-decimal list-inside space-y-0.5 text-gray-400 pl-1">
+              <li>Entra en tu <a href="https://campusfp.unir.net/profile/settings" target="_blank" class="text-cyan-400 hover:underline font-bold">Perfil UNIR → Integraciones aprobadas</a>.</li>
+              <li>Pulsa el botón <strong>«+ Nuevo token de acceso»</strong>.</li>
+              <li>En "Propósito" escribe <em>Study Hub</em> y genera el token.</li>
+              <li>Copia el token generado y pégalo aquí abajo:</li>
+            </ol>
           </div>
-          <p class="text-[11px] text-gray-400">
-            Necesario para que el servidor pueda <strong>descargar los PDFs</strong> de tus asignaturas o traer tus <strong>calificaciones reales</strong>.
-            En tu <a href="https://campusfp.unir.net/profile/settings" target="_blank" class="text-cyan-400 hover:underline font-semibold">Perfil UNIR → Integraciones aprobadas</a> pulsa <strong>«+ Nuevo token de acceso»</strong>:
-          </p>
-          <input type="password"
-                 x-model="inputCanvasToken"
-                 placeholder="Ej: 11842~aBcDeFgHiJkLmNoPqRsTuVwXyZ..."
-                 class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3.5 py-2.5 text-xs text-indigo-300 outline-none focus:border-indigo-500 font-mono transition mt-1">
-          <div class="flex items-center gap-2 mt-2">
-            <label class="text-[10px] text-gray-400">Fecha de vencimiento (la que pusiste en Canvas):</label>
+
+          <div>
+            <label class="block text-[11px] font-bold text-gray-300 mb-1">Pega aquí tu Token de Canvas:</label>
+            <input type="password"
+                   x-model="inputCanvasToken"
+                   placeholder="Ej: 11842~aBcDeFgHiJkLmNoPqRsTuVwXyZ..."
+                   class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3.5 py-2.5 text-xs text-indigo-300 outline-none focus:border-cyan-500 font-mono transition">
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800/80">
+            <label class="text-[10px] text-gray-400 flex items-center gap-1">
+              <i class="fa-regular fa-calendar text-gray-500"></i>
+              <span>Fecha de vencimiento (la que pusiste en Canvas, o se calculará a 30 días):</span>
+            </label>
             <input type="date"
                    x-model="inputCanvasTokenExpira"
-                   class="bg-gray-900 border border-gray-800 rounded-lg px-2 py-1 text-[11px] text-gray-300 outline-none focus:border-cyan-500">
+                   class="bg-gray-900 border border-gray-800 rounded-lg px-2.5 py-1 text-[11px] text-gray-300 outline-none focus:border-cyan-500">
           </div>
         </div>
 
@@ -6478,7 +6509,14 @@ def dashboard_html():
           <h4 class="text-xs font-bold text-white mt-1 break-words" x-text="alerta.titulo"></h4>
           <p class="text-[11px] text-gray-300 truncate mt-0.5" x-text="alerta.asignatura"></p>
           <div class="flex items-center gap-2 mt-2 pt-1.5 border-t border-gray-800">
-            <button @click="abrirAsignaturaPorNombre(alerta.asignatura); descartarToastAlerta(alerta.id)" class="text-[10px] text-cyan-400 hover:underline font-bold">Ver materia →</button>
+            <template x-if="alerta.accion === 'campus'">
+              <button @click="abrirModalMiCampus(); descartarToastAlerta(alerta.id)" class="text-[10px] text-amber-400 hover:underline font-bold flex items-center gap-1">
+                <i class="fa-solid fa-key text-[9px]"></i> <span>Renovar Token →</span>
+              </button>
+            </template>
+            <template x-if="!alerta.accion">
+              <button @click="abrirAsignaturaPorNombre(alerta.asignatura); descartarToastAlerta(alerta.id)" class="text-[10px] text-cyan-400 hover:underline font-bold">Ver materia →</button>
+            </template>
             <button @click="descartarToastAlerta(alerta.id)" class="text-[10px] text-gray-400 hover:text-white ml-auto">Descartar</button>
           </div>
         </div>
@@ -7939,7 +7977,11 @@ def dashboard_html():
         },
 
         get totalAlertasProximasCount() {
-          return (this.alertasProximas || []).length;
+          let count = (this.alertasProximas || []).length;
+          if (this.miCampusConfig?.conectado && (this.miCampusConfig?.token_estado?.estado === 'por_caducar' || this.miCampusConfig?.token_estado?.estado === 'caducado')) {
+            count += 1;
+          }
+          return count;
         },
 
         get alertasProximas() {
@@ -7975,6 +8017,48 @@ def dashboard_html():
 
         verificarAlertasTiempo() {
           if (!this.alertasConfig || !this.alertasConfig.activo) return;
+
+          // 1. Alerta de caducidad o vencimiento inminente del Token de Canvas
+          if (this.miCampusConfig?.conectado && (this.miCampusConfig?.token_estado?.estado === 'por_caducar' || this.miCampusConfig?.token_estado?.estado === 'caducado')) {
+            const estadoTok = this.miCampusConfig.token_estado.estado;
+            const diasRest = this.miCampusConfig.token_estado.dias_restantes;
+            const hoyStr = new Date().toISOString().slice(0, 10);
+            const tokenAlertKey = `alerta_token_${estadoTok}_${diasRest ?? 0}_${hoyStr}`;
+            if (!this.alertasDisparadasIds.includes(tokenAlertKey)) {
+              this.alertasDisparadasIds.push(tokenAlertKey);
+              try {
+                localStorage.setItem('nova_alertas_disparadas', JSON.stringify(this.alertasDisparadasIds.slice(-50)));
+              } catch(e) {}
+
+              const esCad = estadoTok === 'caducado';
+              const tituloAlerta = esCad ? '⛔ Token de Canvas Caducado' : `⚠️ Token de Canvas caduca en ${diasRest} días`;
+              const msgAlerta = esCad ? 'Renuévalo en Mi Campus para seguir sincronizando notas y materiales' : 'Genera un nuevo token en tu perfil de Canvas para no perder la sincronización';
+
+              if (this.alertasConfig.sonido) {
+                this.reproducirSonidoAlerta();
+              }
+              if (this.notificacionesSoportadas && this.permisoNotificaciones === 'granted') {
+                try {
+                  new Notification(tituloAlerta, { body: msgAlerta });
+                } catch(e) {}
+              }
+
+              const toastId = 'toast_token_' + Date.now();
+              this.alertasActivasToast.unshift({
+                id: toastId,
+                badge: 'Campus UNIR',
+                titulo: tituloAlerta,
+                asignatura: msgAlerta,
+                tiempoRestanteTexto: esCad ? '¡Expirado!' : `Quedan ${diasRest}d`,
+                accion: 'campus'
+              });
+
+              setTimeout(() => {
+                this.descartarToastAlerta(toastId);
+              }, 25000);
+            }
+          }
+
           if (!this.agendaEventos || !this.agendaEventos.length) return;
 
           const ahora = new Date().getTime();
@@ -8531,7 +8615,6 @@ def dashboard_html():
         abrirModalMiCampus() {
           this.miCampusMensajeError = '';
           this.miCampusMensajeExito = '';
-          this.inputCanvasIcsUrl = this.miCampusConfig?.ics_url || '';
           this.modalMiCampus = true;
         },
 
@@ -8551,8 +8634,8 @@ def dashboard_html():
         async conectarMiCampus() {
           this.miCampusMensajeError = '';
           this.miCampusMensajeExito = '';
-          if (!this.inputCanvasToken.trim() && !this.inputCanvasIcsUrl.trim() && !this.miCampusConfig?.conectado) {
-            this.miCampusMensajeError = 'Introduce tu Token de Acceso de Canvas UNIR o tu enlace de Calendario (.ics).';
+          if (!this.inputCanvasToken.trim() && !this.miCampusConfig?.conectado) {
+            this.miCampusMensajeError = 'Introduce tu Token de Acceso personal de Canvas UNIR.';
             return;
           }
           this.sincronizandoMiCampus = true;
@@ -8562,7 +8645,6 @@ def dashboard_html():
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 canvas_token: this.inputCanvasToken.trim() || null,
-                ics_url: this.inputCanvasIcsUrl.trim() || null,
                 token_expira: this.inputCanvasTokenExpira ? this.inputCanvasTokenExpira : null
               })
             });

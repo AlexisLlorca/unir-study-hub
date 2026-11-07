@@ -25,7 +25,7 @@ from src.crawler.agenda_sync import calcular_dias_restantes
 
 DEFAULT_CANVAS_BASE_URL = "https://campusfp.unir.net"
 TOKEN_DIAS_MAX = 30   # UNIR limita los tokens personales a 30 días
-TOKEN_DIAS_AVISO = 5  # Avisar al alumno cuando queden 5 días o menos
+TOKEN_DIAS_AVISO = 7  # Avisar al alumno cuando queden 7 días o menos antes de expirar
 
 
 def _archivos_canvas_usuario(username: str) -> Tuple[Path, Path]:
