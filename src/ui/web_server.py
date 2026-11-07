@@ -44,6 +44,7 @@ from src.core.academic_structure import (
     reorganizar_biblioteca_completa,
     sincronizar_estudios_externos,
     obtener_info_asignatura,
+    normalizar_nombre_asignatura,
 )
 from src.core.progress_tracker import GestorProgreso
 from src.core.config import RESPALDO_DIR, get_hub_access_token
@@ -1458,6 +1459,59 @@ class EstadoTemaReq(BaseModel):
     fecha_dia: Optional[str] = None
 
 
+ACRONIMOS_DAM_CANONICOS = {
+    "ad": "Acceso a Datos",
+    "di": "Desarrollo de Interfaces",
+    "pmdm": "Programación Multimedia y Dispositivos Móviles",
+    "psp": "Programación de Servicios y Procesos",
+    "sge": "Sistemas de Gestión Empresarial",
+    "nube": "Arquitecturas en la Nube",
+    "cloud": "Arquitecturas en la Nube",
+    "proy": "Proyecto Intermodular DAM",
+    "proyecto": "Proyecto Intermodular DAM",
+    "ffe": "Formación en Empresa (FFE)",
+    "dig": "Digitalización Aplicada",
+    "sost": "Sostenibilidad Aplicada",
+    "ing": "Inglés Profesional",
+    "ipe": "Itinerario para la Empleabilidad II",
+    "ipe2": "Itinerario para la Empleabilidad II",
+    "ipe ii": "Itinerario para la Empleabilidad II",
+}
+
+
+def normalizar_etiqueta_asignatura(nombre: str) -> str:
+    """Normaliza cualquier nombre, código de grupo (ej: Grupo 3) o acrónimo (AD, PMDM, SGE...) al nombre canónico."""
+    if not nombre:
+        return ""
+    limpio = re.sub(r"\(grupo\s*\d+\)", "", nombre, flags=re.IGNORECASE).strip()
+    limpio = re.sub(r"\[.*?\]", "", limpio).strip()
+    k = limpio.lower().strip()
+    if k in ACRONIMOS_DAM_CANONICOS:
+        return ACRONIMOS_DAM_CANONICOS[k]
+    res = normalizar_nombre_asignatura(limpio)
+    k_res = res.lower().strip()
+    if k_res in ACRONIMOS_DAM_CANONICOS:
+        return ACRONIMOS_DAM_CANONICOS[k_res]
+    if "digitali" in k_res:
+        return "Digitalización Aplicada"
+    if "formaci" in k_res or "ffe" in k_res:
+        return "Formación en Empresa (FFE)"
+    if "sostenib" in k_res:
+        return "Sostenibilidad Aplicada"
+    return res
+
+
+def son_misma_asignatura(asig1: str, asig2: str) -> bool:
+    """Comprueba si dos textos de asignatura corresponden a la misma materia, tolerando variantes y acrónimos."""
+    if not asig1 or not asig2:
+        return False
+    n1 = normalizar_etiqueta_asignatura(asig1).lower().strip()
+    n2 = normalizar_etiqueta_asignatura(asig2).lower().strip()
+    if n1 == n2:
+        return True
+    return (n1 in n2) or (n2 in n1)
+
+
 def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]:
     """
     Combina el calendario oficial DAM 2026-2027 (clases, tutorías, entregas PAC, temas y tests)
@@ -1476,9 +1530,9 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
     entregas_est = datos_est.get("entregas", []) if datos_est.get("config", {}).get("conectado") else []
     for e_user in entregas_est:
         f_dia = (e_user.get("fecha_iso") or "")[:10]
-        asig_k = (e_user.get("asignatura") or "").lower().strip()
-        if asig_k and f_dia:
-            por_asig_fecha[(asig_k, f_dia)] = e_user
+        asig_norm = normalizar_etiqueta_asignatura(e_user.get("asignatura") or "").lower().strip()
+        if asig_norm and f_dia:
+            por_asig_fecha[(asig_norm, f_dia)] = e_user
 
     combinados = []
     usados_ids = set()
@@ -1530,9 +1584,16 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
 
         # Si el alumno conectó Canvas y esta entrega figura entregada/calificada en su Canvas
         if ev_c.get("tipo") == "tarea":
-            asig_k = (ev_c.get("asignatura") or "").lower().strip()
+            asig_norm = normalizar_etiqueta_asignatura(ev_c.get("asignatura") or "").lower().strip()
             f_dia = ev_c.get("fecha_dia") or (ev_c.get("fecha_iso") or "")[:10]
-            match = por_asig_fecha.get((asig_k, f_dia))
+            # 1. Búsqueda directa en diccionario por clave normalizada
+            match = por_asig_fecha.get((asig_norm, f_dia))
+            # 2. Si no coincide exactamente, buscar mediante comparación tolerante de etiquetas
+            if not match:
+                for (a_k, f_k), e_cand in por_asig_fecha.items():
+                    if f_k == f_dia and son_misma_asignatura(a_k, asig_norm):
+                        match = e_cand
+                        break
             if match:
                 usados_ids.add(match.get("id"))
                 ev_c["entregada"] = match.get("entregada", False)
@@ -1560,10 +1621,10 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         if e_user.get("id") not in usados_ids:
             f_iso = e_user.get("fecha_iso") or ""
             f_dia = f_iso[:10] if len(f_iso) >= 10 else ""
-            asig_k = (e_user.get("asignatura") or "").lower().strip()
-            # Evitar duplicar tareas que ya figuren en el calendario por fecha y asignatura
+            asig_u = e_user.get("asignatura") or ""
+            # Evitar duplicar tareas que ya figuren en el calendario por fecha y asignatura (tolerante a etiquetas/acrónimos)
             ya_existe = any(
-                (c.get("fecha_dia") == f_dia and (c.get("asignatura") or "").lower().strip() == asig_k and c.get("tipo") == "tarea")
+                (c.get("fecha_dia") == f_dia and c.get("tipo") == "tarea" and son_misma_asignatura(c.get("asignatura") or "", asig_u))
                 for c in combinados
             )
             if ya_existe:
@@ -2832,9 +2893,12 @@ def dashboard_html():
                         <span x-show="ev.hora_inicio && ev.hora_inicio !== '23:59'" class="text-[9px] font-mono text-amber-200 bg-black/30 px-1 rounded" x-text="ev.hora_inicio"></span>
                         <span class="text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
                       </div>
-                      <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1">
+                      <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1 hover:text-cyan-300 cursor-pointer group/asig transition"
+                         @click.stop="abrirAsignaturaPorNombre(ev.asignatura)"
+                         :title="'Abrir ' + ev.asignatura">
                         <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
-                        <span class="break-words" x-text="ev.asignatura"></span>
+                        <span class="break-words group-hover/asig:underline" x-text="ev.asignatura"></span>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-0 group-hover/asig:opacity-100 transition-opacity ml-0.5 shrink-0"></i>
                       </p>
                     </div>
                     <div class="flex items-center gap-1 shrink-0" @click.stop="">
@@ -2891,9 +2955,12 @@ def dashboard_html():
                         </div>
                         <span class="text-[9px] text-gray-300 font-mono shrink-0" x-text="formatearFechaDDMMAAAA(ev.fecha_dia || ev.fecha_iso)"></span>
                       </div>
-                      <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1">
+                      <p class="text-[10px] text-gray-200 font-medium leading-snug mt-0.5 flex items-center gap-1 hover:text-cyan-300 cursor-pointer group/asig transition"
+                         @click.stop="abrirAsignaturaPorNombre(ev.asignatura)"
+                         :title="'Abrir ' + ev.asignatura">
                         <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
-                        <span class="break-words" x-text="ev.asignatura"></span>
+                        <span class="break-words group-hover/asig:underline" x-text="ev.asignatura"></span>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-0 group-hover/asig:opacity-100 transition-opacity ml-0.5 shrink-0"></i>
                       </p>
                       <div class="flex items-center justify-between gap-1 mt-1">
                         <span class="text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
@@ -3056,9 +3123,12 @@ def dashboard_html():
                                     class="text-[9px] text-gray-200 font-mono shrink-0 bg-black/25 px-1 rounded"
                                     x-text="ev.hora_inicio"></span>
                             </div>
-                            <div class="flex items-start gap-1 text-[10px] text-gray-200/95 leading-snug">
+                            <div class="flex items-start gap-1 text-[10px] text-gray-200/95 leading-snug hover:text-cyan-300 cursor-pointer group/asig transition"
+                                 @click.stop="abrirAsignaturaPorNombre(ev.asignatura)"
+                                 :title="'Abrir ' + ev.asignatura">
                               <span x-text="iconoAsignatura(ev.asignatura)" class="text-[10px] shrink-0"></span>
-                              <span class="break-words font-medium" x-text="ev.asignatura"></span>
+                              <span class="break-words font-medium group-hover/asig:underline" x-text="ev.asignatura"></span>
+                              <i class="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-0 group-hover/asig:opacity-100 transition-opacity ml-0.5 mt-0.5 shrink-0"></i>
                             </div>
                             <div class="flex items-center justify-between gap-1 pt-0.5">
                               <span class="text-[9px] px-1.5 py-0.2 rounded font-bold inline-block"
@@ -5994,8 +6064,10 @@ def dashboard_html():
               </button>
               <button @click="irAAsignaturaDesdeModal(itemEditAsignatura || itemAgendaActivo?.asignatura)"
                       type="button"
-                      class="text-[11px] text-cyan-400 hover:underline font-semibold shrink-0">
-                Ir →
+                      title="Abrir vista y materiales de esta materia"
+                      class="px-2.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[11px] font-bold transition shrink-0 flex items-center gap-1">
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                <span>Ver materia</span>
               </button>
             </div>
           </div>
@@ -7570,15 +7642,8 @@ def dashboard_html():
 
         irAAsignaturaDesdeModal(nombreAsig) {
           if (!nombreAsig) return;
-          const encontrada = this.catalogoTotal.find(a =>
-            a.nombre.toLowerCase() === nombreAsig.toLowerCase() ||
-            a.nombre.toLowerCase().includes(nombreAsig.toLowerCase()) ||
-            nombreAsig.toLowerCase().includes(a.nombre.toLowerCase())
-          );
-          if (encontrada) {
-            this.modalItemAgenda = false;
-            this.seleccionarAsignatura(encontrada);
-          }
+          this.modalItemAgenda = false;
+          this.abrirAsignaturaPorNombre(nombreAsig);
         },
 
         navegarCalendario(delta) {
@@ -9041,6 +9106,50 @@ def dashboard_html():
             sky: 'rgba(56, 189, 248, 0.12)'
           };
           return map[color] || 'rgba(56, 189, 248, 0.12)';
+        },
+
+        abrirAsignaturaPorNombre(nombre) {
+          if (!nombre || nombre === 'General' || nombre === 'Personal') return;
+          this.modalItemAgenda = false;
+          const normalizar = (str) => (str || '').toLowerCase()
+            .replace(/\\(grupo\\s*\\d+\\)/gi, '')
+            .replace(/\\[.*?\\]/g, '')
+            .replace(/[^\\w\\sáéíóúüñ]/gi, '')
+            .trim();
+          const target = normalizar(nombre);
+          
+          const lista = (this.catalogoTotal && this.catalogoTotal.length > 0) ? this.catalogoTotal : ((this.catalogo && this.catalogo.length > 0) ? this.catalogo : (this.catalogoFiltrado || []));
+          let match = lista.find(a => normalizar(a.nombre) === target);
+          if (!match) {
+            match = lista.find(a => {
+              const aNom = normalizar(a.nombre);
+              return aNom.includes(target) || target.includes(aNom);
+            });
+          }
+          if (!match) {
+            const acronimos = {
+              ad: 'Acceso a Datos',
+              di: 'Desarrollo de Interfaces',
+              pmdm: 'Programación Multimedia y Dispositivos Móviles',
+              psp: 'Programación de Servicios y Procesos',
+              sge: 'Sistemas de Gestión Empresarial',
+              nube: 'Arquitecturas en la Nube',
+              proy: 'Proyecto Intermodular DAM',
+              ffe: 'Formación en Empresa (FFE)',
+              dig: 'Digitalización Aplicada',
+              sost: 'Sostenibilidad Aplicada',
+              ing: 'Inglés Profesional',
+              ipe: 'Itinerario para la Empleabilidad II'
+            };
+            const acr = acronimos[target];
+            if (acr) {
+              match = lista.find(a => normalizar(a.nombre) === normalizar(acr));
+            }
+          }
+          if (match) {
+            this.abrirAsignatura(match);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         },
 
         abrirAsignatura(asig) {
