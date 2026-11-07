@@ -3400,7 +3400,7 @@ def dashboard_html():
             </div>
             <div class="px-6 pb-6 -mt-12 relative z-10 flex flex-wrap items-end justify-between gap-4">
               <div class="flex items-center space-x-4">
-                <button @click="asigSeleccionada = null; irASeccion('asignaturas')" class="w-11 h-11 rounded-2xl bg-gray-900/90 hover:bg-gray-800 text-gray-200 border border-gray-700 flex items-center justify-center transition shadow-lg">
+                <button @click="asigSeleccionada = null; irASeccion('dashboard')" class="w-11 h-11 rounded-2xl bg-gray-900/90 hover:bg-gray-800 text-gray-200 border border-gray-700 flex items-center justify-center transition shadow-lg">
                   <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl border border-white/20 text-white text-xl"
@@ -3835,6 +3835,155 @@ def dashboard_html():
                   </div>
                 </template>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== CATÁLOGO DE MATERIAS (CUANDO NO HAY ASIGNATURA SELECCIONADA) ==================== -->
+        <div x-show="!asigSeleccionada" class="space-y-6">
+          <div class="glass rounded-3xl p-6 border border-gray-800/80">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6 pb-4 border-b border-gray-800/80">
+              <div>
+                <h3 class="text-xl font-extrabold text-white flex items-center space-x-2.5">
+                  <i class="fa-solid fa-layer-group text-cyan-400"></i>
+                  <span>Materias y Módulos de <span x-text="programaActual?.nombre"></span></span>
+                </h3>
+                <p class="text-xs text-gray-400 mt-1">Explora tus asignaturas, guías oficiales, videoclases y bancos de preguntas</p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- Buscador rápido de asignaturas -->
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-gray-500 text-xs absolute left-3 top-1/2 -translate-y-1/2"></i>
+                  <input type="text"
+                         x-model="busquedaTexto"
+                         @input="aplicarFiltroCatalogo()"
+                         placeholder="Buscar asignatura..."
+                         class="bg-gray-950/90 border border-gray-800 focus:border-cyan-500/60 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none w-44 sm:w-52 transition">
+                </div>
+
+                <!-- Filtro por Curso (Todos / 2º Curso / 1º Curso) -->
+                <div x-show="programaActivoId === 'dam'" class="flex items-center bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs">
+                  <button @click="filtrarCurso('todos')"
+                          :class="cursoFiltro === 'todos' ? 'bg-gray-800 text-white font-bold shadow' : 'text-gray-400 hover:text-gray-200'"
+                          class="px-2.5 py-1 rounded-lg transition">Todos</button>
+                  <button @click="filtrarCurso('2dam')"
+                          :class="cursoFiltro === '2dam' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold' : 'text-gray-400 hover:text-gray-200'"
+                          class="px-2.5 py-1 rounded-lg transition">2º Curso</button>
+                  <button @click="filtrarCurso('1dam')"
+                          :class="cursoFiltro === '1dam' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold' : 'text-gray-400 hover:text-gray-200'"
+                          class="px-2.5 py-1 rounded-lg transition">1º Curso</button>
+                </div>
+
+                <button @click="toggleSoloFavoritas()"
+                        :class="mostrarSoloFavoritas ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-gray-950 text-gray-400 border-gray-800 hover:text-gray-200'"
+                        class="text-xs px-3 py-1.5 rounded-xl border font-bold transition flex items-center space-x-1.5">
+                  <i class="fa-solid fa-star text-[11px]" :class="mostrarSoloFavoritas ? 'text-amber-400' : 'text-gray-500'"></i>
+                  <span x-text="mostrarSoloFavoritas ? ('Mis Asignaturas (' + asignaturasFavoritas.length + ')') : 'Filtrar Mis Asignaturas'"></span>
+                </button>
+                <span class="text-xs bg-gray-950 text-gray-300 font-semibold px-3 py-1.5 rounded-xl border border-gray-800" x-text="catalogoFiltrado.length + ' materias'"></span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <template x-for="asig in catalogoFiltrado" :key="'cat-asig-' + asig.nombre">
+                <div @click="abrirAsignatura(asig)"
+                     class="group rounded-2xl overflow-hidden bg-surface-5 border border-gray-800/90 hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/30 transition-all duration-200 cursor-pointer flex flex-col justify-between relative">
+
+                  <!-- PORTADA ILUSTRADA / IMAGEN DE LA ASIGNATURA -->
+                  <div>
+                    <div class="h-28 relative overflow-hidden">
+                      <img :src="temaVisualAsignatura(asig.nombre).imagen"
+                           :alt="asig.nombre"
+                           loading="lazy"
+                           class="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 opacity-65">
+                      <div class="absolute inset-0 bg-gradient-to-t from-surface-5 via-surface-5/45 to-transparent"></div>
+                      <div class="absolute inset-0 opacity-45 mix-blend-overlay" :class="temaVisualAsignatura(asig.nombre).gradiente"></div>
+
+                      <div class="absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
+                        <div class="flex items-center gap-1.5">
+                          <button @click.stop="toggleAsignaturaFavorita(asig.nombre)"
+                                  :title="esAsignaturaFavorita(asig.nombre) ? 'Quitar de Mis Asignaturas' : 'Fijar en Mis Asignaturas'"
+                                  class="w-7 h-7 rounded-lg bg-gray-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-gray-900 transition">
+                            <i class="fa-star text-xs transition"
+                               :class="esAsignaturaFavorita(asig.nombre) ? 'fa-solid text-amber-400' : 'fa-regular text-gray-300 hover:text-amber-300'"></i>
+                          </button>
+                          <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-gray-950/80 backdrop-blur-md text-gray-100 border border-white/10" x-text="asig.curso"></span>
+                        </div>
+
+                        <div class="flex items-center gap-1.5">
+                          <template x-if="notaCampusDeAsignatura(asig.nombre) !== null">
+                            <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-indigo-950/90 backdrop-blur-md text-indigo-200 border border-indigo-400/40"
+                                  x-text="'🏛️ ' + notaCampusDeAsignatura(asig.nombre) + '%'"></span>
+                          </template>
+                        </div>
+                      </div>
+
+                      <div class="absolute bottom-2.5 left-4 flex items-center space-x-2 z-10">
+                        <div class="w-8 h-8 rounded-xl flex items-center justify-center shadow-lg border border-white/20 text-white text-xs"
+                             :class="temaVisualAsignatura(asig.nombre).badgeBg">
+                          <i :class="temaVisualAsignatura(asig.nombre).icono"></i>
+                        </div>
+                        <span class="text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border backdrop-blur-md"
+                              :class="temaVisualAsignatura(asig.nombre).chipClase"
+                              x-text="temaVisualAsignatura(asig.nombre).siglas"></span>
+                      </div>
+                    </div>
+
+                    <div class="px-5 pt-2 pb-1">
+                      <h4 class="font-extrabold text-white text-base leading-snug group-hover:text-cyan-300 transition" x-text="asig.nombre"></h4>
+                      <p class="text-[11px] text-gray-400 mt-0.5 line-clamp-1" x-text="temaVisualAsignatura(asig.nombre).subtitulo"></p>
+                    </div>
+                  </div>
+
+                  <div class="px-5 pb-4 pt-3 space-y-3">
+                    <div class="grid grid-cols-4 gap-1.5 text-center">
+                      <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                        <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                          <i class="fa-regular fa-file-pdf text-rose-400 text-[11px]"></i>
+                          <span x-text="asig.total_materiales"></span>
+                        </div>
+                        <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">PDFs</div>
+                      </div>
+                      <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                        <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                          <i class="fa-solid fa-video text-amber-400 text-[11px]"></i>
+                          <span x-text="asig.total_clases"></span>
+                        </div>
+                        <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Clases</div>
+                      </div>
+                      <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                        <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                          <i class="fa-solid fa-book-open text-cyan-400 text-[11px]"></i>
+                          <span x-text="(asig.guias?.length || 0)"></span>
+                        </div>
+                        <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Guías</div>
+                      </div>
+                      <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
+                        <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
+                          <i class="fa-solid fa-bolt text-emerald-400 text-[11px]"></i>
+                          <span x-text="(asig.tests?.length || 0)"></span>
+                        </div>
+                        <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Tests</div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2 pt-0.5" @click.stop="">
+                      <button @click="abrirAsignatura(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-gray-200 hover:text-white text-xs font-bold transition border border-gray-700/80 flex items-center justify-center space-x-1.5">
+                        <i class="fa-solid fa-folder-open text-cyan-400 text-[11px]"></i>
+                        <span>Temario</span>
+                      </button>
+                      <button @click="abrirGeneradorDirecto(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold transition border border-emerald-500/30 flex items-center justify-center space-x-1.5" title="Generar Guía o Test IA directamente">
+                        <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
+                        <span>Crear IA</span>
+                      </button>
+                      <button @click="abrirChatConAsignatura(asig.nombre)" class="py-2 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 text-xs font-bold transition border border-indigo-500/30 flex items-center justify-center" title="Consultar dudas de esta materia con NOVA">
+                        <i class="fa-solid fa-robot text-xs"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </div>
