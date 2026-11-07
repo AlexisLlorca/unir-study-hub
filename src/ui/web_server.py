@@ -2715,7 +2715,17 @@ def dashboard_html():
           <span class="hidden sm:inline font-medium" x-text="userGeminiKey ? 'Mi Key' : 'Mi Key'"></span>
         </button>
 
-        <!-- SELECTOR DE TEMA DE COLORES (PERSONALIZACIÓN) -->
+        <!-- BOTÓN CONFIGURACIÓN DE ALERTAS Y RECORDATORIOS -->
+        <button @click="abrirModalAlertas()"
+                :class="alertasConfig.activo ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'"
+                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm relative"
+                title="Configurar alertas para avisarte antes de clases y entregas">
+          <i class="fa-solid fa-bell text-[11px]" :class="alertasConfig.activo ? 'text-amber-400' : 'text-gray-400'"></i>
+          <span class="hidden sm:inline font-medium">Alertas</span>
+          <span x-show="totalAlertasProximasCount > 0"
+                class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono text-[9px] font-extrabold flex items-center justify-center shadow-lg border border-gray-900"
+                x-text="totalAlertasProximasCount"></span>
+        </button>
         <div class="relative shrink-0" @click.outside="menuTemaAbierto = false" @keydown.escape.window="menuTemaAbierto = false">
           <button @click="menuTemaAbierto = !menuTemaAbierto"
                   :class="menuTemaAbierto ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
@@ -2830,12 +2840,20 @@ def dashboard_html():
                   <span>Recordatorios y Citas</span>
                   <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/30 text-purple-200 font-mono" x-text="recordatoriosActivosHoyManana.length"></span>
                 </div>
-                <button @click="solicitarPermisoNotificaciones()"
-                        x-show="notificacionesSoportadas && permisoNotificaciones !== 'granted'"
-                        class="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold transition"
-                        title="Activar avisos emergentes del navegador">
-                  🔔 Avisarme en PC
-                </button>
+                <div class="flex items-center gap-1.5">
+                  <button @click="abrirModalAlertas()"
+                          class="text-[10px] px-2 py-0.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 font-bold transition flex items-center gap-1"
+                          title="Ajustar minutos y antelación de alertas">
+                    <i class="fa-solid fa-sliders text-[9px]"></i>
+                    <span>Ajustar</span>
+                  </button>
+                  <button @click="solicitarPermisoNotificaciones()"
+                          x-show="notificacionesSoportadas && permisoNotificaciones !== 'granted'"
+                          class="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold transition"
+                          title="Activar avisos emergentes del navegador">
+                    🔔 Avisarme en PC
+                  </button>
+                </div>
               </div>
               <div class="space-y-1.5">
                 <template x-for="rec in recordatoriosActivosHoyManana" :key="'rec-alert-' + rec.id">
@@ -6445,6 +6463,151 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== TOAST FLOTANTE DE ALERTA DE TIEMPO ==================== -->
+  <div class="fixed bottom-20 md:bottom-6 right-4 z-50 max-w-sm w-full space-y-2 pointer-events-none">
+    <template x-for="alerta in alertasActivasToast" :key="alerta.id">
+      <div class="pointer-events-auto p-4 rounded-2xl bg-gray-900/95 border border-amber-500/50 shadow-2xl backdrop-blur-lg flex items-start gap-3 transform transition-all duration-300">
+        <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/40 text-base">
+          <i class="fa-solid fa-bell animate-bounce"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-1">
+            <span class="text-[10px] uppercase font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300" x-text="alerta.badge"></span>
+            <span class="text-[10px] text-gray-400 font-mono font-bold" x-text="alerta.tiempoRestanteTexto"></span>
+          </div>
+          <h4 class="text-xs font-bold text-white mt-1 break-words" x-text="alerta.titulo"></h4>
+          <p class="text-[11px] text-gray-300 truncate mt-0.5" x-text="alerta.asignatura"></p>
+          <div class="flex items-center gap-2 mt-2 pt-1.5 border-t border-gray-800">
+            <button @click="abrirAsignaturaPorNombre(alerta.asignatura); descartarToastAlerta(alerta.id)" class="text-[10px] text-cyan-400 hover:underline font-bold">Ver materia →</button>
+            <button @click="descartarToastAlerta(alerta.id)" class="text-[10px] text-gray-400 hover:text-white ml-auto">Descartar</button>
+          </div>
+        </div>
+        <button @click="descartarToastAlerta(alerta.id)" class="text-gray-500 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+    </template>
+  </div>
+
+  <!-- ==================== MODAL CONFIGURACIÓN DE ALERTAS Y RECORDATORIOS ==================== -->
+  <div x-show="modalConfigAlertas"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalConfigAlertas = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5">
+      <!-- HEADER -->
+      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-bell"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-extrabold text-white">Configurar Alertas y Avisos</h3>
+            <p class="text-xs text-gray-400">Te avisa con antelación antes de clases y vencimiento de entregas</p>
+          </div>
+        </div>
+        <button @click="modalConfigAlertas = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- INTERRUPTOR MAESTRO -->
+      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 flex items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-bold text-white">Sistema de Alertas Activo</p>
+          <p class="text-xs text-gray-400">Comprueba automáticamente los plazos y horarios en segundo plano</p>
+        </div>
+        <button @click="alertasConfig.activo = !alertasConfig.activo; guardarAlertasConfig()"
+                :class="alertasConfig.activo ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'bg-gray-800 text-gray-400'"
+                class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition">
+          <span x-text="alertasConfig.activo ? 'Activado' : 'Desactivado'"></span>
+        </button>
+      </div>
+
+      <!-- NOTIFICACIONES DE ESCRITORIO -->
+      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-desktop text-cyan-400 text-xs"></i>
+            <span class="text-xs font-bold text-gray-200">Notificaciones de Escritorio (PC / Móvil)</span>
+          </div>
+          <button @click="solicitarPermisoNotificaciones()"
+                  class="text-xs px-2.5 py-1 rounded-lg border font-bold transition"
+                  :class="permisoNotificaciones === 'granted' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'">
+            <span x-text="permisoNotificaciones === 'granted' ? '✅ Permitido' : '🔔 Activar Permiso'"></span>
+          </button>
+        </div>
+        <p class="text-[11px] text-gray-400">Si está permitido, recibirás un aviso emergente en tu sistema aunque tengas la pestaña en segundo plano.</p>
+      </div>
+
+      <!-- SONIDO DE AVISO -->
+      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 flex items-center justify-between gap-3">
+        <div class="flex items-center space-x-2.5">
+          <i class="fa-solid fa-volume-high text-amber-400 text-xs"></i>
+          <div>
+            <p class="text-xs font-bold text-gray-200">Efecto de Sonido Suave</p>
+            <p class="text-[11px] text-gray-400">Emite un tono armónico al saltar cada alerta</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="reproducirSonidoAlerta()" type="button" class="text-xs px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1.5" title="Probar sonido">
+            <i class="fa-solid fa-play text-[9px]"></i> <span>Probar</span>
+          </button>
+          <button @click="alertasConfig.sonido = !alertasConfig.sonido; guardarAlertasConfig()"
+                  :class="alertasConfig.sonido ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-gray-800 text-gray-500 border-gray-700'"
+                  class="px-2.5 py-1 rounded-lg border text-xs font-bold transition">
+            <span x-text="alertasConfig.sonido ? 'Sí' : 'No'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- TIEMPO DE ANTELACIÓN PARA CLASES -->
+      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-gray-200 flex items-center gap-2"><i class="fa-solid fa-video text-blue-400 text-xs"></i> Avisar antes de Clases y Tutorías:</span>
+        </div>
+        <select x-model.number="alertasConfig.minutosClases" @change="guardarAlertasConfig()"
+                class="w-full bg-gray-950 border border-gray-700 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none">
+          <option value="5">5 minutos antes</option>
+          <option value="10">10 minutos antes</option>
+          <option value="15">15 minutos antes (Recomendado)</option>
+          <option value="30">30 minutos antes</option>
+          <option value="60">1 hora antes</option>
+          <option value="0">Desactivado</option>
+        </select>
+      </div>
+
+      <!-- TIEMPO DE ANTELACIÓN PARA ENTREGAS (PACS / PROYECTOS / TESTS) -->
+      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-gray-200 flex items-center gap-2"><i class="fa-solid fa-flag text-rose-400 text-xs"></i> Avisar antes de Entregas y PACs:</span>
+        </div>
+        <select x-model.number="alertasConfig.horasEntregas" @change="guardarAlertasConfig()"
+                class="w-full bg-gray-950 border border-gray-700 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none">
+          <option value="2">2 horas antes del cierre</option>
+          <option value="6">6 horas antes</option>
+          <option value="12">12 horas antes</option>
+          <option value="24">24 horas (1 día) antes (Recomendado)</option>
+          <option value="48">48 horas (2 días) antes</option>
+          <option value="72">3 días antes</option>
+          <option value="0">Desactivado</option>
+        </select>
+      </div>
+
+      <!-- BOTÓN GUARDAR -->
+      <div class="pt-2 flex justify-end">
+        <button @click="modalConfigAlertas = false" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-lg transition">
+          Guardar y Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-3/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
     <button @click="irASeccion('dashboard')" 
@@ -6721,6 +6884,15 @@ def dashboard_html():
         notificacionesSoportadas: typeof window !== 'undefined' && ('Notification' in window),
         permisoNotificaciones: (typeof window !== 'undefined' && ('Notification' in window)) ? Notification.permission : 'denied',
         recordatoriosDisparadosIds: [],
+        modalConfigAlertas: false,
+        alertasConfig: {
+          activo: true,
+          sonido: true,
+          minutosClases: 15,
+          horasEntregas: 24,
+        },
+        alertasActivasToast: [],
+        alertasDisparadasIds: [],
 
         // Flashcards Repetición Espaciada
         flashcards: [],
@@ -7731,20 +7903,175 @@ def dashboard_html():
           }
         },
 
-        comprobarRecordatoriosPendientes() {
-          if (!this.notificacionesSoportadas || this.permisoNotificaciones !== 'granted') return;
-          const hoyStr = new Date().toISOString().slice(0, 10);
-          (this.recordatoriosActivosHoyManana || []).forEach(rec => {
-            if (rec.fecha_dia === hoyStr && !this.recordatoriosDisparadosIds.includes(rec.id)) {
-              this.recordatoriosDisparadosIds.push(rec.id);
-              try {
-                const horaTxt = (rec.hora_inicio && rec.hora_inicio !== '23:59') ? ` a las ${rec.hora_inicio}` : '';
-                new Notification(`🔔 Recordatorio Hoy: ${rec.titulo}`, {
-                  body: `${rec.asignatura}${horaTxt}`
-                });
-              } catch (e) {}
+        guardarAlertasConfig() {
+          try {
+            localStorage.setItem('nova_alertas_config', JSON.stringify(this.alertasConfig));
+          } catch(e) {}
+        },
+
+        abrirModalAlertas() {
+          this.modalConfigAlertas = true;
+        },
+
+        descartarToastAlerta(id) {
+          this.alertasActivasToast = this.alertasActivasToast.filter(a => a.id !== id);
+        },
+
+        reproducirSonidoAlerta() {
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const now = ctx.currentTime;
+            [659.25, 987.77].forEach((freq, idx) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+              gain.gain.setValueAtTime(0.18, now + idx * 0.12);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.7);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now + idx * 0.12);
+              osc.stop(now + idx * 0.12 + 0.75);
+            });
+          } catch(e) {}
+        },
+
+        get totalAlertasProximasCount() {
+          return (this.alertasProximas || []).length;
+        },
+
+        get alertasProximas() {
+          if (!this.agendaEventos || !this.agendaEventos.length) return [];
+          const ahora = new Date().getTime();
+          const lista = [];
+          
+          this.agendaEventos.forEach(ev => {
+            if (ev.estado === 'Hecho' || ev.estado === 'Vista' || ev.estado === 'Vista no relevante') return;
+            
+            let fStr = ev.fecha_iso;
+            if (!fStr && ev.fecha_dia) {
+              const h = ev.hora_inicio && ev.hora_inicio !== '23:59' ? ev.hora_inicio : '23:59';
+              fStr = `${ev.fecha_dia}T${h}:00`;
+            }
+            if (!fStr) return;
+            
+            const evDate = new Date(fStr).getTime();
+            if (isNaN(evDate)) return;
+            
+            const diffMin = (evDate - ahora) / 60000;
+            if (diffMin > 0 && diffMin <= 2880) {
+              lista.push({
+                ev,
+                diffMin,
+                esClase: ev.tipo === 'clase_directo' || ev.categoria === 'Clase' || ev.categoria === 'Tutoría'
+              });
             }
           });
+          
+          return lista.sort((a, b) => a.diffMin - b.diffMin);
+        },
+
+        verificarAlertasTiempo() {
+          if (!this.alertasConfig || !this.alertasConfig.activo) return;
+          if (!this.agendaEventos || !this.agendaEventos.length) return;
+
+          const ahora = new Date().getTime();
+          const hoyStr = new Date().toISOString().slice(0, 10);
+
+          this.agendaEventos.forEach(ev => {
+            if (ev.estado === 'Hecho' || ev.estado === 'Vista' || ev.estado === 'Vista no relevante') return;
+
+            let fStr = ev.fecha_iso;
+            if (!fStr && ev.fecha_dia) {
+              const h = (ev.hora_inicio && ev.hora_inicio !== '23:59') ? ev.hora_inicio : '23:59';
+              fStr = `${ev.fecha_dia}T${h}:00`;
+            }
+            if (!fStr) return;
+
+            const evDate = new Date(fStr).getTime();
+            if (isNaN(evDate)) return;
+
+            const diffMin = (evDate - ahora) / 60000;
+            const esClase = ev.tipo === 'clase_directo' || ev.categoria === 'Clase' || ev.categoria === 'Tutoría';
+            const esTarea = ev.tipo === 'tarea' || ['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(ev.categoria);
+
+            let debeAlertar = false;
+            let ventanaTxt = '';
+            let alertKey = '';
+
+            // 1. Alerta para clases en directo (según minutos configurados)
+            if (esClase && this.alertasConfig.minutosClases > 0) {
+              if (diffMin > 0 && diffMin <= this.alertasConfig.minutosClases) {
+                alertKey = `alerta_clase_${ev.id || ev.titulo}_${ev.fecha_dia}_${this.alertasConfig.minutosClases}`;
+                if (!this.alertasDisparadasIds.includes(alertKey)) {
+                  debeAlertar = true;
+                  const m = Math.ceil(diffMin);
+                  ventanaTxt = m <= 1 ? '¡Empieza ya!' : `Empieza en ${m} min`;
+                }
+              }
+            }
+
+            // 2. Alerta para entregas y PACs (según horas configuradas)
+            if (esTarea && this.alertasConfig.horasEntregas > 0) {
+              const diffHoras = diffMin / 60;
+              if (diffHoras > 0 && diffHoras <= this.alertasConfig.horasEntregas) {
+                alertKey = `alerta_entrega_${ev.id || ev.titulo}_${ev.fecha_dia}_${this.alertasConfig.horasEntregas}`;
+                if (!this.alertasDisparadasIds.includes(alertKey)) {
+                  debeAlertar = true;
+                  const h = Math.ceil(diffHoras);
+                  ventanaTxt = h <= 1 ? '¡Vence en menos de 1h!' : (h <= 24 ? `Vence en ${h} horas` : `Vence en ${Math.ceil(h/24)} días`);
+                }
+              }
+            }
+
+            // 3. Recordatorios personalizados del usuario (marcados con campanita)
+            if (Boolean(ev.recordatorio) && ev.fecha_dia === hoyStr) {
+              const recKey = `alerta_rec_custom_${ev.id || ev.titulo}_${hoyStr}`;
+              if (!this.alertasDisparadasIds.includes(recKey)) {
+                alertKey = recKey;
+                debeAlertar = true;
+                ventanaTxt = ev.hora_inicio ? `Fijado para las ${ev.hora_inicio}` : 'Programado para hoy';
+              }
+            }
+
+            if (debeAlertar && alertKey) {
+              this.alertasDisparadasIds.push(alertKey);
+              try {
+                localStorage.setItem('nova_alertas_disparadas', JSON.stringify(this.alertasDisparadasIds.slice(-50)));
+              } catch(e) {}
+
+              if (this.alertasConfig.sonido) {
+                this.reproducirSonidoAlerta();
+              }
+
+              if (this.notificacionesSoportadas && this.permisoNotificaciones === 'granted') {
+                try {
+                  new Notification(`🔔 ${ventanaTxt}: ${ev.titulo}`, {
+                    body: `${ev.asignatura}${ev.hora_inicio ? ' (' + ev.hora_inicio + ')' : ''}`
+                  });
+                } catch(e) {}
+              }
+
+              const toastId = 'toast_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+              this.alertasActivasToast.unshift({
+                id: toastId,
+                badge: esClase ? 'Clase en directo' : (esTarea ? 'Entrega / PAC' : 'Recordatorio'),
+                titulo: ev.titulo,
+                asignatura: ev.asignatura,
+                tiempoRestanteTexto: ventanaTxt
+              });
+
+              setTimeout(() => {
+                this.descartarToastAlerta(toastId);
+              }, 15000);
+            }
+          });
+        },
+
+        comprobarRecordatoriosPendientes() {
+          this.verificarAlertasTiempo();
         },
 
         async crearNuevoItemAgenda() {
@@ -8189,6 +8516,14 @@ def dashboard_html():
           await this.cargarFlashcards();
           await this.cargarFeedback();
           await this.cargarModelosIa();
+          try {
+            const cfg = localStorage.getItem('nova_alertas_config');
+            if (cfg) this.alertasConfig = Object.assign(this.alertasConfig, JSON.parse(cfg));
+            const disp = localStorage.getItem('nova_alertas_disparadas');
+            if (disp) this.alertasDisparadasIds = JSON.parse(disp) || [];
+          } catch(e) {}
+          setInterval(() => this.verificarAlertasTiempo(), 30000);
+          setTimeout(() => this.verificarAlertasTiempo(), 2000);
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
         },
