@@ -1567,8 +1567,11 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
 
 
 @app.get("/api/agenda")
-def api_agenda(request: Request):
+def api_agenda(request: Request, response: Response):
     """Devuelve el calendario completo (clases, entregas, temas, tests) con el estado personal del estudiante."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return _combinar_agenda_oficial_y_estudiante(_username_actual(request))
 
 
@@ -9382,7 +9385,7 @@ def dashboard_html():
 
         async cargarAgenda() {
           try {
-            const res = await fetch('/api/agenda');
+            const res = await fetch('/api/agenda?_t=' + Date.now());
             this.agendaEventos = await res.json();
             this.comprobarRecordatoriosPendientes();
           } catch(e) { console.error(e); }
