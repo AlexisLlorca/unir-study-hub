@@ -356,7 +356,7 @@ def _username_actual(request: Request) -> str:
     """Devuelve el nombre de usuario de la cuenta autenticada (o 'alexking44' en modo local/admin)."""
     u = getattr(request.state, "usuario", None)
     username = (u.get("username") if isinstance(u, dict) else None) or "alexking44"
-    return "alexking44" if username == "local" else username
+    return "alexking44" if username in ("local", "admin") else username
 
 
 def _rutas_usuario_request(request: Request) -> dict:
@@ -1589,7 +1589,8 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
             ev_c["comentario"] = ov["comentario"]
 
         # Si el alumno conectó Canvas y esta entrega figura entregada/calificada en su Canvas
-        if ev_c.get("tipo") == "tarea":
+        # IMPORTANTE: Solo enlazar entregas del calendario oficial base; NUNCA sobreescribir ítems propios del alumno
+        if ev_c.get("tipo") == "tarea" and not ev_c.get("es_propio"):
             asig_norm = normalizar_etiqueta_asignatura(ev_c.get("asignatura") or "").lower().strip()
             f_dia = ev_c.get("fecha_dia") or (ev_c.get("fecha_iso") or "")[:10]
             # 1. Búsqueda directa en diccionario por clave normalizada
@@ -1597,10 +1598,10 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
             # 2. Si no coincide exactamente, buscar mediante comparación tolerante de etiquetas
             if not match:
                 for (a_k, f_k), e_cand in por_asig_fecha.items():
-                    if f_k == f_dia and son_misma_asignatura(a_k, asig_norm):
+                    if f_k == f_dia and son_misma_asignatura(a_k, asig_norm) and e_cand.get("id") not in usados_ids:
                         match = e_cand
                         break
-            if match:
+            if match and match.get("id") not in usados_ids:
                 usados_ids.add(match.get("id"))
                 ev_c["entregada"] = match.get("entregada", False)
                 ev_c["calificada"] = match.get("calificada", False)
@@ -1616,6 +1617,8 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
 
         if ev_c.get("estado") in ("Hecho", "Vista", "Vista no relevante"):
             ev_c["entregada"] = True
+        else:
+            ev_c["entregada"] = False
 
         combinados.append(ev_c)
 
@@ -6212,14 +6215,15 @@ def dashboard_html():
 
   <!-- ==================== MODAL DE ÍTEM DE CALENDARIO / TO-DO ESTILO NOTION (COMO EN EL VÍDEO) ==================== -->
   <div x-show="modalItemAgenda"
+       x-cloak
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0"
        x-transition:enter-end="opacity-100"
        x-transition:leave="transition ease-in duration-150"
        x-transition:leave-start="opacity-100"
        x-transition:leave-end="opacity-0"
-       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-       style="display: none;">
+       :class="modalItemAgenda ? 'flex' : 'hidden'"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
     <div @click.away="modalItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
       <div class="flex items-start justify-between gap-3 pb-4 border-b border-gray-800">
         <div class="flex-1">
@@ -6385,11 +6389,12 @@ def dashboard_html():
 
   <!-- ==================== MODAL NUEVO TEMA / TAREA / CITA / RECORDATORIO EN CALENDARIO PERSONAL ==================== -->
   <div x-show="modalNuevoItemAgenda"
+       x-cloak
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0"
        x-transition:enter-end="opacity-100"
-       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-       style="display: none;">
+       :class="modalNuevoItemAgenda ? 'flex' : 'hidden'"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
     <div @click.away="modalNuevoItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3 border-b border-gray-800">
         <h3 class="text-base font-extrabold text-white">Añadir a Mi Calendario / To-do</h3>
@@ -7320,14 +7325,30 @@ def dashboard_html():
           }).sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || '')).slice(0, 25);
         },
 
+        ordenarEventosDia(lista) {
+          if (!lista || !Array.isArray(lista)) return [];
+          return [...lista].sort((a, b) => {
+            const hA = (a.hora_inicio || '').trim();
+            const hB = (b.hora_inicio || '').trim();
+            // Orden cronológico estricto por hora si ambos tienen hora (ej: 09:00, 09:15, 11:15, 13:05, 14:00)
+            if (hA && hB) {
+              const compHora = hA.localeCompare(hB);
+              if (compHora !== 0) return compHora;
+            } else if (hA && !hB) {
+              return -1;
+            } else if (!hA && hB) {
+              return 1;
+            }
+            if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
+            return (a.titulo || '').localeCompare(b.titulo || '');
+          });
+        },
+
         get eventosDiaSeleccionado() {
           if (!this.calDiaSeleccionado) return [];
-          return this.eventosCalendarioFiltrados
-            .filter(e => (e.fecha_dia || (e.fecha_iso || '').slice(0, 10)) === this.calDiaSeleccionado)
-            .sort((a, b) => {
-              if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
-              return (a.hora_inicio || '').localeCompare(b.hora_inicio || '');
-            });
+          const filtrados = this.eventosCalendarioFiltrados
+            .filter(e => (e.fecha_dia || (e.fecha_iso || '').slice(0, 10)) === this.calDiaSeleccionado);
+          return this.ordenarEventosDia(filtrados);
         },
 
         // Celdas visibles en el Calendario (Lun-Vie 2 semanas en modo 'quincena', o Mes completo en modo 'mes')
@@ -7371,18 +7392,15 @@ def dashboard_html():
                   }
                 }
               }
-              evsDia.sort((a, b) => {
-                if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
-                return (a.hora_inicio || '').localeCompare(b.hora_inicio || '');
-              });
-              const tieneEntregaRoja = evsDia.some(e => e.tipo === 'tarea' && !e.entregada);
+              const evsOrdenados = this.ordenarEventosDia(evsDia);
+              const tieneEntregaRoja = evsOrdenados.some(e => e.tipo === 'tarea' && !e.entregada);
               celdas.push({
                 key: `q-${fechaStr}`,
                 dia: diaNum,
                 fechaStr,
                 esMesActual: true,
                 esHoy: fechaStr === hoyStr,
-                eventos: evsDia,
+                eventos: evsOrdenados,
                 tieneEntregaRoja
               });
             }
@@ -7424,18 +7442,15 @@ def dashboard_html():
 
           for (let d = 1; d <= totalDiasMes; d++) {
             const fechaStr = `${anio}-${String(mes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const evsDia = (mapaEventos[fechaStr] || []).sort((a, b) => {
-              if (a.tipo !== b.tipo) return a.tipo === 'tarea' ? -1 : 1;
-              return (a.hora_inicio || '').localeCompare(b.hora_inicio || '');
-            });
-            const tieneEntregaRoja = evsDia.some(e => e.tipo === 'tarea' && !e.entregada);
+            const evsOrdenados = this.ordenarEventosDia(mapaEventos[fechaStr] || []);
+            const tieneEntregaRoja = evsOrdenados.some(e => e.tipo === 'tarea' && !e.entregada);
             celdas.push({
               key: fechaStr,
               dia: d,
               fechaStr,
               esMesActual: true,
               esHoy: fechaStr === hoyStr,
-              eventos: evsDia,
+              eventos: evsOrdenados,
               tieneEntregaRoja
             });
           }
@@ -7501,7 +7516,7 @@ def dashboard_html():
                 dia: fecha.getDate(),
                 fechaStr,
                 esHoy: fechaStr === hoyStr,
-                eventos: evsDia
+                eventos: this.ordenarEventosDia(evsDia)
               });
             }
           }

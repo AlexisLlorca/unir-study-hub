@@ -412,6 +412,14 @@ def actualizar_item_organizador_usuario(username: str, item_id: str, cambios: Di
             for k in ("estado", "fecha_dia", "nota_personal", "comentario", "titulo", "hora_inicio", "asignatura", "categoria", "recordatorio"):
                 if k in cambios and cambios[k] is not None:
                     it[k] = cambios[k]
+            if "categoria" in cambios and cambios["categoria"]:
+                cat = cambios["categoria"]
+                if cat in ("Clase", "Tutoría"):
+                    it["tipo"] = "clase_directo"
+                elif cat in ("Actividad", "Entrega", "Práctica", "Examen", "Proyecto", "FFE", "Formulario"):
+                    it["tipo"] = "tarea"
+                else:
+                    it["tipo"] = "tema"
             actualizado_propio = True
             break
 
@@ -420,6 +428,15 @@ def actualizar_item_organizador_usuario(username: str, item_id: str, cambios: Di
         for k in ("estado", "fecha_dia", "nota_personal", "comentario", "titulo", "asignatura", "categoria", "hora_inicio", "recordatorio", "oculto"):
             if k in cambios and cambios[k] is not None:
                 ov[k] = cambios[k]
+        if "categoria" in cambios and cambios["categoria"]:
+            cat = cambios["categoria"]
+            ov["categoria"] = cat
+            if cat in ("Clase", "Tutoría"):
+                ov["tipo"] = "clase_directo"
+            elif cat in ("Actividad", "Entrega", "Práctica", "Examen", "Proyecto", "FFE", "Formulario"):
+                ov["tipo"] = "tarea"
+            else:
+                ov["tipo"] = "tema"
         org["overrides"][item_id] = ov
 
     escribir_json_atomico(f, org)
@@ -550,6 +567,18 @@ def importar_calendario_ics_usuario(
     # Límite superior por defecto para recurrencias (final de curso académico: 30 de junio 2027)
     max_horizonte = datetime(2027, 6, 30, 23, 59, 59)
 
+    from src.core.academic_structure import (
+        normalizar_nombre_asignatura,
+        ASIGNATURAS_2DAM, ASIGNATURAS_1DAM, MODULOS_CIBER,
+        ASIGNATURAS_PFU, ASIGNATURAS_BOOTCAMP, ASIGNATURAS_PYTHON,
+        ASIGNATURAS_AWS, ASIGNATURAS_AZURE
+    )
+    todos_canonicos = set(
+        ASIGNATURAS_2DAM + ASIGNATURAS_1DAM + MODULOS_CIBER +
+        ASIGNATURAS_PFU + ASIGNATURAS_BOOTCAMP + ASIGNATURAS_PYTHON +
+        ASIGNATURAS_AWS + ASIGNATURAS_AZURE
+    )
+
     # Extraer bloques VEVENT
     bloques = re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", ics_texto, re.DOTALL)
     importados = 0
@@ -662,27 +691,46 @@ def importar_calendario_ics_usuario(
             asig_detectada = m_corchete.group(2).strip()
 
         if asig_detectada:
-            asig_final = normalizar_nombre_asignatura(asig_detectada) or asig_detectada
+            cand = normalizar_nombre_asignatura(asig_detectada)
+            asig_final = cand if cand in todos_canonicos else (asignatura_por_defecto or "Personal / General")
         else:
-            asig_final = normalizar_nombre_asignatura(titulo) or asignatura_por_defecto or "General"
+            cand = normalizar_nombre_asignatura(summary_raw)
+            asig_final = cand if cand in todos_canonicos else (asignatura_por_defecto or "Personal / General")
 
         # Categoría
-        tit_lower = titulo.lower()
-        if any(k in tit_lower for k in ("actividad", "pac", "entrega", "práctica", "practica", "proyecto", "ffe")):
-            cat = "Actividad"
-            tipo_interno = "tarea"
+        tit_lower = summary_raw.lower()
+        es_horario_clase = bool(
+            re.search(r"\[(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s*-\s*(mañana|tarde)", tit_lower)
+            or "bloque" in tit_lower
+            or "clase" in tit_lower
+            or "tutor" in tit_lower
+            or "sesión" in tit_lower
+            or "sesion" in tit_lower
+            or "webinar" in tit_lower
+            or "directo" in tit_lower
+            or "deep work" in tit_lower
+        )
+
+        if es_horario_clase:
+            cat = "Clase"
+            tipo_interno = "clase_directo"
+            estado_ini = "No vista"
         elif any(k in tit_lower for k in ("examen", "test", "autoevaluación", "cuestionario")):
             cat = "Examen"
             tipo_interno = "tarea"
-        elif any(k in tit_lower for k in ("clase", "tutoría", "tutoria", "sesión", "sesion", "webinar", "directo")):
-            cat = "Clase"
-            tipo_interno = "clase_directo"
-        elif any(k in tit_lower for k in ("cita", "médico", "medico", "reunión", "reunion", "entrevista", "recordatorio")):
+            estado_ini = "No entregado"
+        elif any(k in tit_lower for k in ("actividad", "pac", "entrega", "práctica", "practica", "tarea", "deberes", "rúbrica", "rubrica")):
+            cat = "Actividad"
+            tipo_interno = "tarea"
+            estado_ini = "No entregado"
+        elif any(k in tit_lower for k in ("cita", "médico", "medico", "reunión", "reunion", "entrevista", "recordatorio", "planificación", "planificacion", "almuerzo", "descanso", "ritual")):
             cat = "Cita"
             tipo_interno = "tema"
+            estado_ini = "Pendiente de empezar"
         else:
             cat = "Tema"
             tipo_interno = "tema"
+            estado_ini = "Pendiente de empezar"
 
         desc_txt = (desc_m.group(1).strip() if desc_m else "").replace("\\n", " ").replace("\\,", ",")
         desc_txt = re.sub(r"<[^>]+>", " ", desc_txt).strip()[:200]
@@ -720,7 +768,7 @@ def importar_calendario_ics_usuario(
                 "fecha_dia": fecha_dia,
                 "hora_inicio": hora_ini,
                 "hora_fin": hora_fin,
-                "estado": "No vista" if tipo_interno == "clase_directo" else ("No entregado" if tipo_interno == "tarea" else "Pendiente de empezar"),
+                "estado": estado_ini,
                 "recordatorio": (cat in ("Cita", "Examen")),
                 "url": url_val,
                 "descripcion": desc_txt or f"Importado de calendario .ics ({cat})",

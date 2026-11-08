@@ -574,7 +574,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         if self._token_valido(cookie_token):
             request.state.usuario = {
                 "id": 1,
-                "username": "admin",
+                "username": "alexking44",
                 "nombre": "Alex (Administrador)",
                 "rol": "admin",
                 "activo": 1
@@ -585,7 +585,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         if _es_loopback(cliente) and not es_nube_o_proxy:
             request.state.usuario = {
                 "id": 1,
-                "username": "admin",
+                "username": "alexking44",
                 "nombre": "Alex (Administrador)",
                 "rol": "admin",
                 "activo": 1
