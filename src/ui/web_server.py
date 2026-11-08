@@ -1549,6 +1549,49 @@ def son_misma_asignatura(asig1: str, asig2: str) -> bool:
     return (n1 in n2) or (n2 in n1)
 
 
+def _normalizar_titulo_tarea(tit: str) -> str:
+    """Normaliza el título de una tarea quitando palabras genéricas y puntuación."""
+    t = (tit or "").lower().strip()
+    t = re.sub(r"\b(individual|grupal|en grupo|evaluable|obligatoria)\b", "", t)
+    t = re.sub(r"[^a-z0-9áéíóúüñ]", " ", t)
+    return " ".join(t.split())
+
+
+def son_misma_tarea_o_entrega(tit1: str, tit2: str, f_dia1: str = "", f_dia2: str = "") -> bool:
+    """Comprueba si dos tareas representan exactamente la misma actividad evaluable para evitar duplicados."""
+    norm1 = _normalizar_titulo_tarea(tit1)
+    norm2 = _normalizar_titulo_tarea(tit2)
+    if not norm1 or not norm2:
+        return False
+    if norm1 == norm2:
+        return True
+
+    nums1 = re.findall(r"\d+", norm1)
+    nums2 = re.findall(r"\d+", norm2)
+    es_test1 = "test" in norm1 or "cuestionario" in norm1
+    es_test2 = "test" in norm2 or "cuestionario" in norm2
+
+    # Si uno es test y el otro no, NUNCA son la misma tarea
+    if es_test1 != es_test2:
+        return False
+
+    # Si ambos tienen números y son diferentes (ej. Test Tema 1 vs Test Tema 2), NUNCA son iguales
+    if nums1 and nums2 and nums1 != nums2:
+        return False
+
+    if "actividad" in norm1 and "actividad" in norm2:
+        return nums1 == nums2 if (nums1 and nums2) else False
+
+    if "entrega" in norm1 and "entrega" in norm2:
+        return nums1 == nums2 if (nums1 and nums2) else False
+
+    if f_dia1 and f_dia2 and f_dia1 == f_dia2:
+        if norm1 in norm2 or norm2 in norm1:
+            return True
+
+    return False
+
+
 def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]:
     """
     Combina el calendario oficial DAM 2026-2027 (clases, tutorías, entregas PAC, temas y tests)
@@ -1563,16 +1606,7 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
     items_propios = org_u.get("items_propios", [])
 
     datos_est = obtener_datos_canvas_estudiante(username)
-    por_asig_fecha = {}
     entregas_est = datos_est.get("entregas", []) if datos_est.get("config", {}).get("conectado") else []
-    for e_user in entregas_est:
-        uid = e_user.get("id")
-        if overrides.get(uid, {}).get("oculto"):
-            continue
-        f_dia = (e_user.get("fecha_iso") or "")[:10]
-        asig_norm = normalizar_etiqueta_asignatura(e_user.get("asignatura") or "").lower().strip()
-        if asig_norm and f_dia:
-            por_asig_fecha[(asig_norm, f_dia)] = e_user
 
     combinados = []
     usados_ids = set()
@@ -1633,16 +1667,37 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         # Si el alumno conectó Canvas y esta entrega figura entregada/calificada en su Canvas
         # IMPORTANTE: Solo enlazar entregas del calendario oficial base; NUNCA sobreescribir ítems propios del alumno
         if ev_c.get("tipo") == "tarea" and not ev_c.get("es_propio"):
-            asig_norm = normalizar_etiqueta_asignatura(ev_c.get("asignatura") or "").lower().strip()
-            f_dia = ev_c.get("fecha_dia") or (ev_c.get("fecha_iso") or "")[:10]
-            # 1. Búsqueda directa en diccionario por clave normalizada
-            match = por_asig_fecha.get((asig_norm, f_dia))
-            # 2. Si no coincide exactamente, buscar mediante comparación tolerante de etiquetas
-            if not match:
-                for (a_k, f_k), e_cand in por_asig_fecha.items():
-                    if f_k == f_dia and son_misma_asignatura(a_k, asig_norm) and e_cand.get("id") not in usados_ids:
-                        match = e_cand
-                        break
+            asig_base = ev_c.get("asignatura") or ""
+            tit_base = ev_c.get("titulo") or ""
+            f_dia_base = ev_c.get("fecha_dia") or (ev_c.get("fecha_iso") or "")[:10]
+
+            match = None
+            # 1. Buscar en Canvas coincidencia de materia y tarea
+            for e_cand in entregas_est:
+                if e_cand.get("id") in usados_ids:
+                    continue
+                if not son_misma_asignatura(e_cand.get("asignatura") or "", asig_base):
+                    continue
+                f_dia_cand = (e_cand.get("fecha_iso") or "")[:10]
+                if son_misma_tarea_o_entrega(tit_base, e_cand.get("titulo") or "", f_dia_base, f_dia_cand):
+                    match = e_cand
+                    break
+
+            # 2. Si no hubo match por título, buscar coincidencia por fecha si es única
+            if not match and f_dia_base:
+                candidatos_fecha = [
+                    e for e in entregas_est
+                    if e.get("id") not in usados_ids
+                    and son_misma_asignatura(e.get("asignatura") or "", asig_base)
+                    and (e.get("fecha_iso") or "")[:10] == f_dia_base
+                ]
+                if len(candidatos_fecha) == 1:
+                    cand = candidatos_fecha[0]
+                    es_test_ev = "test" in tit_base.lower() or "cuestionario" in tit_base.lower()
+                    es_test_cand = "test" in (cand.get("titulo") or "").lower() or "cuestionario" in (cand.get("titulo") or "").lower()
+                    if es_test_ev == es_test_cand:
+                        match = cand
+
             if match and match.get("id") not in usados_ids:
                 if overrides.get(match.get("id"), {}).get("oculto"):
                     continue
@@ -1666,7 +1721,7 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
 
         combinados.append(ev_c)
 
-    # Añadir exclusivamente entregas (tareas/PACs) personales adicionales del alumno en Canvas que no existan en el calendario oficial
+    # Añadir exclusivamente entregas (tareas/PACs/tests) personales adicionales del alumno en Canvas que no existan en el calendario oficial
     for e_user in entregas_est:
         # NUNCA añadir sesiones lectivas o clases de Canvas como entregas
         if e_user.get("tipo") != "tarea":
@@ -1675,49 +1730,61 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         ov = overrides.get(uid, {})
         if ov.get("oculto"):
             continue
-        if uid not in usados_ids:
-            f_iso = e_user.get("fecha_iso") or ""
-            f_dia = f_iso[:10] if len(f_iso) >= 10 else ""
-            asig_u = e_user.get("asignatura") or ""
-            # Evitar duplicar tareas que ya figuren en el calendario por fecha y asignatura (tolerante a etiquetas/acrónimos)
-            ya_existe = any(
-                (c.get("fecha_dia") == f_dia and c.get("tipo") == "tarea" and son_misma_asignatura(c.get("asignatura") or "", asig_u))
-                for c in combinados
-            )
-            if ya_existe:
-                continue
+        if uid in usados_ids:
+            continue
 
-            e_copia = dict(e_user)
-            e_copia["fecha_dia"] = ov.get("fecha_dia") or f_dia
-            e_copia["hora_inicio"] = ov.get("hora_inicio") or (f_iso[11:16] if len(f_iso) >= 16 else "23:59")
-            e_copia["categoria"] = ov.get("categoria") or "Actividad"
-            if ov.get("titulo"):
-                e_copia["titulo"] = ov["titulo"]
-            if ov.get("estado"):
-                e_copia["estado"] = ov["estado"]
-            else:
-                e_copia["estado"] = "Hecho" if e_copia.get("entregada") else "No entregado"
-            if "recordatorio" in ov and ov["recordatorio"] is not None:
-                e_copia["recordatorio"] = bool(ov["recordatorio"])
-            if "nota_personal" in ov and ov["nota_personal"] is not None:
-                e_copia["nota_personal"] = ov["nota_personal"]
-                e_copia["nota"] = ov["nota_personal"]
-            if "comentario" in ov and ov["comentario"] is not None:
-                e_copia["comentario"] = ov["comentario"]
+        f_iso = e_user.get("fecha_iso") or ""
+        f_dia = f_iso[:10] if len(f_iso) >= 10 else ""
+        asig_u = e_user.get("asignatura") or ""
+        tit_u = e_user.get("titulo") or ""
 
-            f_iso_calc = e_copia.get("fecha_iso") or (f"{e_copia.get('fecha_dia')}T{e_copia.get('hora_inicio') or '23:59'}:00Z" if e_copia.get("fecha_dia") else "")
-            if f_iso_calc:
-                dias_r, plazo_t = calcular_dias_restantes(f_iso_calc)
-                e_copia["dias_restantes"] = dias_r
-                if not e_copia.get("plazo_texto"):
-                    e_copia["plazo_texto"] = plazo_t
+        # Evitar duplicar tareas que ya figuren en combinados SI Y SOLO SI son la misma tarea
+        ya_existe = any(
+            (c.get("id") == uid or (
+                son_misma_asignatura(c.get("asignatura") or "", asig_u) and
+                son_misma_tarea_o_entrega(c.get("titulo") or "", tit_u, c.get("fecha_dia") or "", f_dia)
+            ))
+            for c in combinados
+        )
+        if ya_existe:
+            continue
 
-            if e_copia.get("estado") in ("Hecho", "Vista", "Vista no relevante"):
-                e_copia["entregada"] = True
-            else:
-                e_copia["entregada"] = False
+        e_copia = dict(e_user)
+        e_copia["fecha_dia"] = ov.get("fecha_dia") or f_dia
+        e_copia["hora_inicio"] = ov.get("hora_inicio") or (f_iso[11:16] if len(f_iso) >= 16 else "23:59")
 
-            combinados.append(e_copia)
+        # Categoría adecuada: Test si el título o tipo es de test, Actividad si es tarea/PAC
+        es_test = "test" in tit_u.lower() or "cuestionario" in tit_u.lower() or "autoevaluaci" in tit_u.lower()
+        e_copia["categoria"] = ov.get("categoria") or ("Test" if es_test else "Actividad")
+
+        if ov.get("titulo"):
+            e_copia["titulo"] = ov["titulo"]
+        if ov.get("estado"):
+            e_copia["estado"] = ov["estado"]
+        else:
+            e_copia["estado"] = "Hecho" if (e_copia.get("entregada") or e_copia.get("calificada")) else "No entregado"
+
+        if "recordatorio" in ov and ov["recordatorio"] is not None:
+            e_copia["recordatorio"] = bool(ov["recordatorio"])
+        if "nota_personal" in ov and ov["nota_personal"] is not None:
+            e_copia["nota_personal"] = ov["nota_personal"]
+            e_copia["nota"] = ov["nota_personal"]
+        if "comentario" in ov and ov["comentario"] is not None:
+            e_copia["comentario"] = ov["comentario"]
+
+        f_iso_calc = e_copia.get("fecha_iso") or (f"{e_copia.get('fecha_dia')}T{e_copia.get('hora_inicio') or '23:59'}:00Z" if e_copia.get("fecha_dia") else "")
+        if f_iso_calc:
+            dias_r, plazo_t = calcular_dias_restantes(f_iso_calc)
+            e_copia["dias_restantes"] = dias_r
+            if not e_copia.get("plazo_texto"):
+                e_copia["plazo_texto"] = plazo_t
+
+        if e_copia.get("estado") in ("Hecho", "Vista", "Vista no relevante") or e_copia.get("entregada"):
+            e_copia["entregada"] = True
+        else:
+            e_copia["entregada"] = False
+
+        combinados.append(e_copia)
 
     return combinados
 
