@@ -3083,13 +3083,6 @@ def dashboard_html():
                     <span class="hidden sm:inline">Añadir al Calendario</span>
                     <span class="sm:hidden">Añadir</span>
                   </button>
-                  <button @click="abrirModalImportarIcs()"
-                          class="px-2.5 sm:px-3 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] sm:text-[11px] font-bold transition flex items-center gap-1.5 whitespace-nowrap shadow-sm active:scale-95"
-                          title="Importar un archivo de calendario (.ics) de tu ordenador a tu cuenta">
-                    <i class="fa-solid fa-file-import text-[9px]"></i>
-                    <span class="hidden sm:inline">Importar .ics</span>
-                    <span class="sm:hidden">.ics</span>
-                  </button>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1 hidden sm:block">💡 Arrastra cualquier etiqueta a otro día, usa el botón «+» de cada día o haz clic para editarla</p>
               </div>
@@ -6395,7 +6388,27 @@ def dashboard_html():
         <h3 class="text-base font-extrabold text-white">Añadir a Mi Calendario / To-do</h3>
         <button @click="modalNuevoItemAgenda = false" class="text-gray-400 hover:text-white p-1 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="mt-4 space-y-3 text-xs">
+
+      <!-- SELECTOR DE MODO: CREAR MANUAL vs IMPORTAR ARCHIVO .ICS -->
+      <div class="mt-3 flex items-center p-1 bg-gray-950 rounded-xl border border-gray-800 gap-1">
+        <button type="button"
+                @click="modoNuevoItemModal = 'manual'"
+                :class="modoNuevoItemModal === 'manual' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-gray-400 hover:text-white'"
+                class="flex-1 py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-pen-to-square text-[10px]"></i>
+          <span>Crear Evento</span>
+        </button>
+        <button type="button"
+                @click="modoNuevoItemModal = 'ics'"
+                :class="modoNuevoItemModal === 'ics' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold' : 'text-gray-400 hover:text-white'"
+                class="flex-1 py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-file-import text-[10px]"></i>
+          <span>Importar .ics</span>
+        </button>
+      </div>
+
+      <!-- MODO 1: FORMULARIO MANUAL -->
+      <div x-show="modoNuevoItemModal === 'manual'" class="mt-3 space-y-3 text-xs">
         <!-- SELECTOR RÁPIDO: ¿DÓNDE QUIERES AÑADIRLO? -->
         <div>
           <label class="text-gray-400 block mb-1.5">¿Dónde quieres añadirlo?</label>
@@ -6511,10 +6524,90 @@ def dashboard_html():
             </template>
           </div>
         </div>
+
+        <div class="mt-5 pt-3 border-t border-gray-800 flex justify-end gap-2">
+          <button @click="modalNuevoItemAgenda = false" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition">Cancelar</button>
+          <button @click="crearNuevoItemAgenda()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-400 hover:to-sky-400 text-gray-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 transition">Añadir al Calendario</button>
+        </div>
       </div>
-      <div class="mt-5 pt-3 border-t border-gray-800 flex justify-end gap-2">
-        <button @click="modalNuevoItemAgenda = false" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition">Cancelar</button>
-        <button @click="crearNuevoItemAgenda()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-400 hover:to-sky-400 text-gray-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 transition">Añadir al Calendario</button>
+
+      <!-- MODO 2: IMPORTAR DESDE ARCHIVO .ICS -->
+      <div x-show="modoNuevoItemModal === 'ics'" class="mt-3 space-y-3 text-xs">
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Sube el archivo <code class="text-purple-300 font-mono">.ics</code> que tienes en tu ordenador (de Google Calendar, Canvas, Outlook o Apple) para fusionar sus eventos con tu calendario de UNIR.
+        </p>
+
+        <!-- CAJA DROPZONE -->
+        <div class="border-2 border-dashed border-gray-700 hover:border-purple-500/60 rounded-2xl p-5 text-center transition bg-gray-950/60 cursor-pointer"
+             @click="$refs.inputArchivoIcsModal.click()"
+             @dragover.prevent="$el.classList.add('border-purple-500')"
+             @dragleave.prevent="$el.classList.remove('border-purple-500')"
+             @drop.prevent="manejarDropIcs($event)">
+          <input type="file"
+                 x-ref="inputArchivoIcsModal"
+                 accept=".ics,text/calendar"
+                 class="hidden"
+                 @change="cargarArchivoIcsSeleccionado($event)">
+          
+          <template x-if="!icsArchivoCargado">
+            <div class="space-y-1.5 py-1">
+              <i class="fa-regular fa-calendar-plus text-3xl text-purple-400/80"></i>
+              <p class="text-xs font-bold text-gray-200">Haz clic aquí para seleccionar tu archivo .ics</p>
+              <p class="text-[11px] text-gray-500">o arrastra y suelta el archivo aquí</p>
+            </div>
+          </template>
+
+          <template x-if="icsArchivoCargado">
+            <div class="space-y-1.5 py-1">
+              <i class="fa-solid fa-circle-check text-2xl text-emerald-400"></i>
+              <p class="text-xs font-bold text-white truncate max-w-xs mx-auto" x-text="icsNombreArchivo"></p>
+              <p class="text-[11px] text-purple-300 font-mono" x-text="icsTotalEventosDetectados + ' eventos detectados en el archivo'"></p>
+              <button @click.stop="limpiarArchivoIcs()" class="text-[11px] text-rose-400 hover:underline">Cambiar archivo</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- ASIGNATURA POR DEFECTO -->
+        <div class="space-y-1">
+          <label class="block text-[11px] font-bold text-gray-400">Asignar eventos a la materia:</label>
+          <select x-model="icsAsignaturaDefecto" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none focus:border-purple-500 font-medium">
+            <option value="Personal / General">Personal / General (Eventos personales)</option>
+            <template x-for="asig in catalogoFiltrado" :key="'ics-modal-' + asig.nombre">
+              <option :value="asig.nombre" x-text="asig.nombre"></option>
+            </template>
+          </select>
+          <p class="text-[10px] text-gray-500">Si un evento ya especifica su asignatura en el título (ej: <em>[Acceso a Datos]</em>), se vinculará a esa materia automáticamente.</p>
+        </div>
+
+        <div class="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-[11px] text-purple-200/90 flex items-start gap-2">
+          <i class="fa-solid fa-shield-halved text-purple-400 mt-0.5 shrink-0 text-xs"></i>
+          <span><strong>Filtro anti-duplicados:</strong> Las clases o entregas que ya estén en tu calendario de la UNIR se omitirán automáticamente para no repetirse.</span>
+        </div>
+
+        <template x-if="icsMensajeError">
+          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation shrink-0"></i>
+            <span x-text="icsMensajeError"></span>
+          </div>
+        </template>
+
+        <template x-if="icsMensajeExito">
+          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-check shrink-0"></i>
+            <span x-text="icsMensajeExito"></span>
+          </div>
+        </template>
+
+        <div class="mt-5 pt-3 border-t border-gray-800 flex justify-end gap-2">
+          <button @click="modalNuevoItemAgenda = false" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition">Cancelar</button>
+          <button @click="procesarImportacionIcs()"
+                  :disabled="!icsArchivoCargado || icsImportando"
+                  type="button"
+                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-purple-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+            <i x-show="icsImportando" class="fa-solid fa-spinner fa-spin text-xs"></i>
+            <span x-text="icsImportando ? 'Importando...' : 'Importar a mi Calendario'"></span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -6666,116 +6759,6 @@ def dashboard_html():
       <div class="pt-2 flex justify-end">
         <button @click="modalConfigAlertas = false" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-lg transition">
           Guardar y Cerrar
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL IMPORTAR ARCHIVO .ICS ==================== -->
-  <div x-show="modalImportarIcs"
-       x-transition:enter="transition ease-out duration-200"
-       x-transition:enter-start="opacity-0"
-       x-transition:enter-end="opacity-100"
-       x-transition:leave="transition ease-in duration-150"
-       x-transition:leave-start="opacity-100"
-       x-transition:leave-end="opacity-0"
-       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-       style="display: none;">
-    <div @click.away="modalImportarIcs = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto space-y-4">
-      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
-        <div class="flex items-center space-x-3">
-          <div class="h-10 w-10 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center justify-center text-lg shadow-lg shadow-purple-500/10">
-            <i class="fa-solid fa-file-import"></i>
-          </div>
-          <div>
-            <h3 class="font-bold text-gray-100 text-base">Importar Calendario (.ics)</h3>
-            <p class="text-xs text-gray-400">Fusiona tu calendario personal junto al oficial de UNIR</p>
-          </div>
-        </div>
-        <button @click="modalImportarIcs = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-
-      <!-- ZONA DE CARGA DEL ARCHIVO -->
-      <div class="space-y-3">
-        <p class="text-xs text-gray-300 leading-relaxed">
-          Sube el archivo <code class="text-purple-300 font-mono">.ics</code> que tienes en tu ordenador (exportado de Google Calendar, Canvas, Outlook o Apple Calendar).
-        </p>
-
-        <!-- CAJA DROPZONE -->
-        <div class="border-2 border-dashed border-gray-700 hover:border-purple-500/60 rounded-2xl p-6 text-center transition bg-gray-950/60 cursor-pointer"
-             @click="$refs.inputArchivoIcs.click()"
-             @dragover.prevent="$el.classList.add('border-purple-500')"
-             @dragleave.prevent="$el.classList.remove('border-purple-500')"
-             @drop.prevent="manejarDropIcs($event)">
-          <input type="file"
-                 x-ref="inputArchivoIcs"
-                 accept=".ics,text/calendar"
-                 class="hidden"
-                 @change="cargarArchivoIcsSeleccionado($event)">
-          
-          <template x-if="!icsArchivoCargado">
-            <div class="space-y-2">
-              <i class="fa-regular fa-calendar-plus text-3xl text-purple-400/80"></i>
-              <p class="text-xs font-bold text-gray-200">Haz clic aquí para seleccionar tu archivo .ics</p>
-              <p class="text-[11px] text-gray-500">o arrastra el archivo directamente a esta caja</p>
-            </div>
-          </template>
-
-          <template x-if="icsArchivoCargado">
-            <div class="space-y-2">
-              <i class="fa-solid fa-circle-check text-2xl text-emerald-400"></i>
-              <p class="text-xs font-bold text-white truncate max-w-xs mx-auto" x-text="icsNombreArchivo"></p>
-              <p class="text-[11px] text-purple-300 font-mono" x-text="icsTotalEventosDetectados + ' eventos detectados en el archivo'"></p>
-              <button @click.stop="limpiarArchivoIcs()" class="text-[11px] text-rose-400 hover:underline">Cambiar archivo</button>
-            </div>
-          </template>
-        </div>
-
-        <!-- ASIGNATURA POR DEFECTO -->
-        <div class="space-y-1 pt-1">
-          <label class="block text-[11px] font-bold text-gray-400">Asignar eventos a la materia:</label>
-          <select x-model="icsAsignaturaDefecto" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none focus:border-purple-500 font-medium">
-            <option value="Personal / General">Personal / General (Eventos personales)</option>
-            <template x-for="asig in catalogoFiltrado" :key="'ics-asig-' + asig.nombre">
-              <option :value="asig.nombre" x-text="asig.nombre"></option>
-            </template>
-          </select>
-          <p class="text-[10px] text-gray-500">Si un evento ya especifica su asignatura en el título (ej: <em>[Acceso a Datos]</em>), se vinculará a esa materia automáticamente.</p>
-        </div>
-
-        <div class="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-[11px] text-purple-200/90 flex items-start gap-2">
-          <i class="fa-solid fa-shield-halved text-purple-400 mt-0.5 shrink-0"></i>
-          <span><strong>Protección contra duplicados:</strong> Si el archivo contiene clases o entregas que ya están en el calendario oficial de UNIR, se omitirán para no duplicarse.</span>
-        </div>
-
-        <template x-if="icsMensajeError">
-          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-            <i class="fa-solid fa-circle-exclamation shrink-0"></i>
-            <span x-text="icsMensajeError"></span>
-          </div>
-        </template>
-
-        <template x-if="icsMensajeExito">
-          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-            <i class="fa-solid fa-circle-check shrink-0"></i>
-            <span x-text="icsMensajeExito"></span>
-          </div>
-        </template>
-      </div>
-
-      <!-- ACCIONES -->
-      <div class="pt-3 border-t border-gray-800 flex items-center justify-end gap-2">
-        <button @click="modalImportarIcs = false" type="button" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 hover:text-white text-xs transition">
-          Cerrar
-        </button>
-        <button @click="procesarImportacionIcs()"
-                :disabled="!icsArchivoCargado || icsImportando"
-                type="button"
-                class="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-purple-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-          <i x-show="icsImportando" class="fa-solid fa-spinner fa-spin text-xs"></i>
-          <span x-text="icsImportando ? 'Importando...' : 'Importar a mi Calendario'"></span>
         </button>
       </div>
     </div>
@@ -7045,6 +7028,7 @@ def dashboard_html():
         itemArrastrando: null,
         diaArrastreSobre: '',
         modalNuevoItemAgenda: false,
+        modoNuevoItemModal: 'manual',
         nuevoItemDestino: 'calendario',
         nuevoItemTitulo: '',
         nuevoItemCategoria: 'Tema',
@@ -8013,7 +7997,9 @@ def dashboard_html():
         },
 
         abrirModalNuevoItemAgenda(categoriaPorDefecto = 'Tema', asignaturaPorDefecto = '', fechaPorDefecto = '', destino = 'calendario') {
+          this.modoNuevoItemModal = 'manual';
           this.nuevoItemTitulo = '';
+          this.limpiarArchivoIcs();
           this.modoNuevaAsignaturaPersonalizada = false;
           this.nuevoItemDestino = destino || 'calendario';
           this.nuevoItemCategoria = categoriaPorDefecto || 'Tema';
@@ -8359,8 +8345,8 @@ def dashboard_html():
           this.icsTotalEventosDetectados = 0;
           this.icsMensajeError = '';
           this.icsMensajeExito = '';
-          if (this.$refs.inputArchivoIcs) {
-            this.$refs.inputArchivoIcs.value = '';
+          if (this.$refs.inputArchivoIcsModal) {
+            this.$refs.inputArchivoIcsModal.value = '';
           }
         },
 
@@ -8430,10 +8416,10 @@ def dashboard_html():
             await this.cargarAgenda();
             setTimeout(() => {
               if (this.icsMensajeExito) {
-                this.modalImportarIcs = false;
+                this.modalNuevoItemAgenda = false;
                 this.limpiarArchivoIcs();
               }
-            }, 2500);
+            }, 2000);
           } catch (e) {
             this.icsMensajeError = 'Error de red al conectar con el servidor.';
           } finally {
