@@ -770,7 +770,7 @@ def importar_calendario_ics_usuario(
                 "hora_inicio": hora_ini,
                 "hora_fin": hora_fin,
                 "estado": estado_ini,
-                "recordatorio": (cat == "Examen" or (cat == "Cita" and not es_rutina and "recordatorio" in tit_lower)),
+                "recordatorio": True,
                 "url": url_val,
                 "descripcion": desc_txt or f"Importado de calendario .ics ({cat})",
             }
