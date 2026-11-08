@@ -2926,55 +2926,6 @@ def dashboard_html():
           <!-- COLUMNA IZQUIERDA (3 COLS): TO-DO HOY & TO-DO SEMANA (COMO EN EL VÍDEO DE NOTION) -->
           <div class="xl:col-span-3 flex flex-col gap-4">
 
-            <!-- AVISO ACTIVO DE RECORDATORIOS Y CITAS PRÓXIMAS (HOY / MAÑANA) -->
-            <div x-show="recordatoriosActivosHoyManana.length > 0"
-                 class="p-3.5 rounded-2xl border border-purple-500/50 bg-gradient-to-br from-purple-950/80 via-surface-8/90 to-surface-2 shadow-lg shadow-purple-950/30 space-y-2">
-              <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 text-xs font-extrabold text-purple-200">
-                  <i class="fa-solid fa-bell text-amber-400 animate-bounce"></i>
-                  <span>Recordatorios y Citas</span>
-                  <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-500/30 text-purple-200 font-mono" x-text="recordatoriosActivosHoyManana.length"></span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <button @click="abrirModalAlertas()"
-                          class="text-[10px] px-2 py-0.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 font-bold transition flex items-center gap-1"
-                          title="Ajustar minutos y antelación de alertas">
-                    <i class="fa-solid fa-sliders text-[9px]"></i>
-                    <span>Ajustar</span>
-                  </button>
-                  <button @click="solicitarPermisoNotificaciones()"
-                          x-show="notificacionesSoportadas && permisoNotificaciones !== 'granted'"
-                          class="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold transition"
-                          title="Activar avisos emergentes del navegador">
-                    🔔 Avisarme en PC
-                  </button>
-                </div>
-              </div>
-              <div class="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                <template x-for="rec in recordatoriosActivosHoyManana" :key="'rec-alert-' + rec.id">
-                  <div @click="abrirModalItemAgenda(rec)"
-                       class="p-2 rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-400/30 cursor-pointer transition flex items-center justify-between gap-2">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-[11px] font-extrabold text-white truncate" x-text="rec.titulo"></span>
-                        <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold shrink-0"
-                              x-text="rec.dias_restantes === 0 ? '¡HOY!' : (rec.dias_restantes === 1 ? 'Mañana' : rec.plazo_texto)"></span>
-                      </div>
-                      <p class="text-[10px] text-purple-200/80 flex items-center gap-1.5 mt-0.5">
-                        <span x-show="rec.hora_inicio && rec.hora_inicio !== '23:59'" class="font-mono font-bold text-amber-300" x-text="'🕒 ' + rec.hora_inicio"></span>
-                        <span class="truncate" x-text="rec.asignatura"></span>
-                      </p>
-                    </div>
-                    <button @click.stop="marcarItemRapidoHecho(rec)"
-                            title="Marcar recordatorio como completado"
-                            class="w-6 h-6 rounded-lg bg-black/30 hover:bg-emerald-500/30 text-gray-300 hover:text-emerald-300 flex items-center justify-center text-[10px] transition shrink-0">
-                      <i class="fa-solid fa-check"></i>
-                    </button>
-                  </div>
-                </template>
-              </div>
-            </div>
-
             <!-- 1. TO-DO HOY -->
             <div class="glass-card p-4 rounded-2xl border border-sky-500/30 bg-surface-2/95 flex flex-col">
               <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-gray-800">
