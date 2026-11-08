@@ -1558,6 +1558,9 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
     por_asig_fecha = {}
     entregas_est = datos_est.get("entregas", []) if datos_est.get("config", {}).get("conectado") else []
     for e_user in entregas_est:
+        uid = e_user.get("id")
+        if overrides.get(uid, {}).get("oculto"):
+            continue
         f_dia = (e_user.get("fecha_iso") or "")[:10]
         asig_norm = normalizar_etiqueta_asignatura(e_user.get("asignatura") or "").lower().strip()
         if asig_norm and f_dia:
@@ -1633,6 +1636,8 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
                         match = e_cand
                         break
             if match and match.get("id") not in usados_ids:
+                if overrides.get(match.get("id"), {}).get("oculto"):
+                    continue
                 usados_ids.add(match.get("id"))
                 ev_c["entregada"] = match.get("entregada", False)
                 ev_c["calificada"] = match.get("calificada", False)
@@ -1658,7 +1663,11 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         # NUNCA añadir sesiones lectivas o clases de Canvas como entregas
         if e_user.get("tipo") != "tarea":
             continue
-        if e_user.get("id") not in usados_ids:
+        uid = e_user.get("id")
+        ov = overrides.get(uid, {})
+        if ov.get("oculto"):
+            continue
+        if uid not in usados_ids:
             f_iso = e_user.get("fecha_iso") or ""
             f_dia = f_iso[:10] if len(f_iso) >= 10 else ""
             asig_u = e_user.get("asignatura") or ""
@@ -1671,10 +1680,35 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
                 continue
 
             e_copia = dict(e_user)
-            e_copia["fecha_dia"] = f_dia
-            e_copia["hora_inicio"] = f_iso[11:16] if len(f_iso) >= 16 else "23:59"
-            e_copia["categoria"] = "Actividad"
-            e_copia["estado"] = "Hecho" if e_copia.get("entregada") else "No entregado"
+            e_copia["fecha_dia"] = ov.get("fecha_dia") or f_dia
+            e_copia["hora_inicio"] = ov.get("hora_inicio") or (f_iso[11:16] if len(f_iso) >= 16 else "23:59")
+            e_copia["categoria"] = ov.get("categoria") or "Actividad"
+            if ov.get("titulo"):
+                e_copia["titulo"] = ov["titulo"]
+            if ov.get("estado"):
+                e_copia["estado"] = ov["estado"]
+            else:
+                e_copia["estado"] = "Hecho" if e_copia.get("entregada") else "No entregado"
+            if "recordatorio" in ov and ov["recordatorio"] is not None:
+                e_copia["recordatorio"] = bool(ov["recordatorio"])
+            if "nota_personal" in ov and ov["nota_personal"] is not None:
+                e_copia["nota_personal"] = ov["nota_personal"]
+                e_copia["nota"] = ov["nota_personal"]
+            if "comentario" in ov and ov["comentario"] is not None:
+                e_copia["comentario"] = ov["comentario"]
+
+            f_iso_calc = e_copia.get("fecha_iso") or (f"{e_copia.get('fecha_dia')}T{e_copia.get('hora_inicio') or '23:59'}:00Z" if e_copia.get("fecha_dia") else "")
+            if f_iso_calc:
+                dias_r, plazo_t = calcular_dias_restantes(f_iso_calc)
+                e_copia["dias_restantes"] = dias_r
+                if not e_copia.get("plazo_texto"):
+                    e_copia["plazo_texto"] = plazo_t
+
+            if e_copia.get("estado") in ("Hecho", "Vista", "Vista no relevante"):
+                e_copia["entregada"] = True
+            else:
+                e_copia["entregada"] = False
+
             combinados.append(e_copia)
 
     return combinados
@@ -8364,9 +8398,10 @@ def dashboard_html():
         async eliminarItemAgendaPropio(itemId) {
           if (!itemId) return;
           try {
+            this.agendaEventos = (this.agendaEventos || []).filter(e => e.id !== itemId);
+            this.modalItemAgenda = false;
             const res = await fetch(`/api/agenda/item/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
             if (res.ok) {
-              this.modalItemAgenda = false;
               await this.cargarAgenda();
             }
           } catch (e) {
@@ -8730,11 +8765,23 @@ def dashboard_html():
         obtenerEventoAgendaDeTema(numero, titulo = '') {
           if (!this.asigSeleccionada) return null;
           const asigNom = (this.asigSeleccionada.nombre || '').toLowerCase().trim();
+          // 1. Priorizar evento que sea específicamente de categoría o tipo 'Tema'
+          const temaExplicito = (this.agendaEventos || []).find(ev => {
+            const evAsig = (ev.asignatura || '').toLowerCase().trim();
+            if (evAsig !== asigNom && !asigNom.includes(evAsig) && !evAsig.includes(asigNom)) return false;
+            if (ev.categoria !== 'Tema' && ev.tipo !== 'tema') return false;
+            const tit = (ev.titulo || '').toLowerCase();
+            const regex = new RegExp('(?:tema|tem|t)\\s*0*' + numero + '(?:\\b|[^\\d])', 'i');
+            return regex.test(tit);
+          });
+          if (temaExplicito) return temaExplicito;
+
+          // 2. Si no hay evento de tipo 'Tema', buscar cualquier otro evento planificado para el tema
           return (this.agendaEventos || []).find(ev => {
             const evAsig = (ev.asignatura || '').toLowerCase().trim();
             if (evAsig !== asigNom && !asigNom.includes(evAsig) && !evAsig.includes(asigNom)) return false;
             const tit = (ev.titulo || '').toLowerCase();
-            const regex = new RegExp('(?:tema|tem|t)\\\\s*0*' + numero + '(?:\\\\b|[^\\\\d])', 'i');
+            const regex = new RegExp('(?:tema|tem|t)\\s*0*' + numero + '(?:\\b|[^\\d])', 'i');
             return regex.test(tit);
           }) || null;
         },

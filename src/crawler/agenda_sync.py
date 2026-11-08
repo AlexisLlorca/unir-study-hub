@@ -509,15 +509,14 @@ def crear_item_organizador_usuario(username: str, nuevo: Dict[str, Any]) -> Dict
 
 
 def eliminar_item_organizador_usuario(username: str, item_id: str) -> bool:
-    """Elimina un ítem propio creado por el estudiante, o lo oculta de su calendario personal si es del temario base."""
+    """Elimina un ítem propio creado por el estudiante, o lo oculta de su calendario personal si es del temario base o Canvas."""
     f = _archivo_organizador_usuario(username)
     org = obtener_organizador_usuario(username)
-    antes = len(org["items_propios"])
-    org["items_propios"] = [x for x in org["items_propios"] if x.get("id") != item_id]
-    if len(org["items_propios"]) == antes:
-        ov = org["overrides"].get(item_id, {})
-        ov["oculto"] = True
-        org["overrides"][item_id] = ov
+    items_antes = org.setdefault("items_propios", [])
+    org["items_propios"] = [x for x in items_antes if x.get("id") != item_id]
+    ovs = org.setdefault("overrides", {})
+    ov = ovs.setdefault(item_id, {})
+    ov["oculto"] = True
     escribir_json_atomico(f, org)
     try:
         _CACHE_ORGANIZADOR[username] = (f.stat().st_mtime, org)
