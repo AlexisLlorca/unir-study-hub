@@ -2149,9 +2149,10 @@ def api_validar_gemini_key(req: dict):
         return {"valida": False, "error": "Debes introducir una clave de API."}
     try:
         from google import genai
-        c = genai.Client(api_key=key)
-        # Probar con los modelos admitidos oficialmente para cuentas nuevas
-        modelos_test = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3-flash-preview"]
+        from google.genai import types
+        c = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=10000))
+        # Probar con los modelos modernos admitidos oficialmente para cuentas nuevas
+        modelos_test = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3-flash-preview"]
         ultimo_error = None
         for mod in modelos_test:
             try:
@@ -4652,7 +4653,7 @@ def dashboard_html():
               </div>
               <p class="text-xs text-emerald-400 flex items-center">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-                <span x-text="(chatModeloActualNombre || 'Gemini 3 Flash Preview') + ' · Memoria Conversacional Activa'"></span>
+                <span x-text="(chatModeloActualNombre || 'Gemini 3.5 Flash') + ' · Memoria Conversacional Activa'"></span>
               </p>
             </div>
           </div>
@@ -4745,8 +4746,17 @@ def dashboard_html():
             </div>
           </template>
           <div x-show="chatCargando" class="flex justify-start">
-            <div class="bg-gray-800 p-4 rounded-2xl rounded-tl-none text-gray-400 text-sm flex items-center space-x-2">
-              <i class="fa-solid fa-spinner fa-spin"></i><span>NOVA está razonando la respuesta técnica...</span>
+            <div class="bg-gray-800 p-4 rounded-2xl rounded-tl-none text-gray-400 text-sm flex items-center justify-between gap-3 shadow-md border border-gray-700/60">
+              <div class="flex items-center space-x-2.5">
+                <i class="fa-solid fa-spinner fa-spin text-cyan-400"></i>
+                <span class="text-gray-300">NOVA está razonando la respuesta técnica...</span>
+              </div>
+              <button @click="detenerConsultaChat()"
+                      class="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5"
+                      title="Detener respuesta en curso">
+                <i class="fa-solid fa-stop text-[10px]"></i>
+                <span>Detener</span>
+              </button>
             </div>
           </div>
         </div>
@@ -4770,12 +4780,21 @@ def dashboard_html():
 
         <!-- INPUT BAR -->
         <div class="p-4 bg-gray-900/90 border-t border-gray-800 flex items-center space-x-3">
-          <input type="text" x-model="chatInput" @keydown.enter="enviarMensajeChat()"
+          <input type="text" x-model="chatInput" @keydown.enter="if(!chatCargando) enviarMensajeChat()"
                  :placeholder="'Haz cualquier pregunta técnica o sobre lo que dijo el docente en las videoclases...'"
                  class="flex-1 bg-gray-800 text-white placeholder-gray-500 text-xs px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-cyan-500">
-          <button @click="enviarMensajeChat()" :disabled="chatCargando || !chatInput.trim()"
-                  class="px-5 py-3 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold rounded-xl text-xs hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 transition">
-            <i class="fa-solid fa-paper-plane mr-1.5"></i>Enviar
+          <!-- BOTÓN DETENER (activo mientras chatCargando) -->
+          <button x-show="chatCargando" @click="detenerConsultaChat()"
+                  class="px-5 py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs hover:shadow-lg hover:shadow-rose-500/20 transition flex items-center space-x-1.5 shadow"
+                  title="Detener la respuesta en curso">
+            <i class="fa-solid fa-stop text-[11px]"></i>
+            <span>Detener</span>
+          </button>
+          <!-- BOTÓN ENVIAR (activo cuando NO está cargando) -->
+          <button x-show="!chatCargando" @click="enviarMensajeChat()" :disabled="!chatInput.trim()"
+                  class="px-5 py-3 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold rounded-xl text-xs hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 transition flex items-center space-x-1.5">
+            <i class="fa-solid fa-paper-plane mr-1.5"></i>
+            <span>Enviar</span>
           </button>
         </div>
       </div>
@@ -6892,10 +6911,11 @@ def dashboard_html():
         chatInput: '',
         chatAsignatura: '',
         chatCargando: false,
+        chatAbortController: null,
         chatHistorial: [],
         chatHistorialesPorAsignatura: {},
         chatModeloSeleccionado: localStorage.getItem('unir_modelo_ia') || 'auto',
-        chatModeloActualNombre: 'Gemini 3 Flash Preview',
+        chatModeloActualNombre: 'Gemini 3.5 Flash',
         modelosIaDisponibles: [],
 
         // BYOK (Bring Your Own Key) para tokens privados
@@ -9158,8 +9178,23 @@ def dashboard_html():
             const res = await fetch('/api/modelos-ia');
             const data = await res.json();
             this.modelosIaDisponibles = data.modelos || [];
-            if (data.ultimo_modelo_nombre) {
+
+            // Si el modelo guardado previamente ya no existe en el catálogo (ej: modelos viejos o deprecados), volver a auto
+            if (this.chatModeloSeleccionado && this.chatModeloSeleccionado !== 'auto') {
+              const existe = this.modelosIaDisponibles.some(m => m.id === this.chatModeloSeleccionado);
+              if (!existe) {
+                this.chatModeloSeleccionado = 'auto';
+                try { localStorage.setItem('unir_modelo_ia', 'auto'); } catch(e) {}
+              }
+            }
+
+            if (data.ultimo_modelo_nombre && this.chatModeloSeleccionado === 'auto') {
               this.chatModeloActualNombre = data.ultimo_modelo_nombre;
+            } else if (this.chatModeloSeleccionado !== 'auto') {
+              const modObj = this.modelosIaDisponibles.find(m => m.id === this.chatModeloSeleccionado);
+              if (modObj) {
+                this.chatModeloActualNombre = modObj.nombre;
+              }
             }
           } catch(e) { console.error(e); }
         },
@@ -10824,6 +10859,16 @@ def dashboard_html():
           return window.DOMPurify ? window.DOMPurify.sanitize(rawHtml) : rawHtml;
         },
 
+        detenerConsultaChat() {
+          if (this.chatAbortController) {
+            try {
+              this.chatAbortController.abort();
+            } catch (err) {}
+            this.chatAbortController = null;
+          }
+          this.chatCargando = false;
+        },
+
         async enviarMensajeChat() {
           if (!this.chatInput.trim() || this.chatCargando) return;
           if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
@@ -10845,6 +10890,11 @@ def dashboard_html():
           this.guardarHistorialActual();
           this.chatInput = '';
           this.chatCargando = true;
+
+          // Crear AbortController para permitir cancelar la consulta si el usuario lo solicita
+          this.chatAbortController = new AbortController();
+          const abortSignal = this.chatAbortController.signal;
+
           this.$nextTick(() => {
             const el = document.getElementById('chatBox');
             if (el) el.scrollTop = el.scrollHeight;
@@ -10895,11 +10945,15 @@ def dashboard_html():
             api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
           };
 
+          let fueCancelado = false;
+          let acumulado = '';
+
           try {
             const res = await fetch('/api/chat-stream', {
               method: 'POST',
               headers: chatHeaders,
-              body: JSON.stringify(chatPayload)
+              body: JSON.stringify(chatPayload),
+              signal: abortSignal
             });
 
             if (!res.ok || !res.body) {
@@ -10909,10 +10963,13 @@ def dashboard_html():
             const reader = res.body.getReader();
             const decoder = new TextDecoder('utf-8');
             let buffer = '';
-            let acumulado = '';
             let primerChunkRecibido = false;
 
             while (true) {
+              if (abortSignal.aborted) {
+                fueCancelado = true;
+                break;
+              }
               const { value, done } = await reader.read();
               if (done) break;
               buffer += decoder.decode(value, { stream: true });
@@ -10943,32 +11000,51 @@ def dashboard_html():
                 } catch (parseErr) {}
               }
             }
-            if (!acumulado.trim()) {
+            if (!fueCancelado && !acumulado.trim()) {
               throw new Error('Stream vacío');
             }
-            actualizarMensajeEnOrigen(acumulado, true);
+            if (!fueCancelado) {
+              actualizarMensajeEnOrigen(acumulado, true);
+            }
           } catch(e) {
-            try {
-              const resFallback = await fetch('/api/chat', {
-                method: 'POST',
-                headers: chatHeaders,
-                body: JSON.stringify(chatPayload)
-              });
-              const data = await resFallback.json();
-              if (data.modelo_nombre) {
-                this.chatModeloActualNombre = data.modelo_nombre;
+            if (e.name === 'AbortError' || abortSignal.aborted) {
+              fueCancelado = true;
+            } else {
+              try {
+                const resFallback = await fetch('/api/chat', {
+                  method: 'POST',
+                  headers: chatHeaders,
+                  body: JSON.stringify(chatPayload),
+                  signal: abortSignal
+                });
+                const data = await resFallback.json();
+                if (data.modelo_nombre) {
+                  this.chatModeloActualNombre = data.modelo_nombre;
+                }
+                actualizarMensajeEnOrigen(data.respuesta || 'Sin respuesta de NOVA.', true);
+              } catch (errFallback) {
+                if (errFallback.name === 'AbortError' || abortSignal.aborted) {
+                  fueCancelado = true;
+                } else {
+                  actualizarMensajeEnOrigen('Error al contactar con NOVA.', true);
+                }
               }
-              actualizarMensajeEnOrigen(data.respuesta || 'Sin respuesta de NOVA.', true);
-            } catch (errFallback) {
-              actualizarMensajeEnOrigen('Error al contactar con NOVA.', true);
             }
           } finally {
+            if (fueCancelado || abortSignal.aborted) {
+              if (acumulado.trim()) {
+                actualizarMensajeEnOrigen(acumulado + '\\n\\n*(⏹ Consulta detenida por el usuario)*', true);
+              } else {
+                actualizarMensajeEnOrigen('*(⏹ Consulta detenida por el usuario)*', true);
+              }
+            }
+            this.chatAbortController = null;
             this.chatCargando = false;
             this.cargarModelosIa();
             this.$nextTick(() => {
               const el = document.getElementById('chatBox');
               if (el) el.scrollTop = el.scrollHeight;
-              if (this.autoVozActiva && this.chatHistorial.length > 0) {
+              if (!fueCancelado && this.autoVozActiva && this.chatHistorial.length > 0) {
                 const ultimoIdx = this.chatHistorial.length - 1;
                 const ultMsg = this.chatHistorial[ultimoIdx];
                 if (ultMsg && ultMsg.rol === 'model' && ultMsg.texto) {

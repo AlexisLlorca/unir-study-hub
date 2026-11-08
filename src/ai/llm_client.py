@@ -37,67 +37,39 @@ CATALOGO_MODELOS_GRATUITOS: List[Dict[str, Any]] = [
         "descripcion": "Salta automáticamente al mejor modelo gratuito con cuota libre",
     },
     {
-        "id": "gemini-3-flash-preview",
-        "nombre": "Gemini 3 Flash Preview",
+        "id": "gemini-3.5-flash",
+        "nombre": "Gemini 3.5 Flash",
         "proveedor": "google",
         "gratis": True,
-        "descripcion": "Google AI Studio · Rápido y alta capacidad (Cuota independiente)",
+        "descripcion": "Google AI Studio · Inteligente y completo (Razonamiento avanzado)",
     },
     {
         "id": "gemini-3.5-flash-lite",
         "nombre": "Gemini 3.5 Flash Lite",
         "proveedor": "google",
         "gratis": True,
-        "descripcion": "Google AI Studio · Ultra rápido y cuota diaria amplia",
+        "descripcion": "Google AI Studio · Ultra rápido (~0.4s) y cuota diaria amplia",
     },
     {
         "id": "gemini-flash-lite-latest",
         "nombre": "Gemini Flash Lite Latest",
         "proveedor": "google",
         "gratis": True,
-        "descripcion": "Google AI Studio · Estable con bolsa de cuota propia",
+        "descripcion": "Google AI Studio · Estable y veloz con bolsa de cuota propia",
     },
     {
-        "id": "gemma-4-31b-it",
-        "nombre": "Gemma 4 31B Instruct",
+        "id": "gemini-3-flash-preview",
+        "nombre": "Gemini 3 Flash Preview",
         "proveedor": "google",
         "gratis": True,
-        "descripcion": "Google Open Models · 31B parámetros (Gratis con tu API Key)",
-    },
-    {
-        "id": "gemma-4-26b-a4b-it",
-        "nombre": "Gemma 4 26B MoE",
-        "proveedor": "google",
-        "gratis": True,
-        "descripcion": "Google Open Models · Mixture-of-Experts rápido (Gratis)",
-    },
-    {
-        "id": "gemini-3.5-flash",
-        "nombre": "Gemini 3.5 Flash",
-        "proveedor": "google",
-        "gratis": True,
-        "descripcion": "Google AI Studio · 20 peticiones/día en capa gratuita",
-    },
-    {
-        "id": "gemini-3.7-flash",
-        "nombre": "Gemini 3.7 Flash",
-        "proveedor": "google",
-        "gratis": True,
-        "descripcion": "Google AI Studio · Última generación Flash",
-    },
-    {
-        "id": "gemini-3.8-flash",
-        "nombre": "Gemini 3.8 Flash",
-        "proveedor": "google",
-        "gratis": True,
-        "descripcion": "Google AI Studio · Experimental de alta velocidad",
+        "descripcion": "Google AI Studio · Alta capacidad y ventana de contexto amplia",
     },
     {
         "id": "gemini-3.1-flash-lite",
         "nombre": "Gemini 3.1 Flash Lite",
         "proveedor": "google",
         "gratis": True,
-        "descripcion": "Google AI Studio · Ligero de respaldo",
+        "descripcion": "Google AI Studio · Ligero y eficiente de respaldo",
     },
     {
         "id": "openrouter:openrouter/free",
@@ -190,7 +162,7 @@ class LLMClient:
     def __init__(self, model_name: Optional[str] = None):
         self.model_name = model_name or DEFAULT_GEMINI_MODEL
         self._client: Optional[genai.Client] = None
-        self.ultimo_modelo_usado: str = "gemini-3-flash-preview"
+        self.ultimo_modelo_usado: str = "gemini-3.5-flash"
 
     @staticmethod
     def _log_seguro(mensaje: str) -> None:
@@ -242,16 +214,12 @@ class LLMClient:
     def _obtener_lista_modelos(self, modelo_preferido: Optional[str] = None) -> List[str]:
         """Devuelve la cadena de modelos gratuitos priorizando el elegido y los que tienen cuota activa."""
         candidatos_base = [
-            "gemini-3.8-flash",
-            "gemini-3-flash-preview",
+            "gemini-3.5-flash",
             "gemini-3.5-flash-lite",
             "gemini-flash-lite-latest",
-            "gemma-4-26b-a4b-it",
-            "gemma-4-31b-it",
-            self.model_name,
-            "gemini-3.5-flash",
+            "gemini-3-flash-preview",
             "gemini-3.1-flash-lite",
-            "gemini-3.7-flash",
+            self.model_name,
         ]
         if get_groq_api_key():
             candidatos_base.extend([
@@ -285,7 +253,7 @@ class LLMClient:
 
     def _registrar_error_modelo(self, mod: str, err: Exception) -> None:
         err_str = str(err)
-        if any(k in err_str for k in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "503", "UNAVAILABLE"]):
+        if any(k in err_str for k in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "503", "UNAVAILABLE", "504", "DEADLINE_EXCEEDED", "401", "500"]):
             self._modelos_agotados.add(mod)
 
     def _llamar_openai_compatible(
@@ -344,9 +312,10 @@ class LLMClient:
 
     def _obtener_cliente(self, api_key_override: Optional[str] = None) -> Optional[genai.Client]:
         """Inicializa de forma perezosa el cliente de Gemini. Si se pasa api_key_override, usa esa clave."""
+        http_opts = types.HttpOptions(timeout=15000)
         if api_key_override and api_key_override.strip():
             try:
-                return genai.Client(api_key=api_key_override.strip())
+                return genai.Client(api_key=api_key_override.strip(), http_options=http_opts)
             except Exception as e:
                 self._log_seguro(f"[red]Error inicializando cliente de Gemini con clave personalizada:[/red] {e}")
                 return None
@@ -359,7 +328,7 @@ class LLMClient:
             return None
 
         try:
-            self._client = genai.Client(api_key=api_key)
+            self._client = genai.Client(api_key=api_key, http_options=http_opts)
             return self._client
         except Exception as e:
             self._log_seguro(f"[red]Error inicializando cliente de Gemini:[/red] {e}")
