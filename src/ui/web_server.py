@@ -3521,8 +3521,8 @@ def dashboard_html():
               </div>
               
               <div class="flex flex-wrap items-center gap-2">
-                <button @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, '', 'calendario')" class="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-xl text-xs font-semibold text-gray-200 transition flex items-center space-x-1.5">
-                  <i class="fa-solid fa-calendar-plus text-cyan-400"></i><span>+ Tema / Tarea al Calendario</span>
+                <button @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, '', 'calendario')" class="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-xl text-xs font-semibold text-gray-200 transition flex items-center space-x-1.5" title="Añadir clase, tema o tarea a esta asignatura">
+                  <i class="fa-solid fa-calendar-plus text-cyan-400"></i><span>+ Añadir al Calendario</span>
                 </button>
                 <button @click="modalGenerador = true" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl text-xs font-bold text-gray-900 hover:shadow-lg hover:shadow-emerald-500/20 transition flex items-center space-x-2">
                   <i class="fa-solid fa-wand-magic-sparkles"></i><span>Generar Guía / Test IA</span>
@@ -6467,8 +6467,8 @@ def dashboard_html():
         </div>
 
         <div>
-          <label class="text-gray-400 block mb-1">Título (ej. Tema 3, Cita médico, Reunión, Examen...)</label>
-          <input type="text" x-model="nuevoItemTitulo" placeholder="Ej: Tema 3 - Ficheros XML o Cita a las 17:30" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500">
+          <label class="text-gray-400 block mb-1">Título <span class="text-[10px] text-gray-500 font-normal">(opcional para clases y tutorías)</span></label>
+          <input type="text" x-model="nuevoItemTitulo" :placeholder="['Clase', 'Tutoría'].includes(nuevoItemCategoria) ? ('Ej: Clase ' + (nuevoItemHora || '19:00') + ' (o déjalo vacío para automático)') : 'Ej: Tema 3 - Ficheros XML o Cita a las 17:30'" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500">
         </div>
         <div class="grid grid-cols-12 gap-2">
           <div class="col-span-5">
@@ -7504,10 +7504,19 @@ def dashboard_html():
         // Eventos filtrados exclusivamente para la asignatura abierta actualmente
         eventosDeAsignaturaActual() {
           if (!this.asigSeleccionada?.nombre) return [];
-          const nombreAsig = this.asigSeleccionada.nombre.toLowerCase();
+          const nombreAsig = this.asigSeleccionada.nombre.toLowerCase().trim();
+          const siglasAsig = (this.abreviarAsignatura(this.asigSeleccionada.nombre) || '').toLowerCase().trim();
+          const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9áéíóúüñ]/gi, '');
+          const cleanAsig = clean(nombreAsig);
           return (this.agendaEventos || []).filter(ev => {
-            const evAsig = (ev.asignatura || '').toLowerCase();
-            return evAsig === nombreAsig || evAsig.includes(nombreAsig) || nombreAsig.includes(evAsig);
+            const evAsig = (ev.asignatura || '').toLowerCase().trim();
+            if (!evAsig) return false;
+            if (evAsig === nombreAsig) return true;
+            if (siglasAsig && (evAsig === siglasAsig || evAsig.includes(`[${siglasAsig}]`) || evAsig.includes(`(${siglasAsig})`))) return true;
+            if (evAsig.includes(nombreAsig) || nombreAsig.includes(evAsig)) return true;
+            const cleanEv = clean(evAsig);
+            if (cleanEv && cleanAsig && (cleanEv.includes(cleanAsig) || cleanAsig.includes(cleanEv))) return true;
+            return false;
           });
         },
 
@@ -8080,10 +8089,25 @@ def dashboard_html():
           this.nuevoItemDestino = destino || 'calendario';
           this.nuevoItemCategoria = categoriaPorDefecto || 'Tema';
           const esCita = ['Cita', 'Recordatorio', 'Otro'].includes(this.nuevoItemCategoria);
-          this.nuevoItemHora = esCita ? '17:00' : '';
+          this.nuevoItemHora = esCita ? '17:00' : (['Clase', 'Tutoría'].includes(this.nuevoItemCategoria) ? '19:00' : '');
           this.nuevoItemRecordatorio = esCita || this.nuevoItemCategoria === 'Examen';
+
+          if (asignaturaPorDefecto) {
+            this.nuevoItemAsignatura = asignaturaPorDefecto;
+          } else if (this.asigSeleccionada?.nombre) {
+            this.nuevoItemAsignatura = this.asigSeleccionada.nombre;
+          } else if (esCita) {
+            this.nuevoItemAsignatura = 'Personal / General';
+          } else {
+            this.nuevoItemAsignatura = (this.asigSeleccionada?.nombre) || (this.listaAsignaturasCompleta[0] || 'Acceso a Datos');
+          }
+
           if (fechaPorDefecto) {
             this.nuevoItemFecha = fechaPorDefecto;
+          } else if (this.asigSeleccionada && this.diasCalendarioAsignaturaActual.length > 0) {
+            const hoyStr = new Date().toISOString().slice(0, 10);
+            const celdaHoy = this.diasCalendarioAsignaturaActual.find(c => c.fechaStr === hoyStr);
+            this.nuevoItemFecha = celdaHoy ? hoyStr : (this.diasCalendarioAsignaturaActual[0].fechaStr || hoyStr);
           } else if (destino === 'calendario') {
             if (this.calModoVista === 'quincena' && this.calOffsetSemanas !== 0 && this.celdasCalendarioVisibles.length > 0) {
               this.nuevoItemFecha = this.celdasCalendarioVisibles[0].fechaStr || new Date().toISOString().slice(0, 10);
@@ -8099,13 +8123,6 @@ def dashboard_html():
             }
           } else {
             this.nuevoItemFecha = new Date().toISOString().slice(0, 10);
-          }
-          if (asignaturaPorDefecto) {
-            this.nuevoItemAsignatura = asignaturaPorDefecto;
-          } else if (esCita) {
-            this.nuevoItemAsignatura = 'Personal / General';
-          } else {
-            this.nuevoItemAsignatura = (this.asigSeleccionada?.nombre) || (this.listaAsignaturasCompleta[0] || 'Acceso a Datos');
           }
           this.actualizarEstadoSegunCategoriaNuevo();
           this.modalNuevoItemAgenda = true;
@@ -8124,18 +8141,27 @@ def dashboard_html():
           if (['Cita', 'Recordatorio', 'Otro'].includes(cat)) {
             this.nuevoItemRecordatorio = true;
             if (!this.nuevoItemHora) this.nuevoItemHora = '17:00';
-            if (this.nuevoItemAsignatura === 'Acceso a Datos') {
+            if (!this.asigSeleccionada && (!this.nuevoItemAsignatura || this.nuevoItemAsignatura === 'Acceso a Datos')) {
               this.nuevoItemAsignatura = 'Personal / General';
             }
             this.nuevoItemEstado = 'Pendiente de empezar';
           } else if (['Clase', 'Tutoría'].includes(cat)) {
             this.nuevoItemEstado = 'No vista';
             if (!this.nuevoItemHora) this.nuevoItemHora = '19:00';
+            if (this.asigSeleccionada?.nombre && this.nuevoItemAsignatura === 'Personal / General') {
+              this.nuevoItemAsignatura = this.asigSeleccionada.nombre;
+            }
           } else if (['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(cat)) {
             if (cat === 'Examen') this.nuevoItemRecordatorio = true;
             this.nuevoItemEstado = this.nuevoItemDestino === 'hoy' ? 'En proceso' : 'No entregado';
+            if (this.asigSeleccionada?.nombre && this.nuevoItemAsignatura === 'Personal / General') {
+              this.nuevoItemAsignatura = this.asigSeleccionada.nombre;
+            }
           } else {
             this.nuevoItemEstado = this.nuevoItemDestino === 'hoy' ? 'Pendiente de empezar' : 'No hecho';
+            if (this.asigSeleccionada?.nombre && this.nuevoItemAsignatura === 'Personal / General') {
+              this.nuevoItemAsignatura = this.asigSeleccionada.nombre;
+            }
           }
         },
 
@@ -8367,16 +8393,31 @@ def dashboard_html():
         },
 
         async crearNuevoItemAgenda() {
-          if (!this.nuevoItemTitulo.trim()) return;
+          let titulo = (this.nuevoItemTitulo || '').trim();
+          const cat = this.nuevoItemCategoria || 'Tema';
+          const asig = this.nuevoItemAsignatura || (this.asigSeleccionada?.nombre || 'General');
+          const hora = this.nuevoItemHora ? ` ${this.nuevoItemHora}` : '';
+          if (!titulo) {
+            if (cat === 'Clase') {
+              titulo = `Clase${hora}`;
+            } else if (cat === 'Tutoría') {
+              titulo = `Tutoría${hora}`;
+            } else if (cat === 'Tema') {
+              titulo = `Estudio ${asig}`;
+            } else {
+              titulo = `${cat}${hora ? ' a las' + hora : ''}`;
+            }
+            this.nuevoItemTitulo = titulo;
+          }
           const fechaCreada = this.nuevoItemFecha;
           try {
             const res = await fetch('/api/agenda/item/crear', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                titulo: this.nuevoItemTitulo.trim(),
-                asignatura: this.nuevoItemAsignatura,
-                categoria: this.nuevoItemCategoria,
+                titulo: titulo,
+                asignatura: asig,
+                categoria: cat,
                 estado: this.nuevoItemEstado,
                 fecha_dia: fechaCreada,
                 hora_inicio: this.nuevoItemHora || null,
@@ -8384,11 +8425,15 @@ def dashboard_html():
               })
             });
             if (res.ok) {
+              const resJson = await res.json().catch(() => ({}));
+              if (resJson && resJson.item) {
+                this.agendaEventos = [resJson.item, ...(this.agendaEventos || []).filter(e => e.id !== resJson.item.id)];
+              }
               this.modalNuevoItemAgenda = false;
-              await this.cargarAgenda();
               if (fechaCreada) {
                 this.irADiaDeEvento({ fecha_dia: fechaCreada });
               }
+              await this.cargarAgenda();
             }
           } catch (e) {
             console.error(e);
@@ -8557,18 +8602,22 @@ def dashboard_html():
             this.calAnio = anio;
             this.calMes = mes;
             this.calDiaSeleccionado = f;
-            // Ajustar también el offset semanal si la fecha no está en las 2 semanas visibles actualmente
+
             const hoy = new Date();
             hoy.setHours(0, 0, 0, 0);
             const diaSemHoy = (hoy.getDay() + 6) % 7;
             const lunesActual = new Date(hoy);
             lunesActual.setDate(hoy.getDate() - diaSemHoy);
+
             const fechaObjetivo = new Date(anio, mes, dia);
             fechaObjetivo.setHours(0, 0, 0, 0);
             const diaSemObj = (fechaObjetivo.getDay() + 6) % 7;
             const lunesObjetivo = new Date(fechaObjetivo);
             lunesObjetivo.setDate(fechaObjetivo.getDate() - diaSemObj);
-            const diffSemanas = Math.round((lunesObjetivo.getTime() - lunesActual.getTime()) / (7 * 24 * 60 * 60 * 1000));
+
+            const utc1 = Date.UTC(lunesActual.getFullYear(), lunesActual.getMonth(), lunesActual.getDate());
+            const utc2 = Date.UTC(lunesObjetivo.getFullYear(), lunesObjetivo.getMonth(), lunesObjetivo.getDate());
+            const diffSemanas = Math.round((utc2 - utc1) / (7 * 24 * 60 * 60 * 1000));
             if (diffSemanas < this.calOffsetSemanas || diffSemanas > this.calOffsetSemanas + 1) {
               this.calOffsetSemanas = diffSemanas;
             }

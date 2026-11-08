@@ -475,12 +475,16 @@ def crear_item_organizador_usuario(username: str, nuevo: Dict[str, Any]) -> Dict
     if rec_val is None:
         rec_val = True if (es_cita or cat == "Examen") else False
 
+    titulo_raw = (nuevo.get("titulo") or "").strip()
+    if not titulo_raw:
+        titulo_raw = f"Clase {hora_ini}" if es_clase else (f"Tutoría {hora_ini}" if cat == "Tutoría" else f"{cat} personal")
+
     item = {
         "id": f"user_{secrets.token_hex(4)}",
         "es_propio": True,
         "tipo": tipo_interno,
         "categoria": cat,
-        "titulo": (nuevo.get("titulo") or "Nuevo evento").strip()[:120],
+        "titulo": titulo_raw[:120],
         "asignatura": (nuevo.get("asignatura") or ("Personal / General" if es_cita else "General")).strip(),
         "fecha_iso": f"{fecha_dia}T{hora_ini}:00Z",
         "fecha_dia": fecha_dia,
