@@ -1588,6 +1588,14 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         if "comentario" in ov and ov["comentario"] is not None:
             ev_c["comentario"] = ov["comentario"]
 
+        # Asegurar cálculo de días restantes y plazo para todos los ítems (incluidos propios e importados)
+        f_iso_calc = ev_c.get("fecha_iso") or (f"{ev_c.get('fecha_dia')}T{ev_c.get('hora_inicio') or '23:59'}:00Z" if ev_c.get("fecha_dia") else "")
+        if f_iso_calc and ev_c.get("dias_restantes") is None:
+            dias_r, plazo_t = calcular_dias_restantes(f_iso_calc)
+            ev_c["dias_restantes"] = dias_r
+            if not ev_c.get("plazo_texto"):
+                ev_c["plazo_texto"] = plazo_t
+
         # Si el alumno conectó Canvas y esta entrega figura entregada/calificada en su Canvas
         # IMPORTANTE: Solo enlazar entregas del calendario oficial base; NUNCA sobreescribir ítems propios del alumno
         if ev_c.get("tipo") == "tarea" and not ev_c.get("es_propio"):
@@ -2888,7 +2896,7 @@ def dashboard_html():
         </template>
 
         <!-- WORKSPACE ORGANIZADOR ESTILO NOTION (TO-DO HOY + TO-DO SEMANA + CALENDARIO CON TARJETAS DE ESTADO) -->
-        <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
 
           <!-- COLUMNA IZQUIERDA (3 COLS): TO-DO HOY & TO-DO SEMANA (COMO EN EL VÍDEO DE NOTION) -->
           <div class="xl:col-span-3 flex flex-col gap-4">
@@ -2917,7 +2925,7 @@ def dashboard_html():
                   </button>
                 </div>
               </div>
-              <div class="space-y-1.5">
+              <div class="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                 <template x-for="rec in recordatoriosActivosHoyManana" :key="'rec-alert-' + rec.id">
                   <div @click="abrirModalItemAgenda(rec)"
                        class="p-2 rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-400/30 cursor-pointer transition flex items-center justify-between gap-2">
@@ -3071,7 +3079,7 @@ def dashboard_html():
           </div>
 
           <!-- COLUMNA DERECHA (9 COLS): CALENDARIO INTERACTIVO CON TARJETAS DE ESTADO (SEMANAL / MENSUAL) -->
-          <div class="xl:col-span-9 glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-800/90 bg-surface-1/95 flex flex-col justify-between">
+          <div class="xl:col-span-9 glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-800/90 bg-surface-1/95 flex flex-col justify-start space-y-4">
             <!-- CABECERA DEL CALENDARIO (TODO EN LÍNEA / RESPONSIVE) -->
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-3.5 border-b border-gray-800">
               <div class="min-w-0">
@@ -7268,6 +7276,9 @@ def dashboard_html():
           return (this.agendaEventos || []).filter(ev => {
             const est = ev.estado || '';
             if (['Vista', 'Vista no relevante', 'Hecho'].includes(est) || ev.entregada) return false;
+            // Filtrar rutinas diarias normales para no saturar las alertas
+            const esRutina = /almuerzo|planificaci[oó]n|ritual|descanso/i.test(ev.titulo || '');
+            if (esRutina) return false;
             const esRec = Boolean(ev.recordatorio) || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria);
             if (!esRec) return false;
             const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
@@ -7276,10 +7287,14 @@ def dashboard_html():
         },
 
         get recordatoriosActivosHoyManana() {
+          const hoyStr = new Date().toISOString().slice(0, 10);
+          const manana = new Date();
+          manana.setDate(manana.getDate() + 1);
+          const mananaStr = manana.toISOString().slice(0, 10);
           return this.proximosRecordatorios.filter(ev => {
-            const d = ev.dias_restantes ?? 0;
-            return d <= 2;
-          });
+            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
+            return f === hoyStr || f === mananaStr;
+          }).slice(0, 6);
         },
 
         // To-do hoy (estilo Notion: lo que tiene fecha de hoy + Temas/Actividades marcadas como 'Pendiente de empezar' o 'En proceso')

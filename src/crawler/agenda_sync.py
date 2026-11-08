@@ -711,6 +711,7 @@ def importar_calendario_ics_usuario(
             or "deep work" in tit_lower
         )
 
+        es_rutina = any(k in tit_lower for k in ("planificación", "planificacion", "almuerzo", "descanso", "ritual", "preparación", "preparacion"))
         if es_horario_clase:
             cat = "Clase"
             tipo_interno = "clase_directo"
@@ -769,7 +770,7 @@ def importar_calendario_ics_usuario(
                 "hora_inicio": hora_ini,
                 "hora_fin": hora_fin,
                 "estado": estado_ini,
-                "recordatorio": (cat in ("Cita", "Examen")),
+                "recordatorio": (cat == "Examen" or (cat == "Cita" and not es_rutina and "recordatorio" in tit_lower)),
                 "url": url_val,
                 "descripcion": desc_txt or f"Importado de calendario .ics ({cat})",
             }
