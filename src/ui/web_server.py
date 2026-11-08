@@ -3166,15 +3166,15 @@ def dashboard_html():
                 <div class="grid gap-1.5" :class="calModoVista === 'quincena' ? 'grid-cols-1 sm:grid-cols-5' : 'grid-cols-7'">
                   <template x-for="celda in celdasCalendarioVisibles" :key="celda.key">
                     <div @dragover.prevent="if (celda.fechaStr) diaArrastreSobre = celda.fechaStr"
-                         @dragleave="if (diaArrastreSobre === celda.fechaStr) diaArrastreSobre = ''"
+                         @dragleave.prevent="if ($event.relatedTarget && !$el.contains($event.relatedTarget)) diaArrastreSobre = ''"
                          @drop.prevent="soltarItemEnDia(celda.fechaStr)"
                          :class="[
                            !celda.esMesActual && calModoVista === 'mes' ? 'opacity-30 bg-gray-950/20 border-gray-900' : 'bg-surface-4 border-gray-800/90',
                            celda.esHoy ? 'ring-2 ring-rose-500/80 border-rose-500' : '',
                            celda.tieneEntregaRoja ? 'border-rose-500/60' : '',
-                           diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/30 border-cyan-400' : ''
+                           diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/60 border-cyan-400 scale-[1.01] shadow-lg shadow-cyan-500/20' : ''
                          ]"
-                         class="min-h-[110px] sm:min-h-[165px] p-2 sm:p-1.5 rounded-xl border flex flex-col justify-between transition">
+                         class="min-h-[110px] sm:min-h-[165px] p-2 sm:p-1.5 rounded-xl border flex flex-col justify-between transition-all duration-150">
                       <div>
                         <!-- NÚMERO DE DÍA + DÍA SEMANA EN MÓVIL + BOTÓN + -->
                         <div class="flex items-center justify-between mb-1.5 px-0.5 group/day">
@@ -3200,8 +3200,11 @@ def dashboard_html():
                                @dragstart="iniciarArrastreItem($event, ev)"
                                @dragend="finalizarArrastreItem()"
                                title="Arrastra a otro día para moverlo o haz clic para editar nombre, asignatura, fecha y estado"
-                               class="p-2 rounded-lg border cursor-grab active:cursor-grabbing transition hover:brightness-110 text-left space-y-1 shadow-sm group/card"
-                               :class="claseColorTarjetaNotion(ev)">
+                               class="p-2 rounded-lg border cursor-grab active:cursor-grabbing transition-all duration-150 hover:brightness-110 text-left space-y-1 shadow-sm group/card"
+                               :class="[
+                                 claseColorTarjetaNotion(ev),
+                                 itemArrastrando && itemArrastrando.id === ev.id ? 'opacity-30 scale-95 border-dashed border-cyan-400' : 'hover:scale-[1.01]'
+                               ]">
                             <div class="flex items-start justify-between gap-1">
                               <p class="text-[11px] font-extrabold text-white leading-tight break-words flex items-center gap-1">
                                 <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[9px] shrink-0"></i>
@@ -3227,14 +3230,18 @@ def dashboard_html():
                                       class="text-[9px] font-mono font-bold text-emerald-300"
                                       x-text="ev.nota_personal + '/10'"></span>
                                 <!-- Botones rápidos para pasar de un día a otro en 1 clic -->
-                                <div class="hidden group-hover/card:flex items-center gap-0.5" @click.stop="">
-                                  <button @click="moverItemDias(ev, -1)" title="Pasar al día anterior (-1 día)" class="px-1 py-0.2 rounded bg-black/40 hover:bg-black/70 text-[9px] text-gray-200">◀</button>
-                                  <button @click="moverItemDias(ev, 1)" title="Pasar al día siguiente (+1 día)" class="px-1 py-0.2 rounded bg-black/40 hover:bg-black/70 text-[9px] text-gray-200">▶</button>
+                                <div class="flex items-center gap-0.5 opacity-60 sm:opacity-0 group-hover/card:opacity-100 transition-opacity" @click.stop="">
+                                  <button @click="moverItemDias(ev, -1)" title="Pasar al día anterior (-1 día)" class="w-4 h-4 rounded flex items-center justify-center bg-black/50 hover:bg-cyan-500 hover:text-black text-[9px] text-gray-300 transition active:scale-90">◀</button>
+                                  <button @click="moverItemDias(ev, 1)" title="Pasar al día siguiente (+1 día)" class="w-4 h-4 rounded flex items-center justify-center bg-black/50 hover:bg-cyan-500 hover:text-black text-[9px] text-gray-300 transition active:scale-90">▶</button>
                                 </div>
                               </div>
                             </div>
                           </div>
                         </template>
+                      </div>
+                    </div>
+                  </div>
+                </template>
                       </div>
                     </div>
                   </div>
@@ -3554,14 +3561,14 @@ def dashboard_html():
               <div class="grid grid-cols-1 sm:grid-cols-5 gap-1.5 pb-1">
                 <template x-for="celda in diasCalendarioAsignaturaActual" :key="'asig-cal-' + celda.key">
                   <div @dragover.prevent="if (celda.fechaStr) diaArrastreSobre = celda.fechaStr"
-                       @dragleave="if (diaArrastreSobre === celda.fechaStr) diaArrastreSobre = ''"
+                       @dragleave.prevent="if ($event.relatedTarget && !$el.contains($event.relatedTarget)) diaArrastreSobre = ''"
                        @drop.prevent="soltarItemEnDia(celda.fechaStr)"
                        :class="[
                          'bg-surface-4 border-gray-800',
                          celda.esHoy ? 'ring-1 ring-rose-500 border-rose-500' : '',
-                         diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/30 border-cyan-400' : ''
+                         diaArrastreSobre === celda.fechaStr && celda.fechaStr ? 'ring-2 ring-cyan-400 bg-cyan-950/60 border-cyan-400 scale-[1.01]' : ''
                        ]"
-                       class="min-h-[96px] p-1.5 rounded-xl border flex flex-col justify-between transition">
+                       class="min-h-[96px] p-1.5 rounded-xl border flex flex-col justify-between transition-all duration-150">
                     <div class="flex items-center justify-between text-[10px] text-gray-400 mb-1">
                       <div class="flex items-center gap-1.5">
                         <button x-show="celda.fechaStr" @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, celda.fechaStr, 'calendario')" class="text-gray-500 hover:text-cyan-400 text-[10px] font-bold px-1 rounded hover:bg-gray-800" title="Planificar tema o tarea aquí">+</button>
@@ -3575,14 +3582,17 @@ def dashboard_html():
                              draggable="true"
                              @dragstart="iniciarArrastreItem($event, ev)"
                              @dragend="finalizarArrastreItem()"
-                             class="p-1.5 rounded-lg border cursor-grab active:cursor-grabbing text-[10px] leading-tight transition hover:brightness-110 group/acard"
-                             :class="claseColorTarjetaNotion(ev)">
+                             class="p-1.5 rounded-lg border cursor-grab active:cursor-grabbing text-[10px] leading-tight transition-all duration-150 hover:brightness-110 group/acard"
+                             :class="[
+                               claseColorTarjetaNotion(ev),
+                               itemArrastrando && itemArrastrando.id === ev.id ? 'opacity-30 scale-95 border-dashed border-cyan-400' : 'hover:scale-[1.01]'
+                             ]">
                           <p class="font-bold text-white break-words" x-text="ev.titulo"></p>
                           <div class="flex items-center justify-between gap-1 mt-1">
                             <span class="text-[8px] px-1 py-0.2 rounded font-bold inline-block" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
-                            <div class="hidden group-hover/acard:flex items-center gap-0.5" @click.stop="">
-                              <button @click="moverItemDias(ev, -1)" title="-1 día" class="px-1 rounded bg-black/40 hover:bg-black/70 text-[8px] text-gray-200">◀</button>
-                              <button @click="moverItemDias(ev, 1)" title="+1 día" class="px-1 rounded bg-black/40 hover:bg-black/70 text-[8px] text-gray-200">▶</button>
+                            <div class="flex items-center gap-0.5 opacity-60 sm:opacity-0 group-hover/acard:opacity-100 transition-opacity" @click.stop="">
+                              <button @click="moverItemDias(ev, -1)" title="Mover -1 día" class="w-3.5 h-3.5 rounded flex items-center justify-center bg-black/50 hover:bg-cyan-500 hover:text-black text-[8px] text-gray-200 transition active:scale-90">◀</button>
+                              <button @click="moverItemDias(ev, 1)" title="Mover +1 día" class="w-3.5 h-3.5 rounded flex items-center justify-center bg-black/50 hover:bg-cyan-500 hover:text-black text-[8px] text-gray-200 transition active:scale-90">▶</button>
                             </div>
                           </div>
                         </div>
@@ -7911,6 +7921,9 @@ def dashboard_html():
           if (event?.dataTransfer) {
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData('text/plain', ev.id);
+            try {
+              event.dataTransfer.dropEffect = 'move';
+            } catch (err) {}
           }
         },
 
@@ -7924,7 +7937,15 @@ def dashboard_html():
           this.diaArrastreSobre = '';
           this.itemArrastrando = null;
           if (!ev || !fechaDestinoStr) return;
-          if (ev.fecha_dia === fechaDestinoStr) return;
+          const fechaAnterior = ev.fecha_dia;
+          if (fechaAnterior === fechaDestinoStr) return;
+
+          // 1. Actualización optimista ultra fluida en memoria (0ms de retraso visual)
+          ev.fecha_dia = fechaDestinoStr;
+          if (ev.fecha_iso) {
+            const h = (ev.hora_inicio || '23:59').slice(0, 5);
+            ev.fecha_iso = `${fechaDestinoStr}T${h}:00Z`;
+          }
 
           if (ev.esTemaUnificado) {
             try {
@@ -7939,14 +7960,12 @@ def dashboard_html():
                   fecha_dia: fechaDestinoStr
                 })
               });
-              await this.cargarAgenda();
             } catch(e) {
-              console.error(e);
+              ev.fecha_dia = fechaAnterior;
             }
             return;
           }
 
-          ev.fecha_dia = fechaDestinoStr;
           try {
             await fetch('/api/agenda/item/actualizar', {
               method: 'POST',
@@ -7956,9 +7975,8 @@ def dashboard_html():
                 fecha_dia: fechaDestinoStr
               })
             });
-            await this.cargarAgenda();
           } catch (e) {
-            console.error(e);
+            ev.fecha_dia = fechaAnterior;
           }
         },
 
@@ -7971,7 +7989,15 @@ def dashboard_html():
             : new Date();
           fecha.setDate(fecha.getDate() + diasDelta);
           const nuevaFecha = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+          
+          // Actualización optimista instantánea sin recarga de red congelante
+          const fechaAnterior = ev.fecha_dia;
           ev.fecha_dia = nuevaFecha;
+          if (ev.fecha_iso) {
+            const h = (ev.hora_inicio || '23:59').slice(0, 5);
+            ev.fecha_iso = `${nuevaFecha}T${h}:00Z`;
+          }
+
           try {
             await fetch('/api/agenda/item/actualizar', {
               method: 'POST',
@@ -7981,9 +8007,8 @@ def dashboard_html():
                 fecha_dia: nuevaFecha
               })
             });
-            await this.cargarAgenda();
           } catch (e) {
-            console.error(e);
+            ev.fecha_dia = fechaAnterior;
           }
         },
 
