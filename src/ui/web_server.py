@@ -1373,6 +1373,7 @@ class FavoritasReq(BaseModel):
 class ImportarIcsReq(BaseModel):
     ics_texto: str
     asignatura_defecto: Optional[str] = "General"
+    reemplazar_anteriores: Optional[bool] = True
 
 
 @app.get("/api/mi-campus")
@@ -1710,7 +1711,13 @@ def api_importar_ics(req: ImportarIcsReq, request: Request):
     username = _username_actual(request)
     if not req.ics_texto or not req.ics_texto.strip():
         raise HTTPException(status_code=400, detail="El archivo .ics está vacío o no es válido.")
-    res = importar_calendario_ics_usuario(username, req.ics_texto, req.asignatura_defecto or "General")
+    reemplazar = True if req.reemplazar_anteriores is None else bool(req.reemplazar_anteriores)
+    res = importar_calendario_ics_usuario(
+        username,
+        req.ics_texto,
+        req.asignatura_defecto or "General",
+        reemplazar_anteriores=reemplazar,
+    )
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("mensaje", "Error al importar el archivo .ics"))
     return res
@@ -6584,6 +6591,13 @@ def dashboard_html():
           <span><strong>Filtro anti-duplicados:</strong> Las clases o entregas que ya estén en tu calendario de la UNIR se omitirán automáticamente para no repetirse.</span>
         </div>
 
+        <div class="flex items-center gap-2 px-1 pt-0.5">
+          <input id="check-reemplazar-ics" type="checkbox" x-model="icsReemplazarAnteriores" class="rounded bg-gray-900 border-gray-700 text-purple-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer">
+          <label for="check-reemplazar-ics" class="text-[11px] text-gray-300 cursor-pointer select-none">
+            Actualizar y reemplazar importaciones anteriores de este calendario
+          </label>
+        </div>
+
         <template x-if="icsMensajeError">
           <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
             <i class="fa-solid fa-circle-exclamation shrink-0"></i>
@@ -7058,6 +7072,7 @@ def dashboard_html():
         icsNombreArchivo: '',
         icsTotalEventosDetectados: 0,
         icsAsignaturaDefecto: 'Personal / General',
+        icsReemplazarAnteriores: true,
         icsImportando: false,
         icsMensajeError: '',
         icsMensajeExito: '',
@@ -8404,7 +8419,8 @@ def dashboard_html():
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 ics_texto: this.icsTextoContenido,
-                asignatura_defecto: this.icsAsignaturaDefecto || 'General'
+                asignatura_defecto: this.icsAsignaturaDefecto || 'General',
+                reemplazar_anteriores: this.icsReemplazarAnteriores !== false
               })
             });
             const data = await res.json();

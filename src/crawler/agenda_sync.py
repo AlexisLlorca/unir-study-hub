@@ -499,13 +499,16 @@ def importar_calendario_ics_usuario(
     username: str,
     ics_texto: str,
     asignatura_por_defecto: str = "General",
+    reemplazar_anteriores: bool = True,
 ) -> Dict[str, Any]:
     """
     Parsea un archivo de calendario (.ics) procedente de Google Calendar, Canvas,
     Outlook o Apple Calendar e importa sus eventos a los items propios del estudiante.
+    Expande eventos recurrentes semanales/diarios (RRULE) a lo largo de todo el curso académico.
     Evita duplicar eventos existentes en la agenda oficial o en el organizador.
     """
     import secrets
+    from datetime import timedelta
     if not ics_texto or "BEGIN:VCALENDAR" not in ics_texto:
         return {
             "status": "error",
@@ -518,6 +521,10 @@ def importar_calendario_ics_usuario(
     f = _archivo_organizador_usuario(username)
     org = obtener_organizador_usuario(username)
     items_actuales = org.get("items_propios", [])
+
+    # Si se solicita reemplazar importaciones anteriores, limpiamos los eventos marcados como "ics_importado"
+    if reemplazar_anteriores:
+        items_actuales = [x for x in items_actuales if x.get("origen") != "ics_importado"]
 
     # Obtener eventos base oficiales para comparar duplicados
     base_eventos = []
@@ -534,17 +541,14 @@ def importar_calendario_ics_usuario(
         return (a_limpia[:15], (f_dia or "")[:10], t_limpio[:25])
 
     existentes = set()
-    uids_existentes = set()
-
     for ev in base_eventos + items_actuales:
         f_dia = ev.get("fecha_dia") or (ev.get("fecha_iso") or "")[:10]
         asig = ev.get("asignatura") or ""
         tit = ev.get("titulo") or ""
         existentes.add(_clave_evento(asig, f_dia, tit))
-        if ev.get("uid_ics"):
-            uids_existentes.add(str(ev["uid_ics"]).strip())
-        if ev.get("id"):
-            uids_existentes.add(str(ev["id"]).strip())
+
+    # Límite superior por defecto para recurrencias (final de curso académico: 30 de junio 2027)
+    max_horizonte = datetime(2027, 6, 30, 23, 59, 59)
 
     # Extraer bloques VEVENT
     bloques = re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", ics_texto, re.DOTALL)
@@ -558,29 +562,98 @@ def importar_calendario_ics_usuario(
         sum_m = re.search(r"^SUMMARY:(.*)$", limpio, re.MULTILINE)
         dt_m = re.search(r"^DTSTART(?:;[^:]*)?:(\d{8}(?:T\d{6}Z?)?)", limpio, re.MULTILINE)
         end_m = re.search(r"^DTEND(?:;[^:]*)?:(\d{8}(?:T\d{6}Z?)?)", limpio, re.MULTILINE)
+        rrule_m = re.search(r"^RRULE:(.*)$", limpio, re.MULTILINE)
         url_m = re.search(r"^URL:(.*)$", limpio, re.MULTILINE)
         desc_m = re.search(r"^DESCRIPTION:(.*)$", limpio, re.MULTILINE)
         loc_m = re.search(r"^LOCATION:(.*)$", limpio, re.MULTILINE)
 
-        uid_val = uid_m.group(1).strip() if uid_m else f"ics_{secrets.token_hex(4)}_{idx}"
-        if uid_val in uids_existentes:
-            omitidos += 1
+        if not dt_m:
             continue
 
-        summary_raw = (sum_m.group(1).strip() if sum_m else "Evento importado").replace("\\,", ",").replace("\\;", ";")
-        dt_raw = (dt_m or end_m).group(1).strip() if (dt_m or end_m) else ""
+        dt_raw = dt_m.group(1).strip()
         if len(dt_raw) < 8:
             continue
 
-        fecha_dia = f"{dt_raw[:4]}-{dt_raw[4:6]}-{dt_raw[6:8]}"
-        hora_ini = f"{dt_raw[9:11]}:{dt_raw[11:13]}" if "T" in dt_raw and len(dt_raw) >= 13 else ""
-        hora_fin = ""
+        an, me, di = int(dt_raw[:4]), int(dt_raw[4:6]), int(dt_raw[6:8])
+        ho = int(dt_raw[9:11]) if "T" in dt_raw and len(dt_raw) >= 13 else 0
+        mi = int(dt_raw[11:13]) if "T" in dt_raw and len(dt_raw) >= 13 else 0
+        dt_start = datetime(an, me, di, ho, mi)
+
+        duracion = timedelta(hours=1)
         if end_m:
             end_raw = end_m.group(1).strip()
-            if "T" in end_raw and len(end_raw) >= 13:
-                hora_fin = f"{end_raw[9:11]}:{end_raw[11:13]}"
+            if len(end_raw) >= 8:
+                e_an, e_me, e_di = int(end_raw[:4]), int(end_raw[4:6]), int(end_raw[6:8])
+                e_ho = int(end_raw[9:11]) if "T" in end_raw and len(end_raw) >= 13 else ho
+                e_mi = int(end_raw[11:13]) if "T" in end_raw and len(end_raw) >= 13 else mi
+                dt_end = datetime(e_an, e_me, e_di, e_ho, e_mi)
+                if dt_end > dt_start:
+                    duracion = dt_end - dt_start
 
-        # Extraer asignatura del summary tipo "Título [Asignatura]" o de título
+        # Excepciones EXDATE
+        exdates = set()
+        for ex_raw in re.findall(r"^EXDATE(?:;[^:]*)?:(.*)$", limpio, re.MULTILINE):
+            for s in ex_raw.split(","):
+                s = s.strip().replace("Z", "")
+                if len(s) >= 8:
+                    exdates.add(f"{s[:4]}-{s[4:6]}-{s[6:8]}")
+
+        # Calcular ocurrencias (evento único o recurrente con RRULE)
+        ocurrencias = []
+        if not rrule_m:
+            if dt_start.strftime("%Y-%m-%d") not in exdates:
+                ocurrencias.append((dt_start, dt_start + duracion))
+        else:
+            rrule_str = rrule_m.group(1).strip()
+            rule_parts = dict(p.split("=", 1) for p in rrule_str.split(";") if "=" in p)
+            freq = rule_parts.get("FREQ", "WEEKLY").upper()
+            interval = max(1, int(rule_parts.get("INTERVAL", "1")))
+            count = int(rule_parts.get("COUNT")) if "COUNT" in rule_parts else None
+
+            until_dt = None
+            if "UNTIL" in rule_parts:
+                u_raw = rule_parts["UNTIL"].rstrip("Z")
+                if len(u_raw) >= 8:
+                    u_an, u_me, u_di = int(u_raw[:4]), int(u_raw[4:6]), int(u_raw[6:8])
+                    u_ho = int(u_raw[9:11]) if "T" in u_raw and len(u_raw) >= 13 else 23
+                    u_mi = int(u_raw[11:13]) if "T" in u_raw and len(u_raw) >= 13 else 59
+                    until_dt = datetime(u_an, u_me, u_di, u_ho, u_mi)
+
+            end_limit = min(until_dt if until_dt else max_horizonte, max_horizonte)
+
+            byday = rule_parts.get("BYDAY")
+            day_map = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
+            target_days = [day_map[d[-2:]] for d in byday.split(",") if d[-2:] in day_map] if byday else [dt_start.weekday()]
+
+            if freq == "WEEKLY":
+                curr_monday = (dt_start - timedelta(days=dt_start.weekday())).date()
+                while curr_monday <= end_limit.date():
+                    for day_idx in sorted(target_days):
+                        occ_date = curr_monday + timedelta(days=day_idx)
+                        occ_start = datetime.combine(occ_date, dt_start.time())
+                        if occ_start >= dt_start and occ_start <= end_limit:
+                            if occ_date.strftime("%Y-%m-%d") not in exdates:
+                                ocurrencias.append((occ_start, occ_start + duracion))
+                                if count and len(ocurrencias) >= count:
+                                    break
+                    if count and len(ocurrencias) >= count:
+                        break
+                    curr_monday += timedelta(weeks=interval)
+            elif freq == "DAILY":
+                curr = dt_start
+                while curr <= end_limit:
+                    if curr.strftime("%Y-%m-%d") not in exdates:
+                        ocurrencias.append((curr, curr + duracion))
+                        if count and len(ocurrencias) >= count:
+                            break
+                    curr += timedelta(days=interval)
+            else:
+                ocurrencias.append((dt_start, dt_start + duracion))
+
+        summary_raw = (sum_m.group(1).strip() if sum_m else "Evento importado").replace("\\,", ",").replace("\\;", ";")
+        uid_val = uid_m.group(1).strip() if uid_m else f"ics_{secrets.token_hex(4)}_{idx}"
+
+        # Extraer asignatura
         titulo = summary_raw
         asig_detectada = None
         m_corchete = re.search(r"^(.*?)\s*\[([^\]]+)\]\s*$", summary_raw)
@@ -611,45 +684,49 @@ def importar_calendario_ics_usuario(
             cat = "Tema"
             tipo_interno = "tema"
 
-        if not hora_ini:
-            hora_ini = "19:00" if tipo_interno == "clase_directo" else ("10:00" if cat == "Cita" else "23:59")
-
-        # Comprobar clave duplicada
-        clave = _clave_evento(asig_final, fecha_dia, titulo)
-        if clave in existentes:
-            omitidos += 1
-            continue
-
-        existentes.add(clave)
-        uids_existentes.add(uid_val)
-
         desc_txt = (desc_m.group(1).strip() if desc_m else "").replace("\\n", " ").replace("\\,", ",")
         desc_txt = re.sub(r"<[^>]+>", " ", desc_txt).strip()[:200]
         if loc_m and loc_m.group(1).strip():
             loc_val = loc_m.group(1).strip().replace("\\,", ",")
             desc_txt = f"{loc_val} • {desc_txt}".strip(" •")
 
-        nuevo_item = {
-            "id": f"ics_{secrets.token_hex(4)}",
-            "uid_ics": uid_val,
-            "es_propio": True,
-            "origen": "ics_importado",
-            "tipo": tipo_interno,
-            "categoria": cat,
-            "titulo": titulo[:120],
-            "asignatura": asig_final,
-            "fecha_iso": f"{fecha_dia}T{hora_ini}:00Z",
-            "fecha_dia": fecha_dia,
-            "hora_inicio": hora_ini,
-            "hora_fin": hora_fin,
-            "estado": "No vista" if tipo_interno == "clase_directo" else ("No entregado" if tipo_interno == "tarea" else "Pendiente de empezar"),
-            "recordatorio": (cat in ("Cita", "Examen")),
-            "url": (url_m.group(1).strip() if url_m else "https://campusfp.unir.net"),
-            "descripcion": desc_txt or f"Importado de calendario .ics ({cat})",
-        }
+        url_val = url_m.group(1).strip() if url_m else "https://campusfp.unir.net"
 
-        items_actuales.append(nuevo_item)
-        importados += 1
+        # Procesar cada ocurrencia
+        for occ_start, occ_end in ocurrencias:
+            fecha_dia = occ_start.strftime("%Y-%m-%d")
+            hora_ini = occ_start.strftime("%H:%M")
+            hora_fin = occ_end.strftime("%H:%M")
+            if hora_ini == "00:00" and not ("T" in dt_raw and len(dt_raw) >= 13):
+                hora_ini = "19:00" if tipo_interno == "clase_directo" else ("10:00" if cat == "Cita" else "23:59")
+                hora_fin = ""
+
+            clave = _clave_evento(asig_final, fecha_dia, titulo)
+            if clave in existentes:
+                omitidos += 1
+                continue
+
+            existentes.add(clave)
+            nuevo_item = {
+                "id": f"ics_{secrets.token_hex(4)}",
+                "uid_ics": f"{uid_val}_{fecha_dia}",
+                "es_propio": True,
+                "origen": "ics_importado",
+                "tipo": tipo_interno,
+                "categoria": cat,
+                "titulo": titulo[:120],
+                "asignatura": asig_final,
+                "fecha_iso": f"{fecha_dia}T{hora_ini}:00Z",
+                "fecha_dia": fecha_dia,
+                "hora_inicio": hora_ini,
+                "hora_fin": hora_fin,
+                "estado": "No vista" if tipo_interno == "clase_directo" else ("No entregado" if tipo_interno == "tarea" else "Pendiente de empezar"),
+                "recordatorio": (cat in ("Cita", "Examen")),
+                "url": url_val,
+                "descripcion": desc_txt or f"Importado de calendario .ics ({cat})",
+            }
+            items_actuales.append(nuevo_item)
+            importados += 1
 
     org["items_propios"] = items_actuales
     escribir_json_atomico(f, org)
@@ -659,7 +736,7 @@ def importar_calendario_ics_usuario(
     except Exception:
         pass
 
-    mensaje = f"¡Se han importado {importados} eventos nuevos a tu calendario!"
+    mensaje = f"¡Se han importado {importados} eventos en total a tu calendario!"
     if omitidos > 0:
         mensaje += f" ({omitidos} eventos duplicados fueron omitidos automáticamente)."
 
