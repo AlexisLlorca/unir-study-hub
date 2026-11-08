@@ -189,11 +189,17 @@ def inicializar_bd_usuarios() -> None:
         )
         conn.commit()
 
-        # Asegurar columna gemini_api_key si la tabla ya existía
+        # Asegurar columnas de claves de IA si la tabla ya existía
         cursor.execute("PRAGMA table_info(usuarios);")
         cols = [c[1] for c in cursor.fetchall()]
         if "gemini_api_key" not in cols:
             cursor.execute("ALTER TABLE usuarios ADD COLUMN gemini_api_key TEXT DEFAULT '';")
+            conn.commit()
+        if "openrouter_api_key" not in cols:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN openrouter_api_key TEXT DEFAULT '';")
+            conn.commit()
+        if "groq_api_key" not in cols:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN groq_api_key TEXT DEFAULT '';")
             conn.commit()
 
         # 1. Asegurar la cuenta de Administrador de Alex
@@ -332,16 +338,22 @@ def registrar_usuario(
     return True, "ok"
 
 
-def actualizar_api_key_usuario(username: str, api_key: str) -> bool:
-    """Actualiza la clave privada de Gemini (BYOK) para el usuario indicado y la respalda en la nube."""
+def actualizar_api_key_usuario(username: str, api_key: str, proveedor: str = "gemini") -> bool:
+    """Actualiza la clave privada del proveedor indicado (gemini, openrouter, groq) para el usuario y la respalda."""
     username = (username or "").strip().lower()
     api_key = (api_key or "").strip()
     if not username:
         return False
 
+    col = "openrouter_api_key" if proveedor == "openrouter" else ("groq_api_key" if proveedor == "groq" else "gemini_api_key")
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE usuarios SET gemini_api_key = ? WHERE username = ?", (api_key, username))
+        cursor.execute("PRAGMA table_info(usuarios);")
+        cols = [c[1] for c in cursor.fetchall()]
+        if col not in cols:
+            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {col} TEXT DEFAULT '';")
+            conn.commit()
+        cursor.execute(f"UPDATE usuarios SET {col} = ? WHERE username = ?", (api_key, username))
         conn.commit()
         cursor.execute("PRAGMA wal_checkpoint(FULL);")
 
@@ -370,13 +382,21 @@ def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], st
             "nombre": "Administrador",
             "rol": "admin",
             "activo": 1,
-            "gemini_api_key": ""
+            "gemini_api_key": "",
+            "openrouter_api_key": "",
+            "groq_api_key": "",
         }, "ok"
 
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(usuarios);")
+        cols = [c[1] for c in cursor.fetchall()]
+        col_gemini = "COALESCE(gemini_api_key, '') as gemini_api_key" if "gemini_api_key" in cols else "'' as gemini_api_key"
+        col_or = ", COALESCE(openrouter_api_key, '') as openrouter_api_key" if "openrouter_api_key" in cols else ", '' as openrouter_api_key"
+        col_groq = ", COALESCE(groq_api_key, '') as groq_api_key" if "groq_api_key" in cols else ", '' as groq_api_key"
+
         cursor.execute(
-            "SELECT id, username, nombre, password_hash, salt, rol, activo, COALESCE(gemini_api_key, '') as gemini_api_key FROM usuarios WHERE username = ?",
+            f"SELECT id, username, nombre, password_hash, salt, rol, activo, {col_gemini}{col_or}{col_groq} FROM usuarios WHERE username = ?",
             (username,)
         )
         row = cursor.fetchone()
@@ -404,6 +424,8 @@ def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], st
             "rol": row["rol"],
             "activo": row["activo"],
             "gemini_api_key": row["gemini_api_key"],
+            "openrouter_api_key": row["openrouter_api_key"],
+            "groq_api_key": row["groq_api_key"],
         }, "ok"
 
 
@@ -434,9 +456,15 @@ def obtener_usuario_por_sesion(token: Optional[str]) -> Optional[dict]:
     ahora = time.time()
     with _obtener_conexion() as conn:
         cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(usuarios);")
+        cols = [c[1] for c in cursor.fetchall()]
+        col_gemini = "COALESCE(u.gemini_api_key, '') as gemini_api_key" if "gemini_api_key" in cols else "'' as gemini_api_key"
+        col_or = ", COALESCE(u.openrouter_api_key, '') as openrouter_api_key" if "openrouter_api_key" in cols else ", '' as openrouter_api_key"
+        col_groq = ", COALESCE(u.groq_api_key, '') as groq_api_key" if "groq_api_key" in cols else ", '' as groq_api_key"
+
         cursor.execute(
-            """
-            SELECT u.id, u.username, u.nombre, u.rol, u.activo, COALESCE(u.gemini_api_key, '') as gemini_api_key
+            f"""
+            SELECT u.id, u.username, u.nombre, u.rol, u.activo, {col_gemini}{col_or}{col_groq}
             FROM sesiones s
             JOIN usuarios u ON s.username = u.username
             WHERE s.token = ? AND s.expira_en > ?
@@ -457,6 +485,8 @@ def obtener_usuario_por_sesion(token: Optional[str]) -> Optional[dict]:
             "rol": row["rol"],
             "activo": row["activo"],
             "gemini_api_key": row["gemini_api_key"],
+            "openrouter_api_key": row["openrouter_api_key"],
+            "groq_api_key": row["groq_api_key"],
         }
 
 

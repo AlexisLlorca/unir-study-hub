@@ -176,11 +176,10 @@ def get_groq_api_key() -> str:
 
 
 def save_groq_api_key(api_key: str):
-    """Guarda o actualiza GROQ_API_KEY en .env (si es sk-or-, la guarda como OpenRouter)."""
+    """Guarda o actualiza GROQ_API_KEY en .env."""
     k = api_key.strip()
     if k.startswith("sk-or-"):
         _guardar_variable_env("OPENROUTER_API_KEY", k)
-        _guardar_variable_env("GROQ_API_KEY", "")
     else:
         _guardar_variable_env("GROQ_API_KEY", k)
 

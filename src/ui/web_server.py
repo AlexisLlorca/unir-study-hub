@@ -156,18 +156,24 @@ def _obtener_user_key_o_exigir(request: Request, key_override: Optional[str] = N
     2. Si se pasa en cabecera 'x-user-gemini-key'
     3. Si está en el perfil de sesión del usuario (request.state.usuario)
     
-    Si el usuario no es admin y no dispone de clave propia:
+    Si el usuario no es admin y no dispone de ninguna clave propia (Gemini, OpenRouter o Groq):
     Lanza HTTPException(400) exigiendo BYOK para proteger la cuota personal del administrador.
     
-    Si el usuario es admin y no proporciona clave, retorna None (usa la clave del servidor).
+    Si el usuario es admin o configuró algún proveedor, retorna la clave de Gemini o None.
     """
     u = getattr(request.state, "usuario", None) or {}
     es_admin = u.get("rol") == "admin"
     user_key = (key_override or request.headers.get("x-user-gemini-key") or u.get("gemini_api_key") or "").strip() or None
-    if not es_admin and not user_key:
+    tiene_otra_clave = bool(
+        (u.get("openrouter_api_key") or "").strip()
+        or (u.get("groq_api_key") or "").strip()
+        or request.headers.get("x-user-openrouter-key")
+        or request.headers.get("x-user-groq-key")
+    )
+    if not es_admin and not user_key and not tiene_otra_clave:
         raise HTTPException(
             status_code=400,
-            detail="Es obligatorio configurar tu propia clave gratuita de Gemini (BYOK). Pulsa en 'Mi Key' arriba para introducir tu clave de Google AI Studio.",
+            detail="Es obligatorio configurar tu propia clave gratuita de IA (Gemini, OpenRouter o Groq). Pulsa en 'Claves IA' arriba para introducirla.",
         )
     return user_key
 
@@ -266,6 +272,8 @@ def api_usuario_actual(request: Request):
         "activo": u.get("activo"),
         "es_admin": u.get("rol") == "admin",
         "gemini_api_key": u.get("gemini_api_key", ""),
+        "openrouter_api_key": u.get("openrouter_api_key", ""),
+        "groq_api_key": u.get("groq_api_key", ""),
     }
 
 
@@ -2005,17 +2013,55 @@ def api_modelos_ia():
     return tutor_ia.client.obtener_estado_modelos()
 
 
+@app.get("/api/proveedores-ia")
+def api_obtener_proveedores_ia(request: Request):
+    """Devuelve las claves actuales guardadas (para pre-rellenar la interfaz y evitar que se pierdan) y su estado."""
+    from src.core.config import get_openrouter_api_key, get_groq_api_key, get_gemini_api_key
+    u = getattr(request.state, "usuario", None) or {}
+
+    gemini_k = (u.get("gemini_api_key") or "").strip() or get_gemini_api_key()
+    openrouter_k = (u.get("openrouter_api_key") or "").strip() or get_openrouter_api_key()
+    groq_k = (u.get("groq_api_key") or "").strip() or get_groq_api_key()
+
+    return {
+        "gemini_key": gemini_k,
+        "openrouter_key": openrouter_k,
+        "groq_key": groq_k,
+        "configurados": {
+            "gemini": bool(gemini_k),
+            "openrouter": bool(openrouter_k),
+            "groq": bool(groq_k),
+        }
+    }
+
+
 @app.post("/api/proveedores-ia")
-def api_configurar_proveedores_ia(req: ConfigurarProveedoresReq):
-    """Guarda claves gratuitas adicionales (OpenRouter / Groq / Gemini) en .env."""
+def api_configurar_proveedores_ia(req: ConfigurarProveedoresReq, request: Request):
+    """Guarda claves gratuitas adicionales (OpenRouter / Groq / Gemini) en .env Y en el perfil de SQLite del usuario."""
     from src.core.config import save_openrouter_api_key, save_groq_api_key, save_gemini_api_key
-    if req.openrouter_key is not None and req.openrouter_key.strip():
-        save_openrouter_api_key(req.openrouter_key.strip())
-    if req.groq_key is not None and req.groq_key.strip():
-        save_groq_api_key(req.groq_key.strip())
-    if req.gemini_key is not None and req.gemini_key.strip():
-        save_gemini_api_key(req.gemini_key.strip())
+    from src.core.auth import actualizar_api_key_usuario
+    u = getattr(request.state, "usuario", None) or {}
+    username = u.get("username")
+
+    if req.openrouter_key is not None:
+        val = req.openrouter_key.strip()
+        save_openrouter_api_key(val)
+        if username:
+            actualizar_api_key_usuario(username, val, proveedor="openrouter")
+
+    if req.groq_key is not None:
+        val = req.groq_key.strip()
+        save_groq_api_key(val)
+        if username:
+            actualizar_api_key_usuario(username, val, proveedor="groq")
+
+    if req.gemini_key is not None:
+        val = req.gemini_key.strip()
+        save_gemini_api_key(val)
+        if username:
+            actualizar_api_key_usuario(username, val, proveedor="gemini")
         tutor_ia.client._client = None
+
     return tutor_ia.client.obtener_estado_modelos()
 
 
@@ -2808,12 +2854,12 @@ def dashboard_html():
 
         <!-- BOTÓN MI KEY / TOKENS PRIVADOS (BYOK) -->
         <button @click="abrirModalApiKey()" 
-                :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
+                :class="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
                 class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm"
-                :title="userGeminiKey ? 'Usando tu clave privada de Gemini' : 'Configurar mi propia clave gratuita de Gemini (BYOK)'">
-          <span class="h-2 w-2 rounded-full" :class="userGeminiKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
-          <i class="fa-solid fa-key text-[10px]" :class="userGeminiKey ? 'text-emerald-400' : 'text-amber-400'"></i>
-          <span class="hidden sm:inline font-medium" x-text="userGeminiKey ? 'Mi Key' : 'Mi Key'"></span>
+                :title="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'Claves de IA configuradas (Gemini, OpenRouter, Groq)' : 'Configurar claves gratuitas de IA (Gemini, OpenRouter, Groq)'">
+          <span class="h-2 w-2 rounded-full" :class="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+          <i class="fa-solid fa-key text-[10px]" :class="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'text-emerald-400' : 'text-amber-400'"></i>
+          <span class="hidden sm:inline font-medium" x-text="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'Claves IA' : 'Claves IA'"></span>
         </button>
 
         <!-- BOTÓN CONFIGURACIÓN DE ALERTAS Y RECORDATORIOS -->
@@ -4691,14 +4737,14 @@ def dashboard_html():
               <span class="hidden sm:inline font-medium" x-text="autoVozActiva ? 'Voz: ON' : 'Voz: OFF'"></span>
             </button>
 
-            <!-- BOTÓN BYOK (BRING YOUR OWN KEY) PARA USAR TOKENS PROPIOS DE GEMINI -->
+            <!-- BOTÓN BYOK PARA USAR CLAVES PROPIAS DE IA -->
             <button @click="abrirModalApiKey()"
-                    :class="userGeminiKey ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
+                    :class="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
                     class="text-xs px-2.5 py-1.5 rounded-xl border transition flex items-center space-x-1.5 shadow-sm"
-                    :title="userGeminiKey ? 'Estás usando tu propia clave privada de Gemini (tokens tuyos)' : 'Configurar mi propia clave gratuita de Gemini para no gastar la del Hub'">
-              <span class="h-2 w-2 rounded-full" :class="userGeminiKey ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'"></span>
-              <span class="hidden sm:inline font-medium" x-text="userGeminiKey ? 'Mi Gemini Key' : 'Mi Key'"></span>
-              <i class="fa-solid fa-key text-[10px]" :class="userGeminiKey ? 'text-emerald-400' : 'text-gray-400'"></i>
+                    :title="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'Claves de IA configuradas y activas' : 'Configurar claves gratuitas de IA (Gemini, OpenRouter, Groq)'">
+              <span class="h-2 w-2 rounded-full" :class="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'"></span>
+              <span class="hidden sm:inline font-medium" x-text="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'Claves IA' : 'Claves IA'"></span>
+              <i class="fa-solid fa-key text-[10px]" :class="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'text-emerald-400' : 'text-gray-400'"></i>
             </button>
 
             <select x-model="chatAsignatura" @change="cambiarAsignaturaChat($event.target.value)" class="bg-gray-800 text-gray-200 text-xs px-3 py-1.5 rounded-xl border border-gray-700 outline-none">
@@ -5918,7 +5964,7 @@ def dashboard_html():
     </div>
   </div>
 
-  <!-- ==================== MODAL CONFIGURACIÓN BYOK: MI PROPIA API KEY DE GEMINI ==================== -->
+  <!-- ==================== MODAL CONFIGURACIÓN BYOK & PROVEEDORES IA (3-EN-1) ==================== -->
   <div x-show="modalApiKey"
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0"
@@ -5928,15 +5974,16 @@ def dashboard_html():
        x-transition:leave-end="opacity-0"
        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
        style="display: none;">
-    <div @click.away="modalApiKey = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
-      <div class="flex items-center justify-between pb-4 border-b border-gray-800">
+    <div @click.away="modalApiKey = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl relative flex flex-col max-h-[90vh]">
+      <!-- CABECERA -->
+      <div class="flex items-center justify-between pb-3.5 border-b border-gray-800 shrink-0">
         <div class="flex items-center space-x-3">
-          <div class="h-10 w-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+          <div class="h-10 w-10 rounded-2xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
             <i class="fa-solid fa-key text-base"></i>
           </div>
           <div>
-            <h3 class="font-bold text-gray-100 text-base">Mi Propia Clave de Gemini</h3>
-            <p class="text-xs text-gray-400">Tokens y cuota privada (BYOK)</p>
+            <h3 class="font-bold text-gray-100 text-base">Claves de IA y Modelos Gratuitos</h3>
+            <p class="text-xs text-gray-400">Gemini, OpenRouter y Groq Cloud (Triple Persistencia)</p>
           </div>
         </div>
         <button @click="modalApiKey = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
@@ -5944,56 +5991,150 @@ def dashboard_html():
         </button>
       </div>
 
-      <div class="mt-4 space-y-4">
-        <p class="text-xs text-gray-300 leading-relaxed">
-          Si vas a compartir la web con un compañero o quieres usar tu propia cuota de Google, pega aquí tu clave gratuita de <strong>Google AI Studio</strong>.
-        </p>
-
-        <div class="p-3 bg-gray-950/70 border border-cyan-500/20 rounded-2xl text-[11px] text-gray-400 space-y-1">
+      <!-- CUERPO CON SCROLL -->
+      <div class="mt-4 space-y-4 overflow-y-auto pr-1">
+        <!-- BANNER DE TRIPLE PERSISTENCIA -->
+        <div class="p-3 bg-cyan-950/40 border border-cyan-500/20 rounded-2xl text-[11px] text-gray-300 space-y-1">
           <div class="flex items-center text-cyan-400 font-semibold gap-1.5">
             <i class="fa-solid fa-shield-halved"></i>
-            <span>100% Privada y Segura en tu Navegador</span>
+            <span>Triple Redundancia Permanente</span>
           </div>
-          <p>Tu clave se almacena <strong>únicamente en tu propio navegador (localStorage)</strong>. El servidor no la guardará en disco ni la compartirá con otros alumnos.</p>
+          <p class="text-gray-400 leading-relaxed">
+            Tus claves se guardan en tu navegador (<code class="text-cyan-300">localStorage</code>), en tu cuenta de usuario y en el servidor local (<code class="text-cyan-300">.env</code>). 
+            Permanecerán guardadas ante cualquier actualización de código, reinicio o cambio de ventana.
+          </p>
         </div>
 
-        <div>
-          <label class="block text-xs font-semibold text-gray-300 mb-1.5">Clave de API de Gemini (AI Studio):</label>
-          <input type="password" 
-                 x-model="inputApiKeyTemp"
-                 placeholder="AIzaSy..." 
-                 class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-cyan-300 outline-none focus:border-cyan-500 font-mono transition">
+        <!-- 1. GOOGLE GEMINI -->
+        <div class="p-3.5 bg-gray-950/80 border border-gray-800/90 rounded-2xl space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">1</span>
+              <span class="text-xs font-bold text-gray-100">Google Gemini (AI Studio)</span>
+              <span class="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded font-mono">Oficial</span>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                  :class="inputApiKeyTemp.trim() ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
+                  x-text="inputApiKeyTemp.trim() ? '✓ Configurada' : 'Sin configurar'"></span>
+          </div>
+          <p class="text-[11px] text-gray-400">
+            Permite usar Gemini 3.5 Flash, Gemini Flash Lite y modelos oficiales de Google con cuota gratuita.
+          </p>
+          <div class="relative">
+            <input :type="mostrarKeyGemini ? 'text' : 'password'"
+                   x-model="inputApiKeyTemp"
+                   placeholder="AIzaSy..."
+                   class="w-full bg-gray-900 border border-gray-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-cyan-300 outline-none focus:border-cyan-500 font-mono transition">
+            <button type="button" 
+                    @click="mostrarKeyGemini = !mostrarKeyGemini"
+                    class="absolute right-3 top-2 text-gray-500 hover:text-gray-300 text-xs">
+              <i class="fa-solid" :class="mostrarKeyGemini ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[11px] pt-0.5">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-cyan-400 hover:underline flex items-center gap-1">
+              <span>Obtener clave gratis en Google AI Studio</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+            </a>
+            <span class="text-gray-500">Tier Free Oficial</span>
+          </div>
         </div>
 
-        <div class="flex items-center justify-between text-[11px]">
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-cyan-400 hover:underline flex items-center gap-1">
-            <span>Obtener clave gratis en Google AI Studio</span>
-            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-          </a>
-          <span class="text-gray-500">Gratis (Tier Free oficial)</span>
+        <!-- 2. OPENROUTER -->
+        <div class="p-3.5 bg-gray-950/80 border border-gray-800/90 rounded-2xl space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold">2</span>
+              <span class="text-xs font-bold text-gray-100">OpenRouter (Modelos de la Comunidad)</span>
+              <span class="text-[10px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono">Gratis</span>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                  :class="inputOpenrouterTemp.trim() ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
+                  x-text="inputOpenrouterTemp.trim() ? '✓ Configurada' : 'Opcional'"></span>
+          </div>
+          <p class="text-[11px] text-gray-400">
+            Habilita DeepSeek V3 Free, Qwen 3 235B Free, Llama 3.3 70B Free y Mistral Small sin coste.
+          </p>
+          <div class="relative">
+            <input :type="mostrarKeyOpenrouter ? 'text' : 'password'"
+                   x-model="inputOpenrouterTemp"
+                   placeholder="sk-or-v1-..."
+                   class="w-full bg-gray-900 border border-gray-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-purple-300 outline-none focus:border-purple-500 font-mono transition">
+            <button type="button" 
+                    @click="mostrarKeyOpenrouter = !mostrarKeyOpenrouter"
+                    class="absolute right-3 top-2 text-gray-500 hover:text-gray-300 text-xs">
+              <i class="fa-solid" :class="mostrarKeyOpenrouter ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[11px] pt-0.5">
+            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="text-purple-400 hover:underline flex items-center gap-1">
+              <span>Obtener clave gratis en OpenRouter</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+            </a>
+            <span class="text-gray-500">Comunidad Free</span>
+          </div>
         </div>
 
+        <!-- 3. GROQ CLOUD -->
+        <div class="p-3.5 bg-gray-950/80 border border-gray-800/90 rounded-2xl space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">3</span>
+              <span class="text-xs font-bold text-gray-100">Groq Cloud (Velocidad LPU Instantánea)</span>
+              <span class="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded font-mono">Ultra-rápido</span>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                  :class="inputGroqTemp.trim() ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
+                  x-text="inputGroqTemp.trim() ? '✓ Configurada' : 'Opcional'"></span>
+          </div>
+          <p class="text-[11px] text-gray-400">
+            Habilita Llama 3.3 70B y DeepSeek R1 Distill 70B a una velocidad extrema de ~300 tokens/segundo.
+          </p>
+          <div class="relative">
+            <input :type="mostrarKeyGroq ? 'text' : 'password'"
+                   x-model="inputGroqTemp"
+                   placeholder="gsk_..."
+                   class="w-full bg-gray-900 border border-gray-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-amber-300 outline-none focus:border-amber-500 font-mono transition">
+            <button type="button" 
+                    @click="mostrarKeyGroq = !mostrarKeyGroq"
+                    class="absolute right-3 top-2 text-gray-500 hover:text-gray-300 text-xs">
+              <i class="fa-solid" :class="mostrarKeyGroq ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[11px] pt-0.5">
+            <a href="https://console.groq.com/keys" target="_blank" rel="noopener" class="text-amber-400 hover:underline flex items-center gap-1">
+              <span>Obtener clave gratis en Groq Console</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+            </a>
+            <span class="text-gray-500">Tier Free Oficial</span>
+          </div>
+        </div>
+
+        <!-- MENSAJES DE ESTADO -->
         <template x-if="apiKeyMensajeError">
-          <div class="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
             <i class="fa-solid fa-circle-exclamation shrink-0"></i>
             <span x-text="apiKeyMensajeError"></span>
           </div>
         </template>
 
         <template x-if="apiKeyMensajeExito">
-          <div class="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
             <i class="fa-solid fa-circle-check shrink-0"></i>
             <span x-text="apiKeyMensajeExito"></span>
           </div>
         </template>
       </div>
 
-      <div class="mt-6 pt-4 border-t border-gray-800 flex items-center justify-between gap-3">
-        <button x-show="userGeminiKey" 
+      <!-- BOTONES DE ACCIÓN -->
+      <div class="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between gap-3 shrink-0">
+        <button x-show="userGeminiKey || userOpenrouterKey || userGroqKey" 
                 @click="eliminarApiKeyUsuario()" 
                 type="button"
-                class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 text-xs transition border border-gray-700">
-          Usar la clave del Hub
+                class="px-3 py-2 rounded-xl bg-gray-800 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 text-xs transition border border-gray-700"
+                title="Limpiar todas las claves guardadas">
+          <i class="fa-solid fa-trash-can mr-1 text-[10px]"></i>
+          Limpiar claves
         </button>
         <div class="flex items-center gap-2 ml-auto">
           <button @click="modalApiKey = false" type="button" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 hover:text-white text-xs transition">
@@ -6002,9 +6143,9 @@ def dashboard_html():
           <button @click="guardarApiKeyUsuario()" 
                   :disabled="apiKeyValidando"
                   type="button" 
-                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-cyan-500/20 transition flex items-center gap-2">
+                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-cyan-500/20 transition flex items-center gap-2">
             <i x-show="apiKeyValidando" class="fa-solid fa-spinner fa-spin text-xs"></i>
-            <span x-text="apiKeyValidando ? 'Verificando...' : 'Guardar y Activar'"></span>
+            <span x-text="apiKeyValidando ? 'Guardando...' : 'Guardar y Activar Claves'"></span>
           </button>
         </div>
       </div>
@@ -6918,10 +7059,17 @@ def dashboard_html():
         chatModeloActualNombre: 'Gemini 3.5 Flash',
         modelosIaDisponibles: [],
 
-        // BYOK (Bring Your Own Key) para tokens privados
+        // BYOK (Bring Your Own Key) y Proveedores de IA con Triple Redundancia
         userGeminiKey: localStorage.getItem('unir_user_gemini_key') || '',
+        userOpenrouterKey: localStorage.getItem('unir_openrouter_key') || '',
+        userGroqKey: localStorage.getItem('unir_groq_key') || '',
         modalApiKey: false,
         inputApiKeyTemp: '',
+        inputOpenrouterTemp: '',
+        inputGroqTemp: '',
+        mostrarKeyGemini: false,
+        mostrarKeyOpenrouter: false,
+        mostrarKeyGroq: false,
         apiKeyValidando: false,
         apiKeyMensajeError: '',
         apiKeyMensajeExito: '',
@@ -8983,6 +9131,7 @@ def dashboard_html():
           }
           window.addEventListener('popstate', () => this.procesarUrlInicial());
           await this.cargarUsuarioActual();
+          await this.sincronizarClavesIa();
           this.cargarActividadReciente();
           await Promise.all([
             this.cargarMiCampus(),
@@ -9219,105 +9368,210 @@ def dashboard_html():
         },
 
         async configurarClavesIaGratis() {
-          const openrouterKey = prompt(
-            '🌐 Clave Gratuita de OpenRouter (opcional):\\n\\n' +
-            'Consíguela gratis en https://openrouter.ai/keys para usar DeepSeek V3 Free, Qwen 3 235B Free, Llama 3.3 70B Free y Mistral Small Free.\\n\\n' +
-            'Pégala aquí (o déjalo vacío para pasar a Groq):'
-          );
-          const groqKey = prompt(
-            '⚡ Clave Gratuita de Groq Cloud (opcional):\\n\\n' +
-            'Consíguela gratis en https://console.groq.com/keys para usar Llama 3.3 70B LPU y DeepSeek R1 70B a velocidad instantánea.\\n\\n' +
-            'Pégala aquí (o déjalo vacío):'
-          );
-          if ((!openrouterKey || !openrouterKey.trim()) && (!groqKey || !groqKey.trim())) {
-            return;
-          }
-          try {
-            const res = await fetch('/api/proveedores-ia', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                openrouter_key: openrouterKey ? openrouterKey.trim() : null,
-                groq_key: groqKey ? groqKey.trim() : null
-              })
-            });
-            const data = await res.json();
-            this.modelosIaDisponibles = data.modelos || [];
-            alert('¡Proveedores gratuitos guardados en .env y activados!');
-          } catch(e) {
-            alert('No se pudieron guardar las claves.');
-          }
+          await this.abrirModalApiKey();
         },
 
-        abrirModalApiKey() {
-          this.inputApiKeyTemp = this.userGeminiKey || '';
+        async abrirModalApiKey() {
+          this.inputApiKeyTemp = this.userGeminiKey || localStorage.getItem('unir_user_gemini_key') || '';
+          this.inputOpenrouterTemp = this.userOpenrouterKey || localStorage.getItem('unir_openrouter_key') || '';
+          this.inputGroqTemp = this.userGroqKey || localStorage.getItem('unir_groq_key') || '';
           this.apiKeyMensajeError = '';
           this.apiKeyMensajeExito = '';
           this.modalApiKey = true;
+
+          // Obtener las claves persistidas en el servidor (.env / SQLite) para pre-rellenar siempre
+          try {
+            const res = await fetch('/api/proveedores-ia');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.gemini_key && !this.inputApiKeyTemp) {
+                this.inputApiKeyTemp = data.gemini_key;
+              }
+              if (data.openrouter_key && !this.inputOpenrouterTemp) {
+                this.inputOpenrouterTemp = data.openrouter_key;
+              }
+              if (data.groq_key && !this.inputGroqTemp) {
+                this.inputGroqTemp = data.groq_key;
+              }
+              if (data.gemini_key) {
+                this.userGeminiKey = data.gemini_key;
+                try { localStorage.setItem('unir_user_gemini_key', data.gemini_key); } catch(e) {}
+              }
+              if (data.openrouter_key) {
+                this.userOpenrouterKey = data.openrouter_key;
+                try { localStorage.setItem('unir_openrouter_key', data.openrouter_key); } catch(e) {}
+              }
+              if (data.groq_key) {
+                this.userGroqKey = data.groq_key;
+                try { localStorage.setItem('unir_groq_key', data.groq_key); } catch(e) {}
+              }
+            }
+          } catch(e) {
+            console.warn('No se pudieron obtener proveedores del servidor:', e);
+          }
         },
 
         async guardarApiKeyUsuario() {
-          const keyLimpia = (this.inputApiKeyTemp || '').trim();
-          if (!keyLimpia) {
-            this.userGeminiKey = '';
-            try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
-            try {
-              fetch('/api/usuario/guardar-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: '' })
-              });
-            } catch(e) {}
-            this.modalApiKey = false;
-            return;
-          }
+          const geminiLimpia = (this.inputApiKeyTemp || '').trim();
+          const openrouterLimpia = (this.inputOpenrouterTemp || '').trim();
+          const groqLimpia = (this.inputGroqTemp || '').trim();
 
           this.apiKeyValidando = true;
           this.apiKeyMensajeError = '';
           this.apiKeyMensajeExito = '';
 
           try {
-            const res = await fetch('/api/validar-gemini-key', {
+            // Si introdujo una clave de Gemini nueva, validarla
+            if (geminiLimpia && geminiLimpia !== this.userGeminiKey) {
+              const resVal = await fetch('/api/validar-gemini-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: geminiLimpia })
+              });
+              const dataVal = await resVal.json();
+              if (!dataVal.valida) {
+                this.apiKeyMensajeError = dataVal.error || 'La clave de Gemini no es válida o ha caducado.';
+                this.apiKeyValidando = false;
+                return;
+              }
+            }
+
+            // Guardar en el servidor (.env + SQLite de usuario)
+            const res = await fetch('/api/proveedores-ia', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ api_key: keyLimpia })
+              body: JSON.stringify({
+                gemini_key: geminiLimpia,
+                openrouter_key: openrouterLimpia,
+                groq_key: groqLimpia
+              })
             });
-            const data = await res.json();
-            if (data.valida) {
-              this.userGeminiKey = keyLimpia;
-              try { localStorage.setItem('unir_user_gemini_key', keyLimpia); } catch(e) {}
-              // Respaldar también en la base de datos de su cuenta
-              try {
-                fetch('/api/usuario/guardar-key', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ api_key: keyLimpia })
-                });
-              } catch(e) {}
-              this.apiKeyMensajeExito = '¡Clave de Gemini verificada y guardada en tu cuenta!';
-              setTimeout(() => { this.modalApiKey = false; }, 1200);
-            } else {
-              this.apiKeyMensajeError = data.error || 'La clave no es válida.';
+
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.modelos) {
+                this.modelosIaDisponibles = data.modelos;
+              }
             }
+
+            // Actualizar estado local y localStorage para triple redundancia
+            this.userGeminiKey = geminiLimpia;
+            this.userOpenrouterKey = openrouterLimpia;
+            this.userGroqKey = groqLimpia;
+
+            try {
+              if (geminiLimpia) localStorage.setItem('unir_user_gemini_key', geminiLimpia);
+              else localStorage.removeItem('unir_user_gemini_key');
+
+              if (openrouterLimpia) localStorage.setItem('unir_openrouter_key', openrouterLimpia);
+              else localStorage.removeItem('unir_openrouter_key');
+
+              if (groqLimpia) localStorage.setItem('unir_groq_key', groqLimpia);
+              else localStorage.removeItem('unir_groq_key');
+            } catch(e) {}
+
+            this.apiKeyMensajeExito = '¡Claves guardadas y activadas con éxito!';
+            setTimeout(() => {
+              this.modalApiKey = false;
+            }, 1200);
           } catch(e) {
-            this.apiKeyMensajeError = 'Error conectando con el verificador de clave.';
+            this.apiKeyMensajeError = 'Ocurrió un error al guardar las claves: ' + (e.message || e);
           } finally {
             this.apiKeyValidando = false;
           }
         },
 
-        eliminarApiKeyUsuario() {
+        async eliminarApiKeyUsuario() {
+          if (!confirm('¿Deseas restablecer y eliminar las claves de IA configuradas?')) {
+            return;
+          }
           this.userGeminiKey = '';
+          this.userOpenrouterKey = '';
+          this.userGroqKey = '';
           this.inputApiKeyTemp = '';
-          try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
+          this.inputOpenrouterTemp = '';
+          this.inputGroqTemp = '';
+
           try {
-            fetch('/api/usuario/guardar-key', {
+            localStorage.removeItem('unir_user_gemini_key');
+            localStorage.removeItem('unir_openrouter_key');
+            localStorage.removeItem('unir_groq_key');
+          } catch(e) {}
+
+          try {
+            await fetch('/api/proveedores-ia', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ api_key: '' })
+              body: JSON.stringify({
+                gemini_key: '',
+                openrouter_key: '',
+                groq_key: ''
+              })
             });
           } catch(e) {}
+
           this.modalApiKey = false;
+        },
+
+        async sincronizarClavesIa() {
+          try {
+            const res = await fetch('/api/proveedores-ia');
+            if (res.ok) {
+              const data = await res.json();
+              let cambioRequerido = false;
+              const payload = {};
+
+              // 1. Gemini
+              const localGemini = localStorage.getItem('unir_user_gemini_key') || '';
+              if (data.gemini_key) {
+                this.userGeminiKey = data.gemini_key;
+                try { localStorage.setItem('unir_user_gemini_key', data.gemini_key); } catch(e) {}
+              } else if (localGemini) {
+                payload.gemini_key = localGemini;
+                this.userGeminiKey = localGemini;
+                cambioRequerido = true;
+              }
+
+              // 2. OpenRouter
+              const localOR = localStorage.getItem('unir_openrouter_key') || '';
+              if (data.openrouter_key) {
+                this.userOpenrouterKey = data.openrouter_key;
+                try { localStorage.setItem('unir_openrouter_key', data.openrouter_key); } catch(e) {}
+              } else if (localOR) {
+                payload.openrouter_key = localOR;
+                this.userOpenrouterKey = localOR;
+                cambioRequerido = true;
+              }
+
+              // 3. Groq
+              const localGroq = localStorage.getItem('unir_groq_key') || '';
+              if (data.groq_key) {
+                this.userGroqKey = data.groq_key;
+                try { localStorage.setItem('unir_groq_key', data.groq_key); } catch(e) {}
+              } else if (localGroq) {
+                payload.groq_key = localGroq;
+                this.userGroqKey = localGroq;
+                cambioRequerido = true;
+              }
+
+              // Si el cliente tenía claves que faltaban en el servidor, sincronizar al servidor
+              if (cambioRequerido) {
+                const resPost = await fetch('/api/proveedores-ia', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+                });
+                if (resPost.ok) {
+                  const dataPost = await resPost.json();
+                  if (dataPost && dataPost.modelos) {
+                    this.modelosIaDisponibles = dataPost.modelos;
+                  }
+                }
+              }
+            }
+          } catch(e) {
+            console.warn('Error sincronizando claves de IA:', e);
+          }
         },
 
         irASeccion(sec) {
@@ -9392,14 +9646,19 @@ def dashboard_html():
             if (this.usuarioActual?.gemini_api_key) {
               this.userGeminiKey = this.usuarioActual.gemini_api_key;
               try { localStorage.setItem('unir_user_gemini_key', this.userGeminiKey); } catch(e) {}
-            } else if (this.usuarioActual?.es_admin) {
-              this.userGeminiKey = '';
-              try { localStorage.removeItem('unir_user_gemini_key'); } catch(e) {}
+            }
+            if (this.usuarioActual?.openrouter_api_key) {
+              this.userOpenrouterKey = this.usuarioActual.openrouter_api_key;
+              try { localStorage.setItem('unir_openrouter_key', this.userOpenrouterKey); } catch(e) {}
+            }
+            if (this.usuarioActual?.groq_api_key) {
+              this.userGroqKey = this.usuarioActual.groq_api_key;
+              try { localStorage.setItem('unir_groq_key', this.userGroqKey); } catch(e) {}
             }
             if (this.usuarioActual && this.usuarioActual.es_admin) {
               await this.cargarAdminUsuarios();
-            } else if (this.usuarioActual?.autenticado && !this.usuarioActual.es_admin && !this.userGeminiKey) {
-              // Estudiante sin API key: abrir modal obligatoriamente
+            } else if (this.usuarioActual?.autenticado && !this.usuarioActual.es_admin && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey) {
+              // Estudiante sin ninguna API key configurada: abrir modal
               setTimeout(() => {
                 this.abrirModalApiKey();
               }, 700);
@@ -9776,7 +10035,7 @@ def dashboard_html():
         },
 
         async abrirResumenClase(clase) {
-          if (!clase.has_resumen && !this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+          if (!clase.has_resumen && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
             this.abrirModalApiKey();
             return;
           }
@@ -9816,7 +10075,7 @@ def dashboard_html():
 
         async regenerarResumenClase() {
           if (!this.resumenClaseActual || this.cargandoResumenClase) return;
-          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+          if (!this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
             this.modalResumenClase = false;
             this.abrirModalApiKey();
             return;
@@ -9869,7 +10128,7 @@ def dashboard_html():
 
         async ejecutarGeneracionIa() {
           if (!this.asigSeleccionada || !this.generadorTemaNombre.trim()) return;
-          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+          if (!this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
             this.modalGenerador = false;
             this.abrirModalApiKey();
             return;
@@ -10580,7 +10839,7 @@ def dashboard_html():
 
         async ejecutarGeneracionFlashcards() {
           if (!this.nuevaCardTema.trim() || this.generandoFlashcards) return;
-          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+          if (!this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
             this.modalGenerarFlashcards = false;
             this.abrirModalApiKey();
             return;
@@ -10879,7 +11138,7 @@ def dashboard_html():
 
         async enviarMensajeChat() {
           if (!this.chatInput.trim() || this.chatCargando) return;
-          if (!this.userGeminiKey && this.usuarioActual?.rol !== 'admin') {
+          if (!this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
             this.abrirModalApiKey();
             return;
           }
@@ -10942,6 +11201,12 @@ def dashboard_html():
           const chatHeaders = { 'Content-Type': 'application/json' };
           if (this.userGeminiKey && this.userGeminiKey.trim()) {
             chatHeaders['X-User-Gemini-Key'] = this.userGeminiKey.trim();
+          }
+          if (this.userOpenrouterKey && this.userOpenrouterKey.trim()) {
+            chatHeaders['X-User-Openrouter-Key'] = this.userOpenrouterKey.trim();
+          }
+          if (this.userGroqKey && this.userGroqKey.trim()) {
+            chatHeaders['X-User-Groq-Key'] = this.userGroqKey.trim();
           }
 
           const chatPayload = {
