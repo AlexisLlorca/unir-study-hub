@@ -2970,7 +2970,7 @@ def dashboard_html():
                   <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono font-bold" x-text="todoHoyLista.length"></span>
                 </div>
               </div>
-              <p class="text-[10px] text-gray-400 mb-2">Eventos de hoy + citas y temas en «Pendiente de empezar» o «En proceso»</p>
+              <p class="text-[10px] text-gray-400 mb-2">Eventos y citas de hoy + tareas en proceso</p>
 
               <div x-show="todoHoyLista.length === 0" class="py-5 text-center text-[11px] text-gray-500">
                 <i class="fa-solid fa-check-double text-emerald-400/60 text-base mb-1 block"></i>
@@ -7333,7 +7333,7 @@ def dashboard_html():
           }).slice(0, 6);
         },
 
-        // To-do hoy (estilo Notion: lo que tiene fecha de hoy + Temas/Actividades marcadas como 'Pendiente de empezar' o 'En proceso')
+        // To-do hoy (estilo Notion: lo que tiene fecha de hoy + tareas sin fecha en 'En proceso')
         get todoHoyLista() {
           const hoyStr = new Date().toISOString().slice(0, 10);
           let evs = this.agendaEventos || [];
@@ -7344,10 +7344,18 @@ def dashboard_html():
             const est = ev.estado || '';
             if (['Vista', 'Vista no relevante', 'Hecho'].includes(est) || ev.entregada) return false;
             const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
-            if (f === hoyStr) return true;
-            if (['Pendiente de empezar', 'En proceso'].includes(est)) return true;
-            return false;
-          }).sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || ''));
+            if (f) {
+              return f === hoyStr;
+            }
+            return ['En proceso', 'Pendiente de empezar'].includes(est);
+          }).sort((a, b) => {
+            const hA = (a.hora_inicio || '').trim();
+            const hB = (b.hora_inicio || '').trim();
+            if (hA && hB) return hA.localeCompare(hB);
+            if (hA && !hB) return -1;
+            if (!hA && hB) return 1;
+            return (a.titulo || '').localeCompare(b.titulo || '');
+          });
         },
 
         // To-do semana (estilo Notion: clases, tutorías, entregas y temas pendientes de esta semana + atrasados si se activa)
