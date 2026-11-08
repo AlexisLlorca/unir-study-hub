@@ -3242,10 +3242,6 @@ def dashboard_html():
                     </div>
                   </div>
                 </template>
-                      </div>
-                    </div>
-                  </div>
-                </template>
               </div>
             </div>
           </div>
