@@ -494,3 +494,181 @@ def eliminar_item_organizador_usuario(username: str, item_id: str) -> bool:
         pass
     return True
 
+
+def importar_calendario_ics_usuario(
+    username: str,
+    ics_texto: str,
+    asignatura_por_defecto: str = "General",
+) -> Dict[str, Any]:
+    """
+    Parsea un archivo de calendario (.ics) procedente de Google Calendar, Canvas,
+    Outlook o Apple Calendar e importa sus eventos a los items propios del estudiante.
+    Evita duplicar eventos existentes en la agenda oficial o en el organizador.
+    """
+    import secrets
+    if not ics_texto or "BEGIN:VCALENDAR" not in ics_texto:
+        return {
+            "status": "error",
+            "mensaje": "El archivo proporcionado no contiene un formato de calendario iCal (.ics) válido.",
+            "importados": 0,
+            "omitidos": 0,
+            "total": 0,
+        }
+
+    f = _archivo_organizador_usuario(username)
+    org = obtener_organizador_usuario(username)
+    items_actuales = org.get("items_propios", [])
+
+    # Obtener eventos base oficiales para comparar duplicados
+    base_eventos = []
+    if AGENDA_CACHE_FILE.exists():
+        try:
+            base_eventos = json.loads(AGENDA_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Claves existentes para evitar duplicados
+    def _clave_evento(asig: str, f_dia: str, tit: str) -> tuple:
+        a_limpia = re.sub(r"[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]", "", asig or "").lower()
+        t_limpio = re.sub(r"[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]", "", tit or "").lower()
+        return (a_limpia[:15], (f_dia or "")[:10], t_limpio[:25])
+
+    existentes = set()
+    uids_existentes = set()
+
+    for ev in base_eventos + items_actuales:
+        f_dia = ev.get("fecha_dia") or (ev.get("fecha_iso") or "")[:10]
+        asig = ev.get("asignatura") or ""
+        tit = ev.get("titulo") or ""
+        existentes.add(_clave_evento(asig, f_dia, tit))
+        if ev.get("uid_ics"):
+            uids_existentes.add(str(ev["uid_ics"]).strip())
+        if ev.get("id"):
+            uids_existentes.add(str(ev["id"]).strip())
+
+    # Extraer bloques VEVENT
+    bloques = re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", ics_texto, re.DOTALL)
+    importados = 0
+    omitidos = 0
+
+    for idx, bloque in enumerate(bloques):
+        # Unfold lines RFC 5545
+        limpio = re.sub(r"\r?\n[ \t]", "", bloque)
+        uid_m = re.search(r"^UID:(.*)$", limpio, re.MULTILINE)
+        sum_m = re.search(r"^SUMMARY:(.*)$", limpio, re.MULTILINE)
+        dt_m = re.search(r"^DTSTART(?:;[^:]*)?:(\d{8}(?:T\d{6}Z?)?)", limpio, re.MULTILINE)
+        end_m = re.search(r"^DTEND(?:;[^:]*)?:(\d{8}(?:T\d{6}Z?)?)", limpio, re.MULTILINE)
+        url_m = re.search(r"^URL:(.*)$", limpio, re.MULTILINE)
+        desc_m = re.search(r"^DESCRIPTION:(.*)$", limpio, re.MULTILINE)
+        loc_m = re.search(r"^LOCATION:(.*)$", limpio, re.MULTILINE)
+
+        uid_val = uid_m.group(1).strip() if uid_m else f"ics_{secrets.token_hex(4)}_{idx}"
+        if uid_val in uids_existentes:
+            omitidos += 1
+            continue
+
+        summary_raw = (sum_m.group(1).strip() if sum_m else "Evento importado").replace("\\,", ",").replace("\\;", ";")
+        dt_raw = (dt_m or end_m).group(1).strip() if (dt_m or end_m) else ""
+        if len(dt_raw) < 8:
+            continue
+
+        fecha_dia = f"{dt_raw[:4]}-{dt_raw[4:6]}-{dt_raw[6:8]}"
+        hora_ini = f"{dt_raw[9:11]}:{dt_raw[11:13]}" if "T" in dt_raw and len(dt_raw) >= 13 else ""
+        hora_fin = ""
+        if end_m:
+            end_raw = end_m.group(1).strip()
+            if "T" in end_raw and len(end_raw) >= 13:
+                hora_fin = f"{end_raw[9:11]}:{end_raw[11:13]}"
+
+        # Extraer asignatura del summary tipo "Título [Asignatura]" o de título
+        titulo = summary_raw
+        asig_detectada = None
+        m_corchete = re.search(r"^(.*?)\s*\[([^\]]+)\]\s*$", summary_raw)
+        if m_corchete:
+            titulo = m_corchete.group(1).strip()
+            asig_detectada = m_corchete.group(2).strip()
+
+        if asig_detectada:
+            asig_final = normalizar_nombre_asignatura(asig_detectada) or asig_detectada
+        else:
+            asig_final = normalizar_nombre_asignatura(titulo) or asignatura_por_defecto or "General"
+
+        # Categoría
+        tit_lower = titulo.lower()
+        if any(k in tit_lower for k in ("actividad", "pac", "entrega", "práctica", "practica", "proyecto", "ffe")):
+            cat = "Actividad"
+            tipo_interno = "tarea"
+        elif any(k in tit_lower for k in ("examen", "test", "autoevaluación", "cuestionario")):
+            cat = "Examen"
+            tipo_interno = "tarea"
+        elif any(k in tit_lower for k in ("clase", "tutoría", "tutoria", "sesión", "sesion", "webinar", "directo")):
+            cat = "Clase"
+            tipo_interno = "clase_directo"
+        elif any(k in tit_lower for k in ("cita", "médico", "medico", "reunión", "reunion", "entrevista", "recordatorio")):
+            cat = "Cita"
+            tipo_interno = "tema"
+        else:
+            cat = "Tema"
+            tipo_interno = "tema"
+
+        if not hora_ini:
+            hora_ini = "19:00" if tipo_interno == "clase_directo" else ("10:00" if cat == "Cita" else "23:59")
+
+        # Comprobar clave duplicada
+        clave = _clave_evento(asig_final, fecha_dia, titulo)
+        if clave in existentes:
+            omitidos += 1
+            continue
+
+        existentes.add(clave)
+        uids_existentes.add(uid_val)
+
+        desc_txt = (desc_m.group(1).strip() if desc_m else "").replace("\\n", " ").replace("\\,", ",")
+        desc_txt = re.sub(r"<[^>]+>", " ", desc_txt).strip()[:200]
+        if loc_m and loc_m.group(1).strip():
+            loc_val = loc_m.group(1).strip().replace("\\,", ",")
+            desc_txt = f"{loc_val} • {desc_txt}".strip(" •")
+
+        nuevo_item = {
+            "id": f"ics_{secrets.token_hex(4)}",
+            "uid_ics": uid_val,
+            "es_propio": True,
+            "origen": "ics_importado",
+            "tipo": tipo_interno,
+            "categoria": cat,
+            "titulo": titulo[:120],
+            "asignatura": asig_final,
+            "fecha_iso": f"{fecha_dia}T{hora_ini}:00Z",
+            "fecha_dia": fecha_dia,
+            "hora_inicio": hora_ini,
+            "hora_fin": hora_fin,
+            "estado": "No vista" if tipo_interno == "clase_directo" else ("No entregado" if tipo_interno == "tarea" else "Pendiente de empezar"),
+            "recordatorio": (cat in ("Cita", "Examen")),
+            "url": (url_m.group(1).strip() if url_m else "https://campusfp.unir.net"),
+            "descripcion": desc_txt or f"Importado de calendario .ics ({cat})",
+        }
+
+        items_actuales.append(nuevo_item)
+        importados += 1
+
+    org["items_propios"] = items_actuales
+    escribir_json_atomico(f, org)
+    try:
+        from src.core.cloud_sync import respaldar_archivo_en_hf_async
+        respaldar_archivo_en_hf_async(f)
+    except Exception:
+        pass
+
+    mensaje = f"¡Se han importado {importados} eventos nuevos a tu calendario!"
+    if omitidos > 0:
+        mensaje += f" ({omitidos} eventos duplicados fueron omitidos automáticamente)."
+
+    return {
+        "status": "ok",
+        "mensaje": mensaje,
+        "importados": importados,
+        "omitidos": omitidos,
+        "total": len(bloques),
+    }
+
+

@@ -1370,6 +1370,11 @@ class FavoritasReq(BaseModel):
     asignaturas: List[str]
 
 
+class ImportarIcsReq(BaseModel):
+    ics_texto: str
+    asignatura_defecto: Optional[str] = "General"
+
+
 @app.get("/api/mi-campus")
 def api_obtener_mi_campus(request: Request):
     """Devuelve el estado de conexión al Campus UNIR (Canvas) personal del estudiante y sus datos sincronizados."""
@@ -1696,6 +1701,19 @@ def api_eliminar_item_agenda(item_id: str, request: Request):
     if not ok:
         raise HTTPException(status_code=404, detail="Solo puedes eliminar ítems creados manualmente por ti.")
     return {"status": "ok"}
+
+
+@app.post("/api/agenda/importar-ics")
+def api_importar_ics(req: ImportarIcsReq, request: Request):
+    """Importa eventos de un archivo o feed .ics a la cuenta personal del estudiante."""
+    from src.crawler.agenda_sync import importar_calendario_ics_usuario
+    username = _username_actual(request)
+    if not req.ics_texto or not req.ics_texto.strip():
+        raise HTTPException(status_code=400, detail="El archivo .ics está vacío o no es válido.")
+    res = importar_calendario_ics_usuario(username, req.ics_texto, req.asignatura_defecto or "General")
+    if res.get("status") == "error":
+        raise HTTPException(status_code=400, detail=res.get("mensaje", "Error al importar el archivo .ics"))
+    return res
 
 
 @app.get("/api/temas-estado")
@@ -3064,6 +3082,13 @@ def dashboard_html():
                     <i class="fa-solid fa-plus text-[9px]"></i>
                     <span class="hidden sm:inline">Añadir al Calendario</span>
                     <span class="sm:hidden">Añadir</span>
+                  </button>
+                  <button @click="abrirModalImportarIcs()"
+                          class="px-2.5 sm:px-3 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] sm:text-[11px] font-bold transition flex items-center gap-1.5 whitespace-nowrap shadow-sm active:scale-95"
+                          title="Importar un archivo de calendario (.ics) de tu ordenador a tu cuenta">
+                    <i class="fa-solid fa-file-import text-[9px]"></i>
+                    <span class="hidden sm:inline">Importar .ics</span>
+                    <span class="sm:hidden">.ics</span>
                   </button>
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1 hidden sm:block">💡 Arrastra cualquier etiqueta a otro día, usa el botón «+» de cada día o haz clic para editarla</p>
@@ -6646,6 +6671,116 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== MODAL IMPORTAR ARCHIVO .ICS ==================== -->
+  <div x-show="modalImportarIcs"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+       style="display: none;">
+    <div @click.away="modalImportarIcs = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+        <div class="flex items-center space-x-3">
+          <div class="h-10 w-10 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center justify-center text-lg shadow-lg shadow-purple-500/10">
+            <i class="fa-solid fa-file-import"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-gray-100 text-base">Importar Calendario (.ics)</h3>
+            <p class="text-xs text-gray-400">Fusiona tu calendario personal junto al oficial de UNIR</p>
+          </div>
+        </div>
+        <button @click="modalImportarIcs = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- ZONA DE CARGA DEL ARCHIVO -->
+      <div class="space-y-3">
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Sube el archivo <code class="text-purple-300 font-mono">.ics</code> que tienes en tu ordenador (exportado de Google Calendar, Canvas, Outlook o Apple Calendar).
+        </p>
+
+        <!-- CAJA DROPZONE -->
+        <div class="border-2 border-dashed border-gray-700 hover:border-purple-500/60 rounded-2xl p-6 text-center transition bg-gray-950/60 cursor-pointer"
+             @click="$refs.inputArchivoIcs.click()"
+             @dragover.prevent="$el.classList.add('border-purple-500')"
+             @dragleave.prevent="$el.classList.remove('border-purple-500')"
+             @drop.prevent="manejarDropIcs($event)">
+          <input type="file"
+                 x-ref="inputArchivoIcs"
+                 accept=".ics,text/calendar"
+                 class="hidden"
+                 @change="cargarArchivoIcsSeleccionado($event)">
+          
+          <template x-if="!icsArchivoCargado">
+            <div class="space-y-2">
+              <i class="fa-regular fa-calendar-plus text-3xl text-purple-400/80"></i>
+              <p class="text-xs font-bold text-gray-200">Haz clic aquí para seleccionar tu archivo .ics</p>
+              <p class="text-[11px] text-gray-500">o arrastra el archivo directamente a esta caja</p>
+            </div>
+          </template>
+
+          <template x-if="icsArchivoCargado">
+            <div class="space-y-2">
+              <i class="fa-solid fa-circle-check text-2xl text-emerald-400"></i>
+              <p class="text-xs font-bold text-white truncate max-w-xs mx-auto" x-text="icsNombreArchivo"></p>
+              <p class="text-[11px] text-purple-300 font-mono" x-text="icsTotalEventosDetectados + ' eventos detectados en el archivo'"></p>
+              <button @click.stop="limpiarArchivoIcs()" class="text-[11px] text-rose-400 hover:underline">Cambiar archivo</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- ASIGNATURA POR DEFECTO -->
+        <div class="space-y-1 pt-1">
+          <label class="block text-[11px] font-bold text-gray-400">Asignar eventos a la materia:</label>
+          <select x-model="icsAsignaturaDefecto" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none focus:border-purple-500 font-medium">
+            <option value="Personal / General">Personal / General (Eventos personales)</option>
+            <template x-for="asig in catalogoFiltrado" :key="'ics-asig-' + asig.nombre">
+              <option :value="asig.nombre" x-text="asig.nombre"></option>
+            </template>
+          </select>
+          <p class="text-[10px] text-gray-500">Si un evento ya especifica su asignatura en el título (ej: <em>[Acceso a Datos]</em>), se vinculará a esa materia automáticamente.</p>
+        </div>
+
+        <div class="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-[11px] text-purple-200/90 flex items-start gap-2">
+          <i class="fa-solid fa-shield-halved text-purple-400 mt-0.5 shrink-0"></i>
+          <span><strong>Protección contra duplicados:</strong> Si el archivo contiene clases o entregas que ya están en el calendario oficial de UNIR, se omitirán para no duplicarse.</span>
+        </div>
+
+        <template x-if="icsMensajeError">
+          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation shrink-0"></i>
+            <span x-text="icsMensajeError"></span>
+          </div>
+        </template>
+
+        <template x-if="icsMensajeExito">
+          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+            <i class="fa-solid fa-circle-check shrink-0"></i>
+            <span x-text="icsMensajeExito"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- ACCIONES -->
+      <div class="pt-3 border-t border-gray-800 flex items-center justify-end gap-2">
+        <button @click="modalImportarIcs = false" type="button" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 hover:text-white text-xs transition">
+          Cerrar
+        </button>
+        <button @click="procesarImportacionIcs()"
+                :disabled="!icsArchivoCargado || icsImportando"
+                type="button"
+                class="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-purple-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+          <i x-show="icsImportando" class="fa-solid fa-spinner fa-spin text-xs"></i>
+          <span x-text="icsImportando ? 'Importando...' : 'Importar a mi Calendario'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-3/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
     <button @click="irASeccion('dashboard')" 
@@ -6931,6 +7066,17 @@ def dashboard_html():
         },
         alertasActivasToast: [],
         alertasDisparadasIds: [],
+
+        // Importación de Calendario (.ics)
+        modalImportarIcs: false,
+        icsArchivoCargado: false,
+        icsTextoContenido: '',
+        icsNombreArchivo: '',
+        icsTotalEventosDetectados: 0,
+        icsAsignaturaDefecto: 'Personal / General',
+        icsImportando: false,
+        icsMensajeError: '',
+        icsMensajeExito: '',
 
         // Flashcards Repetición Espaciada
         flashcards: [],
@@ -8197,6 +8343,101 @@ def dashboard_html():
             }
           } catch (e) {
             console.error(e);
+          }
+        },
+
+        abrirModalImportarIcs() {
+          this.icsMensajeError = '';
+          this.icsMensajeExito = '';
+          this.modalImportarIcs = true;
+        },
+
+        limpiarArchivoIcs() {
+          this.icsArchivoCargado = false;
+          this.icsTextoContenido = '';
+          this.icsNombreArchivo = '';
+          this.icsTotalEventosDetectados = 0;
+          this.icsMensajeError = '';
+          this.icsMensajeExito = '';
+          if (this.$refs.inputArchivoIcs) {
+            this.$refs.inputArchivoIcs.value = '';
+          }
+        },
+
+        manejarDropIcs(event) {
+          const dt = event.dataTransfer;
+          if (dt && dt.files && dt.files.length > 0) {
+            this.procesarArchivoIcsFisico(dt.files[0]);
+          }
+        },
+
+        cargarArchivoIcsSeleccionado(event) {
+          if (event.target.files && event.target.files.length > 0) {
+            this.procesarArchivoIcsFisico(event.target.files[0]);
+          }
+        },
+
+        procesarArchivoIcsFisico(file) {
+          this.icsMensajeError = '';
+          this.icsMensajeExito = '';
+          if (!file.name.toLowerCase().endsWith('.ics') && file.type !== 'text/calendar') {
+            this.icsMensajeError = 'El archivo seleccionado debe ser un archivo de calendario con extensión .ics';
+            return;
+          }
+          this.icsNombreArchivo = file.name;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const contenido = e.target.result;
+            if (!contenido || !contenido.includes('BEGIN:VCALENDAR')) {
+              this.icsMensajeError = 'El archivo seleccionado no tiene un formato iCal (.ics) válido.';
+              this.icsArchivoCargado = false;
+              return;
+            }
+            this.icsTextoContenido = contenido;
+            const matches = contenido.match(/BEGIN:VEVENT/g);
+            this.icsTotalEventosDetectados = matches ? matches.length : 0;
+            this.icsArchivoCargado = true;
+          };
+          reader.onerror = () => {
+            this.icsMensajeError = 'No se pudo leer el archivo desde tu ordenador.';
+          };
+          reader.readAsText(file);
+        },
+
+        async procesarImportacionIcs() {
+          if (!this.icsTextoContenido || !this.icsArchivoCargado) {
+            this.icsMensajeError = 'Selecciona primero un archivo .ics válido.';
+            return;
+          }
+          this.icsImportando = true;
+          this.icsMensajeError = '';
+          this.icsMensajeExito = '';
+          try {
+            const res = await fetch('/api/agenda/importar-ics', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ics_texto: this.icsTextoContenido,
+                asignatura_defecto: this.icsAsignaturaDefecto || 'General'
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              this.icsMensajeError = data.detail || 'Error al importar los eventos del archivo .ics.';
+              return;
+            }
+            this.icsMensajeExito = data.mensaje || '¡Eventos importados con éxito!';
+            await this.cargarAgenda();
+            setTimeout(() => {
+              if (this.icsMensajeExito) {
+                this.modalImportarIcs = false;
+                this.limpiarArchivoIcs();
+              }
+            }, 2500);
+          } catch (e) {
+            this.icsMensajeError = 'Error de red al conectar con el servidor.';
+          } finally {
+            this.icsImportando = false;
           }
         },
 
