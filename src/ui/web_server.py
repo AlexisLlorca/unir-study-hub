@@ -14,6 +14,7 @@ import re
 import json
 import socket
 import asyncio
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -21,6 +22,7 @@ import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 from src.core.config import (
@@ -91,6 +93,7 @@ app = FastAPI(title="NOVA Study Hub — Plataforma Inteligente Multi-Titulación
 HUB_ACCESS_TOKEN = get_hub_access_token()
 IP_LOCAL = obtener_ip_red_local()
 app.add_middleware(AccesoSeguroMiddleware, token=HUB_ACCESS_TOKEN, ip_local=IP_LOCAL)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 inicializar_bd_usuarios()
 inicializar_bd_feedback()
@@ -391,9 +394,18 @@ def _orden_natural_items(texto: Any) -> tuple:
     return (2, 999, s.lower())
 
 
+_CACHE_CATALOGO: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
+
+
 @app.get("/api/catalogo")
 def api_catalogo(request: Request, programa: Optional[str] = None, curso: Optional[str] = None):
     """Retorna el catálogo consolidado de asignaturas filtrado por programa, curso y espacio privado del usuario."""
+    username = _username_actual(request)
+    cache_key = f"{username}:{programa or ''}:{curso or ''}"
+    cached = _CACHE_CATALOGO.get(cache_key)
+    if cached and (time.time() - cached[0] < 15):
+        return cached[1]
+
     catalogo = obtener_catalogo_academico(programa_id=programa, curso_id=curso)
     rutas = _rutas_usuario_request(request)
     tracker_u = _tracker_usuario(request)
@@ -462,6 +474,7 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
                 "progreso": tracker_u.obtener_resumen_asignatura(asig),
             })
 
+    _CACHE_CATALOGO[cache_key] = (time.time(), resultado)
     return resultado
 
 
@@ -1205,9 +1218,18 @@ def obtener_contexto_inteligente_clases(
     return buscar_contexto_transcripciones(query, asignatura)
 
 
+_CACHE_VIDEOCLASES: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
+
+
 @app.get("/api/videoclases")
 def api_videoclases(request: Request, programa: Optional[str] = None):
     """Devuelve el catálogo de todas las clases grabadas con sus metadatos y resúmenes del usuario."""
+    username = _username_actual(request)
+    cache_key = f"{username}:{programa or ''}"
+    cached = _CACHE_VIDEOCLASES.get(cache_key)
+    if cached and (time.time() - cached[0] < 30):
+        return cached[1]
+
     if not TRANSCRIPCIONES_DIR.exists():
         return []
 
@@ -1254,6 +1276,7 @@ def api_videoclases(request: Request, programa: Optional[str] = None):
                 "has_resumen": resumen_file.exists(),
                 "duration": duration,
             })
+    _CACHE_VIDEOCLASES[cache_key] = (time.time(), clases)
     return clases
 
 
@@ -2368,9 +2391,11 @@ def dashboard_html():
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
     html, body { overflow-x: hidden; max-width: 100vw; width: 100%; }
     body { font-family: 'Inter', sans-serif; background-color: rgb(var(--surface-0)); color: rgb(var(--c-gray-100)); transition: background-color .25s ease; }
     code, pre { font-family: 'JetBrains Mono', monospace; }
@@ -8883,17 +8908,19 @@ def dashboard_html():
           }
           window.addEventListener('popstate', () => this.procesarUrlInicial());
           await this.cargarUsuarioActual();
-          await this.cargarMiCampus();
           this.cargarActividadReciente();
-          await this.cargarProgramas();
-          await this.cargarCatalogo();
-          await this.cargarProgreso();
-          await this.cargarVideoclases();
-          await this.cargarAgenda();
-          await this.cargarTemasEstado();
-          await this.cargarFlashcards();
-          await this.cargarFeedback();
-          await this.cargarModelosIa();
+          await Promise.all([
+            this.cargarMiCampus(),
+            this.cargarProgramas(),
+            this.cargarCatalogo(),
+            this.cargarProgreso(),
+            this.cargarAgenda(),
+            this.cargarTemasEstado(),
+            this.cargarFlashcards(),
+            this.cargarFeedback(),
+            this.cargarModelosIa(),
+            this.cargarVideoclases()
+          ]);
           try {
             const cfg = localStorage.getItem('nova_alertas_config');
             if (cfg) this.alertasConfig = Object.assign(this.alertasConfig, JSON.parse(cfg));

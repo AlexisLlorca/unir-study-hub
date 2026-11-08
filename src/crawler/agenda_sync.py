@@ -381,6 +381,8 @@ def _archivo_organizador_usuario(username: str) -> Path:
     return obtener_espacio_usuario(username) / "organizador_notion.json"
 
 
+_CACHE_ORGANIZADOR: Dict[str, tuple[float, Dict[str, Any]]] = {}
+
 def obtener_organizador_usuario(username: str) -> Dict[str, Any]:
     """
     Devuelve las personalizaciones del calendario/to-do del estudiante:
@@ -390,10 +392,15 @@ def obtener_organizador_usuario(username: str) -> Dict[str, Any]:
     f = _archivo_organizador_usuario(username)
     if f.exists():
         try:
+            mtime = f.stat().st_mtime
+            cached = _CACHE_ORGANIZADOR.get(username)
+            if cached and cached[0] == mtime:
+                return cached[1]
             data = json.loads(f.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 data.setdefault("overrides", {})
                 data.setdefault("items_propios", [])
+                _CACHE_ORGANIZADOR[username] = (mtime, data)
                 return data
         except Exception:
             pass
@@ -441,6 +448,10 @@ def actualizar_item_organizador_usuario(username: str, item_id: str, cambios: Di
 
     escribir_json_atomico(f, org)
     try:
+        _CACHE_ORGANIZADOR[username] = (f.stat().st_mtime, org)
+    except Exception:
+        pass
+    try:
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
         respaldar_archivo_en_hf_async(f)
     except Exception:
@@ -486,6 +497,10 @@ def crear_item_organizador_usuario(username: str, nuevo: Dict[str, Any]) -> Dict
     org["items_propios"].append(item)
     escribir_json_atomico(f, org)
     try:
+        _CACHE_ORGANIZADOR[username] = (f.stat().st_mtime, org)
+    except Exception:
+        pass
+    try:
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
         respaldar_archivo_en_hf_async(f)
     except Exception:
@@ -504,6 +519,10 @@ def eliminar_item_organizador_usuario(username: str, item_id: str) -> bool:
         ov["oculto"] = True
         org["overrides"][item_id] = ov
     escribir_json_atomico(f, org)
+    try:
+        _CACHE_ORGANIZADOR[username] = (f.stat().st_mtime, org)
+    except Exception:
+        pass
     try:
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
         respaldar_archivo_en_hf_async(f)
@@ -779,6 +798,10 @@ def importar_calendario_ics_usuario(
 
     org["items_propios"] = items_actuales
     escribir_json_atomico(f, org)
+    try:
+        _CACHE_ORGANIZADOR[username] = (f.stat().st_mtime, org)
+    except Exception:
+        pass
     try:
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
         respaldar_archivo_en_hf_async(f)

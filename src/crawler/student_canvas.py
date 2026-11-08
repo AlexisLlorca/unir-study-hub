@@ -704,6 +704,9 @@ def iniciar_programador_sincronizacion(hora_inicio: int = 3, hora_fin: int = 6) 
     threading.Thread(target=_bucle, name="nova-sync-campus", daemon=True).start()
 
 
+_CACHE_CANVAS_SYNC: Dict[str, tuple[float, Dict[str, Any]]] = {}
+
+
 def obtener_datos_canvas_estudiante(username: str) -> Dict[str, Any]:
     """Devuelve el estado de conexión y los datos sincronizados del Campus UNIR para este usuario."""
     cfg_file, sync_file = _archivos_canvas_usuario(username)
@@ -720,7 +723,13 @@ def obtener_datos_canvas_estudiante(username: str) -> Dict[str, Any]:
     }
     if sync_file.exists():
         try:
-            raw = json.loads(sync_file.read_text(encoding="utf-8"))
+            mtime = sync_file.stat().st_mtime
+            cached = _CACHE_CANVAS_SYNC.get(username)
+            if cached and cached[0] == mtime:
+                raw = cached[1]
+            else:
+                raw = json.loads(sync_file.read_text(encoding="utf-8"))
+                _CACHE_CANVAS_SYNC[username] = (mtime, raw)
             datos["cursos"] = raw.get("cursos", [])
             datos["entregas"] = raw.get("entregas", [])
             datos["calificaciones_campus"] = raw.get("calificaciones_campus", [])
