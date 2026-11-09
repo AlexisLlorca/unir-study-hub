@@ -1401,12 +1401,6 @@ class FavoritasReq(BaseModel):
     asignaturas: List[str]
 
 
-class ImportarIcsReq(BaseModel):
-    ics_texto: str
-    asignatura_defecto: Optional[str] = "General"
-    reemplazar_anteriores: Optional[bool] = True
-
-
 @app.get("/api/mi-campus")
 def api_obtener_mi_campus(request: Request):
     """Devuelve el estado de conexión al Campus UNIR (Canvas) personal del estudiante y sus datos sincronizados."""
@@ -1815,10 +1809,16 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         combinados_ids.add(uid)
         tareas_combinadas_por_asig[asig_u_norm].append(e_copia)
 
-    _CACHE_AGENDA_COMBINADA[username] = (ahora, [dict(e) for e in combinados])
-    return combinados
-
-    return combinados
+    campos_ui = {
+        "id", "titulo", "asignatura", "categoria", "tipo",
+        "fecha_dia", "fecha_iso", "hora_inicio", "estado",
+        "entregada", "calificada", "nota", "nota_personal",
+        "plazo_texto", "dias_restantes", "urgencia", "url",
+        "es_propio", "recordatorio", "comentario", "puntos"
+    }
+    combinados_compactos = [{k: v for k, v in e.items() if k in campos_ui} for e in combinados]
+    _CACHE_AGENDA_COMBINADA[username] = (ahora, [dict(e) for e in combinados_compactos])
+    return combinados_compactos
 
 
 @app.get("/api/agenda")
@@ -1882,26 +1882,6 @@ def api_eliminar_item_agenda(item_id: str, request: Request):
     return {"status": "ok"}
 
 
-@app.post("/api/agenda/importar-ics")
-def api_importar_ics(req: ImportarIcsReq, request: Request):
-    """Importa eventos de un archivo o feed .ics a la cuenta personal del estudiante."""
-    from src.crawler.agenda_sync import importar_calendario_ics_usuario
-    username = _username_actual(request)
-    if not req.ics_texto or not req.ics_texto.strip():
-        raise HTTPException(status_code=400, detail="El archivo .ics está vacío o no es válido.")
-    reemplazar = True if req.reemplazar_anteriores is None else bool(req.reemplazar_anteriores)
-    res = importar_calendario_ics_usuario(
-        username,
-        req.ics_texto,
-        req.asignatura_defecto or "General",
-        reemplazar_anteriores=reemplazar,
-    )
-    if res.get("status") == "error":
-        raise HTTPException(status_code=400, detail=res.get("mensaje", "Error al importar el archivo .ics"))
-    invalidar_cache_agenda(username)
-    return res
-
-
 @app.get("/api/temas-estado")
 def api_obtener_temas_estado(request: Request):
     """Devuelve los estados personales guardados por el alumno para cada tema de cada asignatura."""
@@ -1909,6 +1889,59 @@ def api_obtener_temas_estado(request: Request):
     username = _username_actual(request)
     org = obtener_organizador_usuario(username)
     return org.get("temas_estado", {})
+
+
+class GenerarEntrenamientoReq(BaseModel):
+    asignatura: str
+    tema_num: int
+    tema_titulo: Optional[str] = ""
+    dificultad: Optional[str] = "examen"
+    enfoque: Optional[str] = ""
+    api_key: Optional[str] = None
+
+
+class EliminarEntrenamientoReq(BaseModel):
+    asignatura: str
+    tema_num: int
+    reto_id: str
+
+
+@app.get("/api/asignatura/tema/entrenamientos")
+def api_entrenamientos_tema(asignatura: str, tema_num: int, request: Request):
+    """Devuelve los entrenamientos prácticos del tema (oficiales de UNIR + generados por IA para el usuario)."""
+    from src.extractors.entrenamientos_extractor import obtener_entrenamientos_tema
+    username = _username_actual(request)
+    return obtener_entrenamientos_tema(asignatura, int(tema_num), username)
+
+
+@app.post("/api/asignatura/tema/generar-entrenamiento")
+def api_generar_entrenamiento_tema(req: GenerarEntrenamientoReq, request: Request):
+    """Genera un nuevo reto práctico con IA pedagógicamente adaptado al temario oficial del tema."""
+    user_key = _obtener_user_key_o_exigir(request, req.api_key)
+    username = _username_actual(request)
+    from src.extractors.entrenamientos_extractor import generar_entrenamiento_con_ia
+    try:
+        nuevo = generar_entrenamiento_con_ia(
+            username=username,
+            asignatura=req.asignatura,
+            tema_num=int(req.tema_num),
+            tema_titulo=req.tema_titulo or f"Tema {req.tema_num}",
+            dificultad=req.dificultad or "examen",
+            enfoque=req.enfoque or "",
+            api_key_override=user_key,
+        )
+        return {"status": "ok", "entrenamiento": nuevo}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar entrenamiento con IA: {str(e)}")
+
+
+@app.post("/api/asignatura/tema/eliminar-entrenamiento")
+def api_eliminar_entrenamiento_tema(req: EliminarEntrenamientoReq, request: Request):
+    """Elimina un entrenamiento de IA creado por el usuario."""
+    username = _username_actual(request)
+    from src.extractors.entrenamientos_extractor import eliminar_entrenamiento_ia_usuario
+    ok = eliminar_entrenamiento_ia_usuario(username, req.asignatura, int(req.tema_num), req.reto_id)
+    return {"status": "ok" if ok else "not_found"}
 
 
 @app.post("/api/asignatura/tema/estado")
@@ -2967,17 +3000,6 @@ def dashboard_html():
           <span class="hidden sm:inline font-medium" x-text="(userGeminiKey || userOpenrouterKey || userGroqKey) ? 'Claves IA' : 'Claves IA'"></span>
         </button>
 
-        <!-- BOTÓN CONFIGURACIÓN DE ALERTAS Y RECORDATORIOS -->
-        <button @click="abrirModalAlertas()"
-                :class="alertasConfig.activo ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'"
-                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm relative"
-                title="Configurar alertas para avisarte antes de clases y entregas">
-          <i class="fa-solid fa-bell text-[11px]" :class="alertasConfig.activo ? 'text-amber-400' : 'text-gray-400'"></i>
-          <span class="hidden sm:inline font-medium">Alertas</span>
-          <span x-show="totalAlertasProximasCount > 0"
-                class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-mono text-[9px] font-extrabold flex items-center justify-center shadow-lg border border-gray-900"
-                x-text="totalAlertasProximasCount"></span>
-        </button>
         <div class="relative shrink-0" @click.outside="menuTemaAbierto = false" @keydown.escape.window="menuTemaAbierto = false">
           <button @click="menuTemaAbierto = !menuTemaAbierto"
                   :class="menuTemaAbierto ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-cyan-300 hover:border-cyan-500/30'"
@@ -3138,7 +3160,6 @@ def dashboard_html():
                        :class="claseColorTarjetaNotion(ev)">
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-1.5 flex-wrap">
-                        <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[10px]"></i>
                         <span class="text-xs font-extrabold text-white break-words" x-text="ev.titulo"></span>
                         <span x-show="ev.hora_inicio && ev.hora_inicio !== '23:59'" class="text-[9px] font-mono text-amber-200 bg-black/30 px-1 rounded" x-text="ev.hora_inicio"></span>
                         <span class="text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0" :class="claseBadgeEstadoNotion(ev.estado)" x-text="ev.estado"></span>
@@ -3200,7 +3221,6 @@ def dashboard_html():
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center justify-between gap-1">
                         <div class="flex items-center gap-1 min-w-0">
-                          <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[10px] shrink-0"></i>
                           <span class="text-xs font-extrabold text-white truncate" x-text="ev.titulo"></span>
                         </div>
                         <span class="text-[9px] text-gray-300 font-mono shrink-0" x-text="formatearFechaDDMMAAAA(ev.fecha_dia || ev.fecha_iso)"></span>
@@ -3284,6 +3304,7 @@ def dashboard_html():
                           :class="calFiltroTipo === 'tema' ? 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40' : 'text-gray-400 hover:text-amber-300'"
                           class="px-2 py-1 rounded-lg transition whitespace-nowrap">Temas / Citas</button>
                 </div>
+
 
                 <!-- VISTA: 2 SEMANAS (DETALLE NOTION) vs MES COMPLETO -->
                 <div class="flex items-center bg-gray-950/90 p-1 rounded-xl border border-gray-800 text-[10px] sm:text-[11px] shrink-0">
@@ -3369,7 +3390,6 @@ def dashboard_html():
                                ]">
                             <div class="flex items-start justify-between gap-1">
                               <p class="text-[11px] font-extrabold text-white leading-tight break-words flex items-center gap-1">
-                                <i x-show="ev.recordatorio || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria)" class="fa-solid fa-bell text-amber-300 text-[9px] shrink-0"></i>
                                 <span x-text="ev.titulo"></span>
                               </p>
                               <span x-show="ev.hora_inicio && ev.hora_inicio !== '23:59'"
@@ -3408,9 +3428,9 @@ def dashboard_html():
             </div>
           </div>
 
-            <!-- BARRA INFERIOR DE PRÓXIMAS ENTREGAS EN ROJO Y RECORDATORIOS PERSONALES -->
-            <div x-show="proximasEntregasRojas.length > 0 || proximosRecordatorios.length > 0" class="mt-4 pt-3 border-t border-gray-800 space-y-2">
-              <div x-show="proximasEntregasRojas.length > 0" class="flex flex-wrap items-center justify-between gap-2">
+            <!-- BARRA INFERIOR DE PRÓXIMAS ENTREGAS EN ROJO -->
+            <div x-show="proximasEntregasRojas.length > 0" class="mt-4 pt-3 border-t border-gray-800 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2 text-xs font-extrabold text-rose-400">
                   <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
                   <span>Próximas entregas PAC en rojo:</span>
@@ -3421,23 +3441,6 @@ def dashboard_html():
                             class="px-2.5 py-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/50 text-rose-200 text-[11px] font-bold transition flex items-center gap-1.5">
                       <span x-text="ev.asignatura + ': ' + ev.titulo"></span>
                       <span class="px-1.5 py-0.2 rounded bg-rose-500 text-white text-[9px] font-extrabold" x-text="ev.plazo_texto"></span>
-                    </button>
-                  </template>
-                </div>
-              </div>
-
-              <div x-show="proximosRecordatorios.length > 0" class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-2 text-xs font-extrabold text-purple-300">
-                  <i class="fa-solid fa-bell text-amber-400"></i>
-                  <span>Tus próximas citas y recordatorios:</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <template x-for="rec in proximosRecordatorios.slice(0, 4)" :key="'prox-rec-' + rec.id">
-                    <button @click="abrirModalItemAgenda(rec)"
-                            class="px-2.5 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-100 text-[11px] font-bold transition flex items-center gap-1.5">
-                      <span x-text="rec.titulo"></span>
-                      <span x-show="rec.hora_inicio && rec.hora_inicio !== '23:59'" class="font-mono text-[10px] text-amber-300" x-text="rec.hora_inicio"></span>
-                      <span class="px-1.5 py-0.2 rounded bg-purple-600 text-white text-[9px] font-extrabold font-mono" x-text="formatearFechaDDMMAAAA(rec.fecha_dia)"></span>
                     </button>
                   </template>
                 </div>
@@ -4003,6 +4006,15 @@ def dashboard_html():
                         </button>
                       </template>
 
+                      <!-- 3. ENTRENAMIENTOS DE CÓDIGO (EJERCICIOS OFICIALES DEL PDF) -->
+                      <button x-show="tm.pdf"
+                              @click="abrirModalEntrenamientos(asigSeleccionada.nombre, tm.numero, tm.titulo)"
+                              class="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                              title="Ver los 5 ejercicios prácticos oficiales de programación de este tema (con enunciados y soluciones paso a paso)">
+                        <i class="fa-solid fa-code text-purple-400 text-xs"></i>
+                        <span>Entrenamientos</span>
+                      </button>
+
                       <!-- 3. CALENDARIO / PLANIFICACIÓN -->
                       <template x-if="tm.fecha_dia">
                         <button @click="tm.eventoAgenda ? abrirModalItemAgenda(tm.eventoAgenda) : planificarTemaEnCalendario(tm)"
@@ -4431,56 +4443,6 @@ def dashboard_html():
           </div>
         </div>
       </div>
-
-      <!-- ==================== VISTA AGENDA Y PACS CANVAS ==================== -->
-      <template x-if="tab === 'agenda'">
-        <div class="space-y-6">
-          <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center space-x-3">
-              <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-lg">
-                <i class="fa-solid fa-calendar-check"></i>
-              </div>
-              <div>
-                <h2 class="text-xl font-bold text-white">Agenda & Calendario de Entregas (Canvas LMS)</h2>
-                <p class="text-xs text-gray-400">Control de plazos, PACs obligatorias, foros puntuables y sesiones en directo</p>
-              </div>
-            </div>
-            <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20 disabled:opacity-50">
-              <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
-              <span x-text="sincronizandoAgenda ? 'Sincronizando con Canvas...' : 'Sincronizar con Canvas'"></span>
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <template x-for="(ev, idx) in entregasCanvasTab" :key="'ag-' + (ev.id || 'ev') + '-' + idx">
-              <div class="glass p-5 rounded-2xl border transition flex flex-col justify-between group"
-                   :class="ev.urgencia === 'critica' ? 'border-rose-500/40 bg-rose-950/10' : (ev.urgencia === 'alta' ? 'border-amber-500/30' : 'border-gray-800')">
-                <div>
-                  <div class="flex items-center justify-between gap-2 mb-2">
-                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase"
-                          :class="ev.tipo === 'tarea' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'"
-                          x-text="ev.tipo === 'tarea' ? 'PAC / Tarea' : 'Clase en Directo'"></span>
-                    <span class="text-[11px] font-black px-2 py-0.5 rounded-full"
-                          :class="ev.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : (ev.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-800 text-gray-400')"
-                          x-text="ev.plazo_texto"></span>
-                  </div>
-                  <p class="text-[11px] font-semibold text-gray-400 truncate" x-text="ev.asignatura"></p>
-                  <h4 class="font-bold text-white text-sm mt-1 group-hover:text-cyan-300 transition" x-text="ev.titulo"></h4>
-                  <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed" x-text="ev.descripcion || 'Sin descripción detallada disponible.'"></p>
-                </div>
-
-                <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between text-xs">
-                  <span class="text-gray-400 font-mono text-[11px]" x-text="ev.puntos ? (ev.puntos + ' puntos') : 'Sesión evaluativa'"></span>
-                  <a :href="ev.url || 'https://campusfp.unir.net'" target="_blank" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-300 rounded-xl font-semibold transition flex items-center space-x-1.5 border border-gray-700">
-                    <span>Ir a la Entrega</span>
-                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                  </a>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
 
       <!-- ==================== VISTA FLASHCARDS / REPASO ACTIVO PROFESIONAL ==================== -->
       <div x-show="tab === 'flashcards'"
@@ -5867,6 +5829,285 @@ def dashboard_html():
     </div>
   </div>
 
+  <!-- ==================== MODAL: ENTRENAMIENTOS DE CÓDIGO OFICIALES Y GENERADOS CON IA ==================== -->
+  <div x-show="modalEntrenamientos" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-4xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/30 shadow-2xl bg-surface-1/95">
+      <!-- HEADER -->
+      <div class="p-4 sm:p-5 bg-gray-900/95 border-b border-gray-800 flex items-center justify-between gap-3">
+        <div class="flex items-center space-x-3 min-w-0">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-300 flex items-center justify-center text-lg shrink-0 shadow-sm">
+            <i class="fa-solid fa-code"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" x-text="entrenamientosTemaInfo?.asignatura"></span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40" x-text="(entrenamientosDatos?.total_oficiales || 5) + ' Retos Oficiales UNIR'"></span>
+            </div>
+            <h3 class="font-bold text-white text-sm sm:text-base truncate mt-0.5" x-text="'Tema ' + entrenamientosTemaInfo?.temaNum + ': ' + (entrenamientosTemaInfo?.temaTitulo || '')"></h3>
+          </div>
+        </div>
+        <button @click="modalEntrenamientos = false" class="w-8 h-8 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition shrink-0">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- CUERPO MODAL -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <!-- LOADING -->
+        <div x-show="entrenamientosCargando" class="text-center py-16 space-y-3">
+          <i class="fa-solid fa-spinner fa-spin text-3xl text-purple-400"></i>
+          <p class="text-xs text-gray-400">Cargando entrenamientos prácticos del tema...</p>
+        </div>
+
+        <!-- ERROR -->
+        <div x-show="!entrenamientosCargando && entrenamientosError" class="p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-center space-y-2">
+          <i class="fa-solid fa-circle-exclamation text-2xl text-rose-400"></i>
+          <p class="text-xs text-rose-200" x-text="entrenamientosError"></p>
+        </div>
+
+        <!-- PANEL DESPLEGABLE: GENERAR NUEVO RETO CON IA -->
+        <div x-show="generadorIaAbierto" x-transition class="glass-card p-4 sm:p-5 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 space-y-3 shadow-lg">
+          <div class="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <h4 class="font-bold text-white text-xs sm:text-sm">Generador de Retos Prácticos con IA</h4>
+            </div>
+            <button @click="generadorIaAbierto = false" class="text-gray-400 hover:text-white text-xs">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <p class="text-[11px] text-gray-300 leading-relaxed">
+            NOVA diseñará un ejercicio de programación nuevo adaptado al temario oficial de este tema y complementario a los ejercicios que ya tienes.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label class="block text-[11px] font-semibold text-emerald-300 mb-1">Dificultad del Reto:</label>
+              <select x-model="generadorIaDificultad" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none">
+                <option value="facil">Básica / Conceptos Clave</option>
+                <option value="medio">Intermedia / Desarrollo estándar</option>
+                <option value="examen" selected>Nivel Examen UNIR (Recomendado)</option>
+                <option value="avanzado">Avanzada / Caso Real de Empresa</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-emerald-300 mb-1">Enfoque específico (opcional):</label>
+              <input type="text" x-model="generadorIaEnfoque" placeholder="Ej: Control de excepciones, Streams, Serializable..."
+                     class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none">
+            </div>
+          </div>
+
+          <div x-show="generadorIaError" class="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-[11px] text-rose-300" x-text="generadorIaError"></div>
+
+          <div class="flex items-center justify-end gap-2 pt-1">
+            <button @click="generadorIaAbierto = false" :disabled="generandoRetoIa"
+                    class="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition">
+              Cancelar
+            </button>
+            <button @click="generarNuevoRetoIa()" :disabled="generandoRetoIa"
+                    class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-gray-950 font-bold text-xs transition flex items-center gap-2 shadow-md shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
+              <i class="fa-solid" :class="generandoRetoIa ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+              <span x-text="generandoRetoIa ? 'Diseñando reto con IA...' : 'Diseñar Reto de Código'"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- CONTENIDO ENTRENAMIENTOS -->
+        <div x-show="!entrenamientosCargando && entrenamientosDatos?.entrenamientos?.length" class="space-y-4">
+          <!-- BARRA DE SELECCIÓN COMPACTA Y ULTRA-ESTILIZADA (1 SOLA LÍNEA) -->
+          <div class="flex items-center justify-between gap-3 p-1.5 bg-gray-950/85 rounded-2xl border border-gray-800 shadow-inner">
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 min-w-0">
+              <!-- SEGMENTO OFICIALES -->
+              <div class="flex items-center bg-gray-900/90 p-1 rounded-xl border border-gray-800 gap-1 shrink-0">
+                <span class="text-[10px] font-bold text-gray-500 uppercase px-1.5 hidden sm:inline tracking-wider">Oficiales:</span>
+                <template x-for="(reto, idx) in (entrenamientosDatos?.entrenamientos || [])" :key="reto.id || idx">
+                  <template x-if="!reto.es_ia">
+                    <button @click="entrenamientoActivoIndice = idx; generadorIaAbierto = false"
+                            :class="entrenamientoActivoIndice === idx 
+                                    ? 'bg-purple-600 text-white font-black shadow-md shadow-purple-500/25 border-purple-500' 
+                                    : 'bg-gray-800/80 text-gray-400 hover:text-white hover:bg-gray-700/80 border-transparent'"
+                            class="h-7 min-w-[28px] px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border"
+                            :title="'Reto ' + (reto.numero || (idx + 1)) + ': ' + reto.titulo">
+                      <span x-text="reto.numero || (idx + 1)"></span>
+                      <span x-show="entrenamientoActivoIndice === idx" 
+                            class="text-[11px] font-medium hidden md:inline truncate max-w-[180px]" 
+                            x-text="reto.titulo"></span>
+                    </button>
+                  </template>
+                </template>
+              </div>
+
+              <!-- SEGMENTO IA (SI EXISTEN) -->
+              <template x-if="(entrenamientosDatos?.entrenamientos || []).some(e => e.es_ia)">
+                <div class="flex items-center bg-emerald-950/30 p-1 rounded-xl border border-emerald-500/30 gap-1 shrink-0">
+                  <span class="text-[10px] font-bold text-emerald-400 uppercase px-1.5 hidden sm:inline tracking-wider">IA:</span>
+                  <template x-for="(reto, idx) in (entrenamientosDatos?.entrenamientos || [])" :key="reto.id || idx">
+                    <template x-if="reto.es_ia">
+                      <button @click="entrenamientoActivoIndice = idx; generadorIaAbierto = false"
+                              :class="entrenamientoActivoIndice === idx 
+                                      ? 'bg-emerald-500 text-gray-950 font-black shadow-md shadow-emerald-500/25 border-emerald-400' 
+                                      : 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border-emerald-500/30'"
+                              class="h-7 min-w-[32px] px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border"
+                              :title="'Reto IA: ' + reto.titulo">
+                        <i class="fa-solid fa-wand-magic-sparkles text-[9px]" :class="entrenamientoActivoIndice === idx ? 'text-gray-950' : 'text-emerald-400'"></i>
+                        <span x-text="idx - (entrenamientosDatos?.total_oficiales || 5) + 1"></span>
+                        <span x-show="entrenamientoActivoIndice === idx" 
+                              class="text-[11px] font-medium hidden md:inline truncate max-w-[160px]" 
+                              x-text="reto.titulo"></span>
+                      </button>
+                    </template>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- BOTÓN ACCIÓN: + RETO CON IA -->
+            <button @click="generadorIaAbierto = !generadorIaAbierto"
+                    :class="generadorIaAbierto ? 'bg-emerald-500 text-gray-950 font-black' : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'"
+                    class="h-7 px-3 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 shrink-0 shadow-sm"
+                    title="Diseñar un nuevo reto de código con IA para este tema">
+              <i class="fa-solid fa-wand-magic-sparkles text-xs" :class="generadorIaAbierto ? 'text-gray-950' : 'text-emerald-400'"></i>
+              <span x-text="generadorIaAbierto ? 'Cerrar' : '+ Reto con IA'"></span>
+            </button>
+          </div>
+
+          <!-- DETALLE DEL RETO SELECCIONADO -->
+          <template x-if="entrenamientosDatos?.entrenamientos?.[entrenamientoActivoIndice]">
+            <div class="space-y-4">
+              <!-- TARJETA DEL PLANTEAMIENTO / ENUNCIADO -->
+              <div class="glass-card p-5 rounded-2xl border border-gray-800/90 space-y-3 bg-surface-2/60">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800/80 pb-3">
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <template x-if="!entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia">
+                      <span class="w-7 h-7 rounded-lg bg-purple-500/30 text-purple-300 font-black text-xs flex items-center justify-center shrink-0"
+                            x-text="'E' + (entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].numero || (entrenamientoActivoIndice + 1))"></span>
+                    </template>
+                    <template x-if="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia">
+                      <span class="w-7 h-7 rounded-lg bg-emerald-500/30 text-emerald-300 font-black text-xs flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                      </span>
+                    </template>
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              :class="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'"
+                              x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'Reto Inédito IA' : 'Oficial UNIR'"></span>
+                        <span class="text-[10px] font-semibold text-gray-400 font-mono" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].dificultad || 'Examen'"></span>
+                      </div>
+                      <h4 class="font-bold text-white text-sm sm:text-base mt-0.5 leading-snug" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].titulo"></h4>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2 shrink-0">
+                    <button @click="copiarTextoReto(entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].enunciado)"
+                            class="px-2.5 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 border border-gray-700">
+                      <i class="fa-regular fa-copy text-xs"></i>
+                      <span>Copiar Enunciado</span>
+                    </button>
+                    <button @click="pedirPistaRetoNova(entrenamientosDatos.entrenamientos[entrenamientoActivoIndice])"
+                            class="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/35 text-cyan-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                            title="Preguntar a NOVA en el chat para que te dé una pista pedagógica">
+                      <i class="fa-solid fa-robot text-xs text-cyan-400"></i>
+                      <span>Pedir Pista a NOVA</span>
+                    </button>
+                    <template x-if="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia">
+                      <button @click="eliminarRetoIaActual()"
+                              class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-medium transition flex items-center gap-1"
+                              title="Eliminar este reto generado por IA">
+                        <i class="fa-regular fa-trash-can text-xs"></i>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- ENUNCIADO -->
+                <div>
+                  <p class="text-[11px] font-bold uppercase tracking-wider text-purple-400 mb-1.5">🎯 Planteamiento del Reto</p>
+                  <p class="text-xs text-gray-200 whitespace-pre-line leading-relaxed font-sans" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].enunciado"></p>
+                </div>
+
+                <!-- PISTA CONCEPTUAL SI VIENE EN EL RETO IA -->
+                <template x-if="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].pista">
+                  <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-1">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1">
+                      <i class="fa-solid fa-lightbulb text-amber-400"></i>
+                      <span>Pista conceptual (sin spoilers)</span>
+                    </p>
+                    <p class="text-[11px] text-amber-200/90 leading-relaxed" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].pista"></p>
+                  </div>
+                </template>
+              </div>
+
+              <!-- DESPLEGABLE SOLUCIÓN Y CÓDIGO PASO A PASO -->
+              <details class="glass-card rounded-2xl border border-gray-800/90 overflow-hidden group/sol bg-surface-2/40 transition">
+                <summary class="p-4 cursor-pointer flex items-center justify-between text-xs font-bold text-cyan-300 hover:text-cyan-200 select-none bg-cyan-950/20 hover:bg-cyan-950/30 transition">
+                  <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-lightbulb text-amber-400 text-sm"></i>
+                    <span>💡 Ver Solución y Código Paso a Paso (¡Pica el código antes de abrirla!)</span>
+                  </div>
+                  <i class="fa-solid fa-chevron-down text-xs transition-transform group-open/sol:rotate-180"></i>
+                </summary>
+
+                <div class="p-5 border-t border-gray-800 space-y-3">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] text-gray-400 font-semibold"
+                          x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'Solución diseñada por IA para este reto:' : 'Solución oficial extraída del temario UNIR:'"></span>
+                    <button @click="copiarTextoReto(entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].solucion)"
+                            class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[11px] font-medium transition flex items-center gap-1">
+                      <i class="fa-regular fa-copy text-[10px]"></i>
+                      <span>Copiar Solución</span>
+                    </button>
+                  </div>
+
+                  <pre class="p-4 rounded-xl bg-gray-950/90 border border-gray-800/90 text-gray-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap leading-relaxed selection:bg-purple-500/30" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].solucion"></pre>
+                </div>
+              </details>
+
+              <!-- BARRA DE NAVEGACIÓN ENTRE RETOS (ANTERIOR / SIGUIENTE) -->
+              <div class="flex items-center justify-between pt-1">
+                <button @click="entrenamientoActivoIndice > 0 ? (entrenamientoActivoIndice--) : null"
+                        :disabled="entrenamientoActivoIndice === 0"
+                        class="px-3.5 py-2 rounded-xl bg-gray-900 border border-gray-800 text-xs font-bold text-gray-300 hover:text-white hover:border-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5">
+                  <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                  <span>Reto Anterior</span>
+                </button>
+
+                <div class="text-xs text-gray-400 font-medium">
+                  Reto <span class="font-bold text-white" x-text="entrenamientoActivoIndice + 1"></span> de <span class="font-bold text-white" x-text="entrenamientosDatos.entrenamientos.length"></span>
+                </div>
+
+                <button @click="entrenamientoActivoIndice < (entrenamientosDatos.entrenamientos.length - 1) ? (entrenamientoActivoIndice++) : null"
+                        :disabled="entrenamientoActivoIndice >= (entrenamientosDatos.entrenamientos.length - 1)"
+                        class="px-3.5 py-2 rounded-xl bg-gray-900 border border-gray-800 text-xs font-bold text-gray-300 hover:text-white hover:border-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-1.5">
+                  <span>Siguiente Reto</span>
+                  <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="p-3.5 bg-gray-900 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
+        <span x-show="copiadoRetoToast" class="text-emerald-400 font-bold flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-check"></i>
+          <span>¡Copiado al portapapeles!</span>
+        </span>
+        <span x-show="!copiadoRetoToast" class="text-gray-500 text-[11px]">
+          💡 Consejo de examen: Intenta resolver el reto a ciegas en tu IDE antes de desplegar la solución.
+        </span>
+        <button @click="modalEntrenamientos = false" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition ml-auto">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== MODAL: VISOR DE CLASE CON MINUTERO INTERACTIVO ==================== -->
   <div x-show="modalMinutero" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
     <div class="glass w-full max-w-5xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-amber-500/30 shadow-2xl">
@@ -6534,16 +6775,8 @@ def dashboard_html():
               <option value="Proyecto">Proyecto</option>
               <option value="FFE">FFE</option>
               <option value="Cita">📌 Cita / Personal</option>
-              <option value="Recordatorio">🔔 Recordatorio</option>
               <option value="Otro">✨ Otro</option>
             </select>
-            <button type="button"
-                    @click="itemEditRecordatorio = !itemEditRecordatorio"
-                    :class="itemEditRecordatorio ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-gray-900 text-gray-500 border-gray-800 hover:text-gray-300'"
-                    class="text-[10px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1">
-              <i class="fa-solid fa-bell text-[10px]" :class="itemEditRecordatorio ? 'text-amber-400' : 'text-gray-500'"></i>
-              <span x-text="itemEditRecordatorio ? 'Recordatorio activo' : 'Activar recordatorio'"></span>
-            </button>
           </div>
           <input type="text"
                  x-model="itemEditTitulo"
@@ -6694,26 +6927,8 @@ def dashboard_html():
         <button @click="modalNuevoItemAgenda = false" class="text-gray-400 hover:text-white p-1 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
-      <!-- SELECTOR DE MODO: CREAR MANUAL vs IMPORTAR ARCHIVO .ICS -->
-      <div class="mt-3 flex items-center p-1 bg-gray-950 rounded-xl border border-gray-800 gap-1">
-        <button type="button"
-                @click="modoNuevoItemModal = 'manual'"
-                :class="modoNuevoItemModal === 'manual' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-gray-400 hover:text-white'"
-                class="flex-1 py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-pen-to-square text-[10px]"></i>
-          <span>Crear Evento</span>
-        </button>
-        <button type="button"
-                @click="modoNuevoItemModal = 'ics'"
-                :class="modoNuevoItemModal === 'ics' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold' : 'text-gray-400 hover:text-white'"
-                class="flex-1 py-1.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-file-import text-[10px]"></i>
-          <span>Importar .ics</span>
-        </button>
-      </div>
-
-      <!-- MODO 1: FORMULARIO MANUAL -->
-      <div x-show="modoNuevoItemModal === 'manual'" class="mt-3 space-y-3 text-xs">
+      <!-- FORMULARIO MANUAL -->
+      <div class="mt-4 space-y-3 text-xs">
         <!-- SELECTOR RÁPIDO: ¿DÓNDE QUIERES AÑADIRLO? -->
         <div>
           <label class="text-gray-400 block mb-1.5">¿Dónde quieres añadirlo?</label>
@@ -6754,7 +6969,6 @@ def dashboard_html():
               <option value="Proyecto">Proyecto</option>
               <option value="FFE">FFE</option>
               <option value="Cita">📌 Cita / Personal</option>
-              <option value="Recordatorio">🔔 Recordatorio</option>
               <option value="Otro">✨ Otro</option>
             </select>
           </div>
@@ -6769,24 +6983,6 @@ def dashboard_html():
             <label class="text-gray-400 block mb-1">Hora (opc.)</label>
             <input type="time" x-model="nuevoItemHora" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-2 py-2 text-amber-200 font-mono outline-none">
           </div>
-        </div>
-
-        <!-- BOTÓN DE AVISO / RECORDATORIO PERSONAL -->
-        <div class="flex items-center justify-between p-2.5 rounded-xl border transition"
-             :class="nuevoItemRecordatorio ? 'bg-purple-950/60 border-purple-500/50 text-purple-100' : 'bg-gray-900/60 border-gray-800 text-gray-400'">
-          <div class="flex items-center gap-2">
-            <i class="fa-solid fa-bell text-sm" :class="nuevoItemRecordatorio ? 'text-amber-400 animate-pulse' : 'text-gray-500'"></i>
-            <div>
-              <p class="font-bold text-xs leading-tight" :class="nuevoItemRecordatorio ? 'text-white' : 'text-gray-300'">Activar recordatorio / aviso</p>
-              <p class="text-[10px] opacity-80">Destaca este evento en tus alertas de Hoy y te avisa a la hora indicada</p>
-            </div>
-          </div>
-          <button type="button"
-                  @click="nuevoItemRecordatorio = !nuevoItemRecordatorio; if (nuevoItemRecordatorio) solicitarPermisoNotificaciones()"
-                  :class="nuevoItemRecordatorio ? 'bg-amber-500 text-gray-950 font-extrabold' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
-                  class="px-3 py-1.5 rounded-lg text-[11px] transition shrink-0">
-            <span x-text="nuevoItemRecordatorio ? '🔔 Activo' : 'Activar'"></span>
-          </button>
         </div>
 
         <div>
@@ -6835,246 +7031,9 @@ def dashboard_html():
           <button @click="crearNuevoItemAgenda()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-400 hover:to-sky-400 text-gray-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 transition">Añadir al Calendario</button>
         </div>
       </div>
-
-      <!-- MODO 2: IMPORTAR DESDE ARCHIVO .ICS -->
-      <div x-show="modoNuevoItemModal === 'ics'" class="mt-3 space-y-3 text-xs">
-        <p class="text-xs text-gray-300 leading-relaxed">
-          Sube el archivo <code class="text-purple-300 font-mono">.ics</code> que tienes en tu ordenador (de Google Calendar, Canvas, Outlook o Apple) para fusionar sus eventos con tu calendario de UNIR.
-        </p>
-
-        <!-- CAJA DROPZONE -->
-        <div class="border-2 border-dashed border-gray-700 hover:border-purple-500/60 rounded-2xl p-5 text-center transition bg-gray-950/60 cursor-pointer"
-             @click="$refs.inputArchivoIcsModal.click()"
-             @dragover.prevent="$el.classList.add('border-purple-500')"
-             @dragleave.prevent="$el.classList.remove('border-purple-500')"
-             @drop.prevent="manejarDropIcs($event)">
-          <input type="file"
-                 x-ref="inputArchivoIcsModal"
-                 accept=".ics,text/calendar"
-                 class="hidden"
-                 @change="cargarArchivoIcsSeleccionado($event)">
-          
-          <template x-if="!icsArchivoCargado">
-            <div class="space-y-1.5 py-1">
-              <i class="fa-regular fa-calendar-plus text-3xl text-purple-400/80"></i>
-              <p class="text-xs font-bold text-gray-200">Haz clic aquí para seleccionar tu archivo .ics</p>
-              <p class="text-[11px] text-gray-500">o arrastra y suelta el archivo aquí</p>
-            </div>
-          </template>
-
-          <template x-if="icsArchivoCargado">
-            <div class="space-y-1.5 py-1">
-              <i class="fa-solid fa-circle-check text-2xl text-emerald-400"></i>
-              <p class="text-xs font-bold text-white truncate max-w-xs mx-auto" x-text="icsNombreArchivo"></p>
-              <p class="text-[11px] text-purple-300 font-mono" x-text="icsTotalEventosDetectados + ' eventos detectados en el archivo'"></p>
-              <button @click.stop="limpiarArchivoIcs()" class="text-[11px] text-rose-400 hover:underline">Cambiar archivo</button>
-            </div>
-          </template>
-        </div>
-
-        <!-- ASIGNATURA POR DEFECTO -->
-        <div class="space-y-1">
-          <label class="block text-[11px] font-bold text-gray-400">Asignar eventos a la materia:</label>
-          <select x-model="icsAsignaturaDefecto" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none focus:border-purple-500 font-medium">
-            <option value="Personal / General">Personal / General (Eventos personales)</option>
-            <template x-for="asig in catalogoFiltrado" :key="'ics-modal-' + asig.nombre">
-              <option :value="asig.nombre" x-text="asig.nombre"></option>
-            </template>
-          </select>
-          <p class="text-[10px] text-gray-500">Si un evento ya especifica su asignatura en el título (ej: <em>[Acceso a Datos]</em>), se vinculará a esa materia automáticamente.</p>
-        </div>
-
-        <div class="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-[11px] text-purple-200/90 flex items-start gap-2">
-          <i class="fa-solid fa-shield-halved text-purple-400 mt-0.5 shrink-0 text-xs"></i>
-          <span><strong>Filtro anti-duplicados:</strong> Las clases o entregas que ya estén en tu calendario de la UNIR se omitirán automáticamente para no repetirse.</span>
-        </div>
-
-        <div class="flex items-center gap-2 px-1 pt-0.5">
-          <input id="check-reemplazar-ics" type="checkbox" x-model="icsReemplazarAnteriores" class="rounded bg-gray-900 border-gray-700 text-purple-500 focus:ring-0 w-3.5 h-3.5 cursor-pointer">
-          <label for="check-reemplazar-ics" class="text-[11px] text-gray-300 cursor-pointer select-none">
-            Actualizar y reemplazar importaciones anteriores de este calendario
-          </label>
-        </div>
-
-        <template x-if="icsMensajeError">
-          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-            <i class="fa-solid fa-circle-exclamation shrink-0"></i>
-            <span x-text="icsMensajeError"></span>
-          </div>
-        </template>
-
-        <template x-if="icsMensajeExito">
-          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-            <i class="fa-solid fa-circle-check shrink-0"></i>
-            <span x-text="icsMensajeExito"></span>
-          </div>
-        </template>
-
-        <div class="mt-5 pt-3 border-t border-gray-800 flex justify-end gap-2">
-          <button @click="modalNuevoItemAgenda = false" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition">Cancelar</button>
-          <button @click="procesarImportacionIcs()"
-                  :disabled="!icsArchivoCargado || icsImportando"
-                  type="button"
-                  class="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-purple-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-            <i x-show="icsImportando" class="fa-solid fa-spinner fa-spin text-xs"></i>
-            <span x-text="icsImportando ? 'Importando...' : 'Importar a mi Calendario'"></span>
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 
-  <!-- ==================== TOAST FLOTANTE DE ALERTA DE TIEMPO ==================== -->
-  <div class="fixed bottom-20 md:bottom-6 right-4 z-50 max-w-sm w-full space-y-2 pointer-events-none">
-    <template x-for="alerta in alertasActivasToast" :key="alerta.id">
-      <div class="pointer-events-auto p-4 rounded-2xl bg-gray-900/95 border border-amber-500/50 shadow-2xl backdrop-blur-lg flex items-start gap-3 transform transition-all duration-300">
-        <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/40 text-base">
-          <i class="fa-solid fa-bell animate-bounce"></i>
-        </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center justify-between gap-1">
-            <span class="text-[10px] uppercase font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300" x-text="alerta.badge"></span>
-            <span class="text-[10px] text-gray-400 font-mono font-bold" x-text="alerta.tiempoRestanteTexto"></span>
-          </div>
-          <h4 class="text-xs font-bold text-white mt-1 break-words" x-text="alerta.titulo"></h4>
-          <p class="text-[11px] text-gray-300 truncate mt-0.5" x-text="alerta.asignatura"></p>
-          <div class="flex items-center gap-2 mt-2 pt-1.5 border-t border-gray-800">
-            <template x-if="alerta.accion === 'campus'">
-              <button @click="abrirModalMiCampus(); descartarToastAlerta(alerta.id)" class="text-[10px] text-amber-400 hover:underline font-bold flex items-center gap-1">
-                <i class="fa-solid fa-key text-[9px]"></i> <span>Renovar Token →</span>
-              </button>
-            </template>
-            <template x-if="!alerta.accion">
-              <button @click="abrirAsignaturaPorNombre(alerta.asignatura); descartarToastAlerta(alerta.id)" class="text-[10px] text-cyan-400 hover:underline font-bold">Ver materia →</button>
-            </template>
-            <button @click="descartarToastAlerta(alerta.id)" class="text-[10px] text-gray-400 hover:text-white ml-auto">Descartar</button>
-          </div>
-        </div>
-        <button @click="descartarToastAlerta(alerta.id)" class="text-gray-500 hover:text-white p-1">
-          <i class="fa-solid fa-xmark text-xs"></i>
-        </button>
-      </div>
-    </template>
-  </div>
-
-  <!-- ==================== MODAL CONFIGURACIÓN DE ALERTAS Y RECORDATORIOS ==================== -->
-  <div x-show="modalConfigAlertas"
-       x-transition:enter="transition ease-out duration-200"
-       x-transition:enter-start="opacity-0"
-       x-transition:enter-end="opacity-100"
-       x-transition:leave="transition ease-in duration-150"
-       x-transition:leave-start="opacity-100"
-       x-transition:leave-end="opacity-0"
-       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-       style="display: none;">
-    <div @click.away="modalConfigAlertas = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5">
-      <!-- HEADER -->
-      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
-        <div class="flex items-center space-x-2.5">
-          <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center text-lg">
-            <i class="fa-solid fa-bell"></i>
-          </div>
-          <div>
-            <h3 class="text-base font-extrabold text-white">Configurar Alertas y Avisos</h3>
-            <p class="text-xs text-gray-400">Te avisa con antelación antes de clases y vencimiento de entregas</p>
-          </div>
-        </div>
-        <button @click="modalConfigAlertas = false" class="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-gray-800 transition">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-
-      <!-- INTERRUPTOR MAESTRO -->
-      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 flex items-center justify-between gap-3">
-        <div>
-          <p class="text-sm font-bold text-white">Sistema de Alertas Activo</p>
-          <p class="text-xs text-gray-400">Comprueba automáticamente los plazos y horarios en segundo plano</p>
-        </div>
-        <button @click="alertasConfig.activo = !alertasConfig.activo; guardarAlertasConfig()"
-                :class="alertasConfig.activo ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'bg-gray-800 text-gray-400'"
-                class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition">
-          <span x-text="alertasConfig.activo ? 'Activado' : 'Desactivado'"></span>
-        </button>
-      </div>
-
-      <!-- NOTIFICACIONES DE ESCRITORIO -->
-      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-3">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <i class="fa-solid fa-desktop text-cyan-400 text-xs"></i>
-            <span class="text-xs font-bold text-gray-200">Notificaciones de Escritorio (PC / Móvil)</span>
-          </div>
-          <button @click="solicitarPermisoNotificaciones()"
-                  class="text-xs px-2.5 py-1 rounded-lg border font-bold transition"
-                  :class="permisoNotificaciones === 'granted' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'">
-            <span x-text="permisoNotificaciones === 'granted' ? '✅ Permitido' : '🔔 Activar Permiso'"></span>
-          </button>
-        </div>
-        <p class="text-[11px] text-gray-400">Si está permitido, recibirás un aviso emergente en tu sistema aunque tengas la pestaña en segundo plano.</p>
-      </div>
-
-      <!-- SONIDO DE AVISO -->
-      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 flex items-center justify-between gap-3">
-        <div class="flex items-center space-x-2.5">
-          <i class="fa-solid fa-volume-high text-amber-400 text-xs"></i>
-          <div>
-            <p class="text-xs font-bold text-gray-200">Efecto de Sonido Suave</p>
-            <p class="text-[11px] text-gray-400">Emite un tono armónico al saltar cada alerta</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button @click="reproducirSonidoAlerta()" type="button" class="text-xs px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1.5" title="Probar sonido">
-            <i class="fa-solid fa-play text-[9px]"></i> <span>Probar</span>
-          </button>
-          <button @click="alertasConfig.sonido = !alertasConfig.sonido; guardarAlertasConfig()"
-                  :class="alertasConfig.sonido ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-gray-800 text-gray-500 border-gray-700'"
-                  class="px-2.5 py-1 rounded-lg border text-xs font-bold transition">
-            <span x-text="alertasConfig.sonido ? 'Sí' : 'No'"></span>
-          </button>
-        </div>
-      </div>
-
-      <!-- TIEMPO DE ANTELACIÓN PARA CLASES -->
-      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-gray-200 flex items-center gap-2"><i class="fa-solid fa-video text-blue-400 text-xs"></i> Avisar antes de Clases y Tutorías:</span>
-        </div>
-        <select x-model.number="alertasConfig.minutosClases" @change="guardarAlertasConfig()"
-                class="w-full bg-gray-950 border border-gray-700 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none">
-          <option value="5">5 minutos antes</option>
-          <option value="10">10 minutos antes</option>
-          <option value="15">15 minutos antes (Recomendado)</option>
-          <option value="30">30 minutos antes</option>
-          <option value="60">1 hora antes</option>
-          <option value="0">Desactivado</option>
-        </select>
-      </div>
-
-      <!-- TIEMPO DE ANTELACIÓN PARA ENTREGAS (PACS / PROYECTOS / TESTS) -->
-      <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-gray-200 flex items-center gap-2"><i class="fa-solid fa-flag text-rose-400 text-xs"></i> Avisar antes de Entregas y PACs:</span>
-        </div>
-        <select x-model.number="alertasConfig.horasEntregas" @change="guardarAlertasConfig()"
-                class="w-full bg-gray-950 border border-gray-700 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none">
-          <option value="2">2 horas antes del cierre</option>
-          <option value="6">6 horas antes</option>
-          <option value="12">12 horas antes</option>
-          <option value="24">24 horas (1 día) antes (Recomendado)</option>
-          <option value="48">48 horas (2 días) antes</option>
-          <option value="72">3 días antes</option>
-          <option value="0">Desactivado</option>
-        </select>
-      </div>
-
-      <!-- BOTÓN GUARDAR -->
-      <div class="pt-2 flex justify-end">
-        <button @click="modalConfigAlertas = false" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-lg transition">
-          Guardar y Cerrar
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
   <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-3/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
@@ -7330,7 +7289,142 @@ def dashboard_html():
         calOffsetSemanas: 0,
         incluirAtrasadosTodo: false,
 
-        // Modal Editar / Nuevo Item Agenda Notion + Drag & Drop + Recordatorios
+        // Modal Entrenamientos Oficiales del Tema y Retos con IA
+        modalEntrenamientos: false,
+        entrenamientosCargando: false,
+        entrenamientosDatos: null,
+        entrenamientoActivoIndice: 0,
+        entrenamientosError: '',
+        entrenamientosTemaInfo: null,
+        copiadoRetoToast: false,
+        generadorIaAbierto: false,
+        generandoRetoIa: false,
+        generadorIaDificultad: 'examen',
+        generadorIaEnfoque: '',
+        generadorIaError: '',
+
+        async abrirModalEntrenamientos(asig, temaNum, temaTitulo) {
+          this.modalEntrenamientos = true;
+          this.entrenamientosCargando = true;
+          this.entrenamientosError = '';
+          this.entrenamientosDatos = null;
+          this.entrenamientoActivoIndice = 0;
+          this.generadorIaAbierto = false;
+          this.generandoRetoIa = false;
+          this.generadorIaError = '';
+          this.generadorIaEnfoque = '';
+          this.entrenamientosTemaInfo = { asignatura: asig, temaNum: temaNum, temaTitulo: temaTitulo };
+          try {
+            const res = await fetch(`/api/asignatura/tema/entrenamientos?asignatura=${encodeURIComponent(asig)}&tema_num=${encodeURIComponent(temaNum)}`);
+            const data = await res.json();
+            if (data.status === 'error' || !data.entrenamientos || !data.entrenamientos.length) {
+              this.entrenamientosError = data.mensaje || 'No se pudieron extraer los entrenamientos de este tema.';
+            } else {
+              this.entrenamientosDatos = data;
+            }
+          } catch(e) {
+            this.entrenamientosError = 'Error de conexión al cargar entrenamientos.';
+          } finally {
+            this.entrenamientosCargando = false;
+          }
+        },
+
+        async generarNuevoRetoIa() {
+          const tieneKey = this.userGeminiKey || this.userOpenrouterKey || this.userGroqKey || this.usuarioActual?.es_admin;
+          if (!tieneKey) {
+            this.generadorIaError = 'Para generar retos con IA necesitas configurar tu clave gratuita de Gemini o Groq. Pulsa en «Claves IA» arriba.';
+            return;
+          }
+          this.generandoRetoIa = true;
+          this.generadorIaError = '';
+          try {
+            const asig = this.entrenamientosTemaInfo?.asignatura || this.asigSeleccionada?.nombre || '';
+            const temaNum = this.entrenamientosTemaInfo?.temaNum || 1;
+            const temaTitulo = this.entrenamientosTemaInfo?.temaTitulo || '';
+            const res = await fetch('/api/asignatura/tema/generar-entrenamiento', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {}),
+                ...(this.userOpenrouterKey ? { 'X-User-Openrouter-Key': this.userOpenrouterKey } : {}),
+                ...(this.userGroqKey ? { 'X-User-Groq-Key': this.userGroqKey } : {})
+              },
+              body: JSON.stringify({
+                asignatura: asig,
+                tema_num: parseInt(temaNum),
+                tema_titulo: temaTitulo,
+                dificultad: this.generadorIaDificultad || 'examen',
+                enfoque: this.generadorIaEnfoque || '',
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+              })
+            });
+            const data = await res.json();
+            if (!res.ok || data.status === 'error') {
+              this.generadorIaError = data.detail || data.mensaje || 'Error al generar el reto con IA.';
+              return;
+            }
+            if (data.entrenamiento) {
+              if (!this.entrenamientosDatos) {
+                this.entrenamientosDatos = { status: 'ok', asignatura: asig, tema_num: temaNum, entrenamientos: [], total_oficiales: 0, total_ia: 0, total: 0 };
+              }
+              this.entrenamientosDatos.entrenamientos.push(data.entrenamiento);
+              this.entrenamientosDatos.total = this.entrenamientosDatos.entrenamientos.length;
+              this.entrenamientosDatos.total_ia = (this.entrenamientosDatos.total_ia || 0) + 1;
+              this.entrenamientoActivoIndice = this.entrenamientosDatos.entrenamientos.length - 1;
+              this.generadorIaAbierto = false;
+              this.generadorIaEnfoque = '';
+            }
+          } catch(e) {
+            this.generadorIaError = 'Error de red al conectar con el motor de IA.';
+          } finally {
+            this.generandoRetoIa = false;
+          }
+        },
+
+        async eliminarRetoIaActual() {
+          const reto = this.entrenamientosDatos?.entrenamientos?.[this.entrenamientoActivoIndice];
+          if (!reto || !reto.es_ia) return;
+          if (!confirm(`¿Eliminar este reto práctico generado por IA ("${reto.titulo}")?`)) return;
+          const asig = this.entrenamientosTemaInfo?.asignatura || this.asigSeleccionada?.nombre || '';
+          const temaNum = this.entrenamientosTemaInfo?.temaNum || 1;
+          try {
+            await fetch('/api/asignatura/tema/eliminar-entrenamiento', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asignatura: asig,
+                tema_num: parseInt(temaNum),
+                reto_id: reto.id
+              })
+            });
+            this.entrenamientosDatos.entrenamientos.splice(this.entrenamientoActivoIndice, 1);
+            this.entrenamientosDatos.total = this.entrenamientosDatos.entrenamientos.length;
+            this.entrenamientosDatos.total_ia = Math.max(0, (this.entrenamientosDatos.total_ia || 1) - 1);
+            this.entrenamientoActivoIndice = Math.max(0, this.entrenamientoActivoIndice - 1);
+          } catch(e) {
+            console.error(e);
+          }
+        },
+
+        copiarTextoReto(texto) {
+          navigator.clipboard.writeText(texto).then(() => {
+            this.copiadoRetoToast = true;
+            setTimeout(() => this.copiadoRetoToast = false, 2500);
+          });
+        },
+
+        pedirPistaRetoNova(reto) {
+          this.modalEntrenamientos = false;
+          const asig = this.entrenamientosTemaInfo?.asignatura || this.asigSeleccionada?.nombre || '';
+          const tmNum = this.entrenamientosTemaInfo?.temaNum || 1;
+          const etiqueta = reto.es_ia ? 'generado con IA' : `Oficial ${reto.numero || ''}`;
+          const prompt = `NOVA, estoy programando el Reto ${etiqueta} ("${reto.titulo}") del Tema ${tmNum} de ${asig}:\n\n"${reto.enunciado}"\n\n¿Podrías darme una pista pedagógica para orientarme en el diseño de clases, métodos y excepciones necesarias para resolverlo sin darme el código de la solución todavía?`;
+          this.abrirChatConAsignatura(asig);
+          this.chatInput = prompt;
+          this.enviarMensajeChat();
+        },
+
+        // Modal Editar / Nuevo Item Agenda Notion + Drag & Drop
         modalItemAgenda: false,
         itemAgendaActivo: null,
         itemEditTitulo: '',
@@ -7339,7 +7433,6 @@ def dashboard_html():
         itemEditEstado: '',
         itemEditFechaDia: '',
         itemEditHora: '',
-        itemEditRecordatorio: false,
         itemEditNota: '',
         itemEditComentario: '',
         modoAsignaturaPersonalizada: false,
@@ -7348,40 +7441,14 @@ def dashboard_html():
         itemArrastrando: null,
         diaArrastreSobre: '',
         modalNuevoItemAgenda: false,
-        modoNuevoItemModal: 'manual',
         nuevoItemDestino: 'calendario',
         nuevoItemTitulo: '',
         nuevoItemCategoria: 'Tema',
         nuevoItemFecha: new Date().toISOString().slice(0, 10),
         nuevoItemHora: '',
-        nuevoItemRecordatorio: false,
         nuevoItemAsignatura: '',
         nuevoItemEstado: 'No hecho',
         modoNuevaAsignaturaPersonalizada: false,
-        notificacionesSoportadas: typeof window !== 'undefined' && ('Notification' in window),
-        permisoNotificaciones: (typeof window !== 'undefined' && ('Notification' in window)) ? Notification.permission : 'denied',
-        recordatoriosDisparadosIds: [],
-        modalConfigAlertas: false,
-        alertasConfig: {
-          activo: true,
-          sonido: true,
-          minutosClases: 15,
-          horasEntregas: 24,
-        },
-        alertasActivasToast: [],
-        alertasDisparadasIds: [],
-
-        // Importación de Calendario (.ics)
-        modalImportarIcs: false,
-        icsArchivoCargado: false,
-        icsTextoContenido: '',
-        icsNombreArchivo: '',
-        icsTotalEventosDetectados: 0,
-        icsAsignaturaDefecto: 'Personal / General',
-        icsReemplazarAnteriores: true,
-        icsImportando: false,
-        icsMensajeError: '',
-        icsMensajeExito: '',
 
         // Flashcards Repetición Espaciada
         flashcards: [],
@@ -7568,31 +7635,6 @@ def dashboard_html():
           return evs.sort((a, b) => (a.dias_restantes ?? 999) - (b.dias_restantes ?? 999));
         },
 
-        get proximosRecordatorios() {
-          const hoyStr = new Date().toISOString().slice(0, 10);
-          return (this.agendaEventos || []).filter(ev => {
-            const est = ev.estado || '';
-            if (['Vista', 'Vista no relevante', 'Hecho'].includes(est) || ev.entregada) return false;
-            // Filtrar rutinas diarias normales para no saturar las alertas
-            const esRutina = /almuerzo|planificaci[oó]n|ritual|descanso/i.test(ev.titulo || '');
-            if (esRutina) return false;
-            const esRec = Boolean(ev.recordatorio) || ['Cita', 'Recordatorio', 'Otro'].includes(ev.categoria);
-            if (!esRec) return false;
-            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
-            return f >= hoyStr;
-          }).sort((a, b) => (a.fecha_dia || '').localeCompare(b.fecha_dia || ''));
-        },
-
-        get recordatoriosActivosHoyManana() {
-          const hoyStr = new Date().toISOString().slice(0, 10);
-          const manana = new Date();
-          manana.setDate(manana.getDate() + 1);
-          const mananaStr = manana.toISOString().slice(0, 10);
-          return this.proximosRecordatorios.filter(ev => {
-            const f = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
-            return f === hoyStr || f === mananaStr;
-          }).slice(0, 6);
-        },
 
         // To-do hoy (estilo Notion: lo que tiene fecha de hoy + tareas sin fecha en 'En proceso')
         get todoHoyLista() {
@@ -8203,7 +8245,6 @@ def dashboard_html():
           this.itemEditEstado = ev.estado || (ev.tipo === 'clase_directo' ? 'No vista' : (ev.tipo === 'tarea' ? 'No entregado' : 'No hecho'));
           this.itemEditFechaDia = ev.fecha_dia || (ev.fecha_iso || '').slice(0, 10);
           this.itemEditHora = (ev.hora_inicio && ev.hora_inicio !== '23:59') ? ev.hora_inicio : '';
-          this.itemEditRecordatorio = Boolean(ev.recordatorio) || ['Cita', 'Recordatorio', 'Otro'].includes(this.itemEditCategoria);
           const nVal = ev.nota_personal !== null && ev.nota_personal !== undefined ? ev.nota_personal : ev.nota;
           this.itemEditNota = nVal !== null && nVal !== undefined ? String(nVal) : '';
           this.itemEditComentario = ev.comentario || '';
@@ -8326,7 +8367,6 @@ def dashboard_html():
             estado: this.itemEditEstado,
             fecha_dia: this.itemEditFechaDia || null,
             hora_inicio: this.itemEditHora ? this.itemEditHora.trim() : null,
-            recordatorio: Boolean(this.itemEditRecordatorio),
             nota_personal: this.itemEditNota !== '' ? parseFloat(this.itemEditNota) : null,
             comentario: this.itemEditComentario
           };
@@ -8371,15 +8411,12 @@ def dashboard_html():
         },
 
         abrirModalNuevoItemAgenda(categoriaPorDefecto = 'Tema', asignaturaPorDefecto = '', fechaPorDefecto = '', destino = 'calendario') {
-          this.modoNuevoItemModal = 'manual';
           this.nuevoItemTitulo = '';
-          this.limpiarArchivoIcs();
           this.modoNuevaAsignaturaPersonalizada = false;
           this.nuevoItemDestino = destino || 'calendario';
           this.nuevoItemCategoria = categoriaPorDefecto || 'Tema';
-          const esCita = ['Cita', 'Recordatorio', 'Otro'].includes(this.nuevoItemCategoria);
+          const esCita = ['Cita', 'Otro'].includes(this.nuevoItemCategoria);
           this.nuevoItemHora = esCita ? '17:00' : (['Clase', 'Tutoría'].includes(this.nuevoItemCategoria) ? '19:00' : '');
-          this.nuevoItemRecordatorio = esCita || this.nuevoItemCategoria === 'Examen';
 
           if (asignaturaPorDefecto) {
             this.nuevoItemAsignatura = asignaturaPorDefecto;
@@ -8427,8 +8464,7 @@ def dashboard_html():
 
         actualizarEstadoSegunCategoriaNuevo() {
           const cat = this.nuevoItemCategoria;
-          if (['Cita', 'Recordatorio', 'Otro'].includes(cat)) {
-            this.nuevoItemRecordatorio = true;
+          if (['Cita', 'Otro'].includes(cat)) {
             if (!this.nuevoItemHora) this.nuevoItemHora = '17:00';
             if (!this.asigSeleccionada && (!this.nuevoItemAsignatura || this.nuevoItemAsignatura === 'Acceso a Datos')) {
               this.nuevoItemAsignatura = 'Personal / General';
@@ -8441,7 +8477,6 @@ def dashboard_html():
               this.nuevoItemAsignatura = this.asigSeleccionada.nombre;
             }
           } else if (['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(cat)) {
-            if (cat === 'Examen') this.nuevoItemRecordatorio = true;
             this.nuevoItemEstado = this.nuevoItemDestino === 'hoy' ? 'En proceso' : 'No entregado';
             if (this.asigSeleccionada?.nombre && this.nuevoItemAsignatura === 'Personal / General') {
               this.nuevoItemAsignatura = this.asigSeleccionada.nombre;
@@ -8454,232 +8489,6 @@ def dashboard_html():
           }
         },
 
-        async solicitarPermisoNotificaciones() {
-          if (!this.notificacionesSoportadas) return;
-          try {
-            const p = await Notification.requestPermission();
-            this.permisoNotificaciones = p;
-          } catch (e) {
-            console.error(e);
-          }
-        },
-
-        guardarAlertasConfig() {
-          try {
-            localStorage.setItem('nova_alertas_config', JSON.stringify(this.alertasConfig));
-          } catch(e) {}
-        },
-
-        abrirModalAlertas() {
-          this.modalConfigAlertas = true;
-        },
-
-        descartarToastAlerta(id) {
-          this.alertasActivasToast = this.alertasActivasToast.filter(a => a.id !== id);
-        },
-
-        reproducirSonidoAlerta() {
-          try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!AudioCtx) return;
-            const ctx = new AudioCtx();
-            const now = ctx.currentTime;
-            [659.25, 987.77].forEach((freq, idx) => {
-              const osc = ctx.createOscillator();
-              const gain = ctx.createGain();
-              osc.type = 'sine';
-              osc.frequency.setValueAtTime(freq, now + idx * 0.12);
-              gain.gain.setValueAtTime(0.18, now + idx * 0.12);
-              gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.7);
-              osc.connect(gain);
-              gain.connect(ctx.destination);
-              osc.start(now + idx * 0.12);
-              osc.stop(now + idx * 0.12 + 0.75);
-            });
-          } catch(e) {}
-        },
-
-        get totalAlertasProximasCount() {
-          let count = (this.alertasProximas || []).length;
-          if (this.miCampusConfig?.conectado && (this.miCampusConfig?.token_estado?.estado === 'por_caducar' || this.miCampusConfig?.token_estado?.estado === 'caducado')) {
-            count += 1;
-          }
-          return count;
-        },
-
-        get alertasProximas() {
-          if (!this.agendaEventos || !this.agendaEventos.length) return [];
-          const ahora = new Date().getTime();
-          const lista = [];
-          
-          this.agendaEventos.forEach(ev => {
-            if (ev.estado === 'Hecho' || ev.estado === 'Vista' || ev.estado === 'Vista no relevante') return;
-            
-            let fStr = ev.fecha_iso;
-            if (!fStr && ev.fecha_dia) {
-              const h = ev.hora_inicio && ev.hora_inicio !== '23:59' ? ev.hora_inicio : '23:59';
-              fStr = `${ev.fecha_dia}T${h}:00`;
-            }
-            if (!fStr) return;
-            
-            const evDate = new Date(fStr).getTime();
-            if (isNaN(evDate)) return;
-            
-            const diffMin = (evDate - ahora) / 60000;
-            if (diffMin > 0 && diffMin <= 2880) {
-              lista.push({
-                ev,
-                diffMin,
-                esClase: ev.tipo === 'clase_directo' || ev.categoria === 'Clase' || ev.categoria === 'Tutoría'
-              });
-            }
-          });
-          
-          return lista.sort((a, b) => a.diffMin - b.diffMin);
-        },
-
-        verificarAlertasTiempo() {
-          if (!this.alertasConfig || !this.alertasConfig.activo) return;
-
-          // 1. Alerta de caducidad o vencimiento inminente del Token de Canvas
-          if (this.miCampusConfig?.conectado && (this.miCampusConfig?.token_estado?.estado === 'por_caducar' || this.miCampusConfig?.token_estado?.estado === 'caducado')) {
-            const estadoTok = this.miCampusConfig.token_estado.estado;
-            const diasRest = this.miCampusConfig.token_estado.dias_restantes;
-            const hoyStr = new Date().toISOString().slice(0, 10);
-            const tokenAlertKey = `alerta_token_${estadoTok}_${diasRest ?? 0}_${hoyStr}`;
-            if (!this.alertasDisparadasIds.includes(tokenAlertKey)) {
-              this.alertasDisparadasIds.push(tokenAlertKey);
-              try {
-                localStorage.setItem('nova_alertas_disparadas', JSON.stringify(this.alertasDisparadasIds.slice(-50)));
-              } catch(e) {}
-
-              const esCad = estadoTok === 'caducado';
-              const tituloAlerta = esCad ? '⛔ Token de Canvas Caducado' : `⚠️ Token de Canvas caduca en ${diasRest} días`;
-              const msgAlerta = esCad ? 'Renuévalo en Mi Campus para seguir sincronizando notas y materiales' : 'Genera un nuevo token en tu perfil de Canvas para no perder la sincronización';
-
-              if (this.alertasConfig.sonido) {
-                this.reproducirSonidoAlerta();
-              }
-              if (this.notificacionesSoportadas && this.permisoNotificaciones === 'granted') {
-                try {
-                  new Notification(tituloAlerta, { body: msgAlerta });
-                } catch(e) {}
-              }
-
-              const toastId = 'toast_token_' + Date.now();
-              this.alertasActivasToast.unshift({
-                id: toastId,
-                badge: 'Campus UNIR',
-                titulo: tituloAlerta,
-                asignatura: msgAlerta,
-                tiempoRestanteTexto: esCad ? '¡Expirado!' : `Quedan ${diasRest}d`,
-                accion: 'campus'
-              });
-
-              setTimeout(() => {
-                this.descartarToastAlerta(toastId);
-              }, 25000);
-            }
-          }
-
-          if (!this.agendaEventos || !this.agendaEventos.length) return;
-
-          const ahora = new Date().getTime();
-          const hoyStr = new Date().toISOString().slice(0, 10);
-
-          this.agendaEventos.forEach(ev => {
-            if (ev.estado === 'Hecho' || ev.estado === 'Vista' || ev.estado === 'Vista no relevante') return;
-
-            let fStr = ev.fecha_iso;
-            if (!fStr && ev.fecha_dia) {
-              const h = (ev.hora_inicio && ev.hora_inicio !== '23:59') ? ev.hora_inicio : '23:59';
-              fStr = `${ev.fecha_dia}T${h}:00`;
-            }
-            if (!fStr) return;
-
-            const evDate = new Date(fStr).getTime();
-            if (isNaN(evDate)) return;
-
-            const diffMin = (evDate - ahora) / 60000;
-            const esClase = ev.tipo === 'clase_directo' || ev.categoria === 'Clase' || ev.categoria === 'Tutoría';
-            const esTarea = ev.tipo === 'tarea' || ['Actividad', 'Entrega', 'Práctica', 'Examen', 'Proyecto', 'FFE'].includes(ev.categoria);
-
-            let debeAlertar = false;
-            let ventanaTxt = '';
-            let alertKey = '';
-
-            // 1. Alerta para clases en directo (según minutos configurados)
-            if (esClase && this.alertasConfig.minutosClases > 0) {
-              if (diffMin > 0 && diffMin <= this.alertasConfig.minutosClases) {
-                alertKey = `alerta_clase_${ev.id || ev.titulo}_${ev.fecha_dia}_${this.alertasConfig.minutosClases}`;
-                if (!this.alertasDisparadasIds.includes(alertKey)) {
-                  debeAlertar = true;
-                  const m = Math.ceil(diffMin);
-                  ventanaTxt = m <= 1 ? '¡Empieza ya!' : `Empieza en ${m} min`;
-                }
-              }
-            }
-
-            // 2. Alerta para entregas y PACs (según horas configuradas)
-            if (esTarea && this.alertasConfig.horasEntregas > 0) {
-              const diffHoras = diffMin / 60;
-              if (diffHoras > 0 && diffHoras <= this.alertasConfig.horasEntregas) {
-                alertKey = `alerta_entrega_${ev.id || ev.titulo}_${ev.fecha_dia}_${this.alertasConfig.horasEntregas}`;
-                if (!this.alertasDisparadasIds.includes(alertKey)) {
-                  debeAlertar = true;
-                  const h = Math.ceil(diffHoras);
-                  ventanaTxt = h <= 1 ? '¡Vence en menos de 1h!' : (h <= 24 ? `Vence en ${h} horas` : `Vence en ${Math.ceil(h/24)} días`);
-                }
-              }
-            }
-
-            // 3. Recordatorios personalizados del usuario (marcados con campanita)
-            if (Boolean(ev.recordatorio) && ev.fecha_dia === hoyStr) {
-              const recKey = `alerta_rec_custom_${ev.id || ev.titulo}_${hoyStr}`;
-              if (!this.alertasDisparadasIds.includes(recKey)) {
-                alertKey = recKey;
-                debeAlertar = true;
-                ventanaTxt = ev.hora_inicio ? `Fijado para las ${ev.hora_inicio}` : 'Programado para hoy';
-              }
-            }
-
-            if (debeAlertar && alertKey) {
-              this.alertasDisparadasIds.push(alertKey);
-              try {
-                localStorage.setItem('nova_alertas_disparadas', JSON.stringify(this.alertasDisparadasIds.slice(-50)));
-              } catch(e) {}
-
-              if (this.alertasConfig.sonido) {
-                this.reproducirSonidoAlerta();
-              }
-
-              if (this.notificacionesSoportadas && this.permisoNotificaciones === 'granted') {
-                try {
-                  new Notification(`🔔 ${ventanaTxt}: ${ev.titulo}`, {
-                    body: `${ev.asignatura}${ev.hora_inicio ? ' (' + ev.hora_inicio + ')' : ''}`
-                  });
-                } catch(e) {}
-              }
-
-              const toastId = 'toast_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-              this.alertasActivasToast.unshift({
-                id: toastId,
-                badge: esClase ? 'Clase en directo' : (esTarea ? 'Entrega / PAC' : 'Recordatorio'),
-                titulo: ev.titulo,
-                asignatura: ev.asignatura,
-                tiempoRestanteTexto: ventanaTxt
-              });
-
-              setTimeout(() => {
-                this.descartarToastAlerta(toastId);
-              }, 15000);
-            }
-          });
-        },
-
-        comprobarRecordatoriosPendientes() {
-          this.verificarAlertasTiempo();
-        },
 
         async crearNuevoItemAgenda() {
           let titulo = (this.nuevoItemTitulo || '').trim();
@@ -8709,8 +8518,7 @@ def dashboard_html():
                 categoria: cat,
                 estado: this.nuevoItemEstado,
                 fecha_dia: fechaCreada,
-                hora_inicio: this.nuevoItemHora || null,
-                recordatorio: Boolean(this.nuevoItemRecordatorio)
+                hora_inicio: this.nuevoItemHora || null
               })
             });
             if (res.ok) {
@@ -8743,101 +8551,6 @@ def dashboard_html():
           }
         },
 
-        abrirModalImportarIcs() {
-          this.icsMensajeError = '';
-          this.icsMensajeExito = '';
-          this.modalImportarIcs = true;
-        },
-
-        limpiarArchivoIcs() {
-          this.icsArchivoCargado = false;
-          this.icsTextoContenido = '';
-          this.icsNombreArchivo = '';
-          this.icsTotalEventosDetectados = 0;
-          this.icsMensajeError = '';
-          this.icsMensajeExito = '';
-          if (this.$refs.inputArchivoIcsModal) {
-            this.$refs.inputArchivoIcsModal.value = '';
-          }
-        },
-
-        manejarDropIcs(event) {
-          const dt = event.dataTransfer;
-          if (dt && dt.files && dt.files.length > 0) {
-            this.procesarArchivoIcsFisico(dt.files[0]);
-          }
-        },
-
-        cargarArchivoIcsSeleccionado(event) {
-          if (event.target.files && event.target.files.length > 0) {
-            this.procesarArchivoIcsFisico(event.target.files[0]);
-          }
-        },
-
-        procesarArchivoIcsFisico(file) {
-          this.icsMensajeError = '';
-          this.icsMensajeExito = '';
-          if (!file.name.toLowerCase().endsWith('.ics') && file.type !== 'text/calendar') {
-            this.icsMensajeError = 'El archivo seleccionado debe ser un archivo de calendario con extensión .ics';
-            return;
-          }
-          this.icsNombreArchivo = file.name;
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const contenido = e.target.result;
-            if (!contenido || !contenido.includes('BEGIN:VCALENDAR')) {
-              this.icsMensajeError = 'El archivo seleccionado no tiene un formato iCal (.ics) válido.';
-              this.icsArchivoCargado = false;
-              return;
-            }
-            this.icsTextoContenido = contenido;
-            const matches = contenido.match(/BEGIN:VEVENT/g);
-            this.icsTotalEventosDetectados = matches ? matches.length : 0;
-            this.icsArchivoCargado = true;
-          };
-          reader.onerror = () => {
-            this.icsMensajeError = 'No se pudo leer el archivo desde tu ordenador.';
-          };
-          reader.readAsText(file);
-        },
-
-        async procesarImportacionIcs() {
-          if (!this.icsTextoContenido || !this.icsArchivoCargado) {
-            this.icsMensajeError = 'Selecciona primero un archivo .ics válido.';
-            return;
-          }
-          this.icsImportando = true;
-          this.icsMensajeError = '';
-          this.icsMensajeExito = '';
-          try {
-            const res = await fetch('/api/agenda/importar-ics', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ics_texto: this.icsTextoContenido,
-                asignatura_defecto: this.icsAsignaturaDefecto || 'General',
-                reemplazar_anteriores: this.icsReemplazarAnteriores !== false
-              })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-              this.icsMensajeError = data.detail || 'Error al importar los eventos del archivo .ics.';
-              return;
-            }
-            this.icsMensajeExito = data.mensaje || '¡Eventos importados con éxito!';
-            await this.cargarAgenda();
-            setTimeout(() => {
-              if (this.icsMensajeExito) {
-                this.modalNuevoItemAgenda = false;
-                this.limpiarArchivoIcs();
-              }
-            }, 2000);
-          } catch (e) {
-            this.icsMensajeError = 'Error de red al conectar con el servidor.';
-          } finally {
-            this.icsImportando = false;
-          }
-        },
 
         irAAsignaturaDesdeModal(nombreAsig) {
           if (!nombreAsig) return;
@@ -9253,19 +8966,8 @@ def dashboard_html():
             this.cargarProgreso(),
             this.cargarAgenda(),
             this.cargarTemasEstado(),
-            this.cargarFlashcards(),
-            this.cargarFeedback(),
-            this.cargarModelosIa(),
-            this.cargarVideoclases()
+            this.cargarModelosIa()
           ]);
-          try {
-            const cfg = localStorage.getItem('nova_alertas_config');
-            if (cfg) this.alertasConfig = Object.assign(this.alertasConfig, JSON.parse(cfg));
-            const disp = localStorage.getItem('nova_alertas_disparadas');
-            if (disp) this.alertasDisparadasIds = JSON.parse(disp) || [];
-          } catch(e) {}
-          setInterval(() => this.verificarAlertasTiempo(), 30000);
-          setTimeout(() => this.verificarAlertasTiempo(), 2000);
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
         },
@@ -9696,11 +9398,17 @@ def dashboard_html():
           this.modalVisor = false;
           this.modalTest = false;
           this.modalVisorPdf = false;
+          if (sec === 'clases' && (!this.todasLasClases || !this.todasLasClases.length)) {
+            this.cargarVideoclases();
+          }
+          if (sec === 'flashcards' && (!this.flashcards || !this.flashcards.length)) {
+            this.cargarFlashcards();
+          }
           if (sec === 'admin') {
             this.cargarAdminUsuarios();
             this.cargarFeedback();
           }
-          if (sec === 'feedback') {
+          if (sec === 'feedback' && (!this.feedbackLista || !this.feedbackLista.length)) {
             this.cargarFeedback();
           }
           if (sec === 'tutor') {
@@ -10032,7 +9740,9 @@ def dashboard_html():
           this.irASeccion('dashboard');
           this.aplicarFiltroCatalogo();
           this.actualizarMensajeBienvenidaChat();
-          this.cargarFlashcards();
+          if (this.tab === 'flashcards') {
+            this.cargarFlashcards();
+          }
         },
 
         filtrarCurso(cursoId) {
@@ -10858,7 +10568,6 @@ def dashboard_html():
           try {
             const res = await fetch('/api/agenda?_t=' + Date.now());
             this.agendaEventos = await res.json();
-            this.comprobarRecordatoriosPendientes();
           } catch(e) { console.error(e); }
         },
 
