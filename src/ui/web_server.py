@@ -9,6 +9,8 @@ Permite seleccionar programas, explorar materias, leer temarios y transcripcione
 generar guías y tests con IA y realizar simulacros tipo test directamente desde la web.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import json
@@ -16,7 +18,7 @@ import socket
 import asyncio
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Response
