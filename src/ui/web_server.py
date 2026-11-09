@@ -7932,7 +7932,7 @@ def dashboard_html():
 
         get temasAsignaturaActual() {
           return this.eventosDeAsignaturaActual()
-            .filter(ev => ev.tipo === 'tema' || ev.tipo === 'tema_estudio' || ['Tema', 'Test'].includes(ev.categoria))
+            .filter(ev => (ev.tipo === 'tema' || ev.tipo === 'tema_estudio' || ev.categoria === 'Tema') && !this.esItemTest(ev))
             .sort((a, b) => {
               const numA = parseInt((a.titulo.match(/\\d+/) || [999])[0], 10);
               const numB = parseInt((b.titulo.match(/\\d+/) || [999])[0], 10);
