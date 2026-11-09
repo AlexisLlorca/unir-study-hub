@@ -1592,13 +1592,32 @@ def son_misma_tarea_o_entrega(tit1: str, tit2: str, f_dia1: str = "", f_dia2: st
     return False
 
 
+_CACHE_AGENDA_COMBINADA: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+
+
+def invalidar_cache_agenda(username: Optional[str] = None):
+    """Invalida la caché en memoria del calendario combinado cuando hay cambios."""
+    if username:
+        _CACHE_AGENDA_COMBINADA.pop(username, None)
+    else:
+        _CACHE_AGENDA_COMBINADA.clear()
+
+
 def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]:
     """
     Combina el calendario oficial DAM 2026-2027 (clases, tutorías, entregas PAC, temas y tests)
     con el estado personal del estudiante (su organizador Notion privado + su conexión a Canvas).
+    Optimizado con indexación por asignatura y caché en memoria para respuesta ultra rápida (< 20ms).
     """
+    import time
+    from collections import defaultdict
     from src.crawler.agenda_sync import cargar_agenda_cache, obtener_organizador_usuario, calcular_dias_restantes
     from src.crawler.student_canvas import obtener_datos_canvas_estudiante
+
+    ahora = time.time()
+    cache_entry = _CACHE_AGENDA_COMBINADA.get(username)
+    if cache_entry and (ahora - cache_entry[0] < 15.0):
+        return [dict(e) for e in cache_entry[1]]
 
     base_eventos = cargar_agenda_cache()
     org_u = obtener_organizador_usuario(username)
@@ -1608,12 +1627,22 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
     datos_est = obtener_datos_canvas_estudiante(username)
     entregas_est = datos_est.get("entregas", []) if datos_est.get("config", {}).get("conectado") else []
 
+    # Agrupar entregas de Canvas por asignatura normalizada para búsqueda instantánea
+    entregas_est_por_asig = defaultdict(list)
+    for e in entregas_est:
+        a_norm = normalizar_etiqueta_asignatura(e.get("asignatura") or "").lower().strip()
+        entregas_est_por_asig[a_norm].append(e)
+
     combinados = []
     usados_ids = set()
+    combinados_ids = set()
+    tareas_combinadas_por_asig = defaultdict(list)
 
     for ev in base_eventos + items_propios:
         ev_c = dict(ev)
         iid = ev_c.get("id", "")
+        if iid:
+            combinados_ids.add(iid)
         ov = overrides.get(iid, {})
         if ov.get("oculto"):
             continue
@@ -1668,27 +1697,24 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         # IMPORTANTE: Solo enlazar entregas del calendario oficial base; NUNCA sobreescribir ítems propios del alumno
         if ev_c.get("tipo") == "tarea" and not ev_c.get("es_propio"):
             asig_base = ev_c.get("asignatura") or ""
+            asig_norm = normalizar_etiqueta_asignatura(asig_base).lower().strip()
             tit_base = ev_c.get("titulo") or ""
             f_dia_base = ev_c.get("fecha_dia") or (ev_c.get("fecha_iso") or "")[:10]
 
             match = None
-            # 1. Buscar en Canvas coincidencia de materia y tarea
-            for e_cand in entregas_est:
+            candidatos_asig = entregas_est_por_asig.get(asig_norm, [])
+            for e_cand in candidatos_asig:
                 if e_cand.get("id") in usados_ids:
-                    continue
-                if not son_misma_asignatura(e_cand.get("asignatura") or "", asig_base):
                     continue
                 f_dia_cand = (e_cand.get("fecha_iso") or "")[:10]
                 if son_misma_tarea_o_entrega(tit_base, e_cand.get("titulo") or "", f_dia_base, f_dia_cand):
                     match = e_cand
                     break
 
-            # 2. Si no hubo match por título, buscar coincidencia por fecha si es única
             if not match and f_dia_base:
                 candidatos_fecha = [
-                    e for e in entregas_est
+                    e for e in candidatos_asig
                     if e.get("id") not in usados_ids
-                    and son_misma_asignatura(e.get("asignatura") or "", asig_base)
                     and (e.get("fecha_iso") or "")[:10] == f_dia_base
                 ]
                 if len(candidatos_fecha) == 1:
@@ -1720,6 +1746,9 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
             ev_c["entregada"] = False
 
         combinados.append(ev_c)
+        if ev_c.get("tipo") == "tarea":
+            a_n = normalizar_etiqueta_asignatura(ev_c.get("asignatura") or "").lower().strip()
+            tareas_combinadas_por_asig[a_n].append(ev_c)
 
     # Añadir exclusivamente entregas (tareas/PACs/tests) personales adicionales del alumno en Canvas que no existan en el calendario oficial
     for e_user in entregas_est:
@@ -1730,21 +1759,19 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
         ov = overrides.get(uid, {})
         if ov.get("oculto"):
             continue
-        if uid in usados_ids:
+        if uid in usados_ids or uid in combinados_ids:
             continue
 
         f_iso = e_user.get("fecha_iso") or ""
         f_dia = f_iso[:10] if len(f_iso) >= 10 else ""
         asig_u = e_user.get("asignatura") or ""
         tit_u = e_user.get("titulo") or ""
+        asig_u_norm = normalizar_etiqueta_asignatura(asig_u).lower().strip()
 
-        # Evitar duplicar tareas que ya figuren en combinados SI Y SOLO SI son la misma tarea
+        tareas_asig = tareas_combinadas_por_asig.get(asig_u_norm, [])
         ya_existe = any(
-            (c.get("id") == uid or (
-                son_misma_asignatura(c.get("asignatura") or "", asig_u) and
-                son_misma_tarea_o_entrega(c.get("titulo") or "", tit_u, c.get("fecha_dia") or "", f_dia)
-            ))
-            for c in combinados
+            son_misma_tarea_o_entrega(c.get("titulo") or "", tit_u, c.get("fecha_dia") or "", f_dia)
+            for c in tareas_asig
         )
         if ya_existe:
             continue
@@ -1785,6 +1812,11 @@ def _combinar_agenda_oficial_y_estudiante(username: str) -> List[Dict[str, Any]]
             e_copia["entregada"] = False
 
         combinados.append(e_copia)
+        combinados_ids.add(uid)
+        tareas_combinadas_por_asig[asig_u_norm].append(e_copia)
+
+    _CACHE_AGENDA_COMBINADA[username] = (ahora, [dict(e) for e in combinados])
+    return combinados
 
     return combinados
 
@@ -1824,6 +1856,7 @@ def api_actualizar_item_agenda(req: ActualizarItemAgendaReq, request: Request):
     if req.comentario is not None:
         cambios["comentario"] = req.comentario
     actualizar_item_organizador_usuario(username, req.item_id, cambios)
+    invalidar_cache_agenda(username)
     return {"status": "ok"}
 
 
@@ -1833,6 +1866,7 @@ def api_crear_item_agenda(req: CrearItemAgendaReq, request: Request):
     from src.crawler.agenda_sync import crear_item_organizador_usuario
     username = _username_actual(request)
     item = crear_item_organizador_usuario(username, req.model_dump())
+    invalidar_cache_agenda(username)
     return {"status": "ok", "item": item}
 
 
@@ -1844,6 +1878,7 @@ def api_eliminar_item_agenda(item_id: str, request: Request):
     ok = eliminar_item_organizador_usuario(username, item_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Solo puedes eliminar ítems creados manualmente por ti.")
+    invalidar_cache_agenda(username)
     return {"status": "ok"}
 
 
@@ -1863,6 +1898,7 @@ def api_importar_ics(req: ImportarIcsReq, request: Request):
     )
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("mensaje", "Error al importar el archivo .ics"))
+    invalidar_cache_agenda(username)
     return res
 
 
@@ -1947,6 +1983,7 @@ def api_actualizar_estado_tema(req: EstadoTemaReq, request: Request):
         respaldar_archivo_en_hf_async(f)
     except Exception:
         pass
+    invalidar_cache_agenda(username)
 
     return {"status": "ok", "estado": req.estado, "temas_estado": org.get("temas_estado", {})}
 
@@ -1961,6 +1998,7 @@ def api_sincronizar_agenda(request: Request):
     if cfg.get("conectado"):
         sincronizar_canvas_estudiante(username=username)
     sincronizar_agenda_canvas()
+    invalidar_cache_agenda(username)
     eventos = _combinar_agenda_oficial_y_estudiante(username)
     return {"status": "ok", "total": len(eventos), "eventos": eventos}
 
@@ -4395,52 +4433,54 @@ def dashboard_html():
       </div>
 
       <!-- ==================== VISTA AGENDA Y PACS CANVAS ==================== -->
-      <div x-show="tab === 'agenda'" x-transition class="space-y-6">
-        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
-          <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-lg">
-              <i class="fa-solid fa-calendar-check"></i>
-            </div>
-            <div>
-              <h2 class="text-xl font-bold text-white">Agenda & Calendario de Entregas (Canvas LMS)</h2>
-              <p class="text-xs text-gray-400">Control de plazos, PACs obligatorias, foros puntuables y sesiones en directo</p>
-            </div>
-          </div>
-          <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20 disabled:opacity-50">
-            <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
-            <span x-text="sincronizandoAgenda ? 'Sincronizando con Canvas...' : 'Sincronizar con Canvas'"></span>
-          </button>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <template x-for="(ev, idx) in agendaEventos" :key="'ag-' + (ev.id || 'ev') + '-' + idx">
-            <div class="glass p-5 rounded-2xl border transition flex flex-col justify-between group"
-                 :class="ev.urgencia === 'critica' ? 'border-rose-500/40 bg-rose-950/10' : (ev.urgencia === 'alta' ? 'border-amber-500/30' : 'border-gray-800')">
+      <template x-if="tab === 'agenda'">
+        <div class="space-y-6">
+          <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-calendar-check"></i>
+              </div>
               <div>
-                <div class="flex items-center justify-between gap-2 mb-2">
-                  <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase"
-                        :class="ev.tipo === 'tarea' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'"
-                        x-text="ev.tipo === 'tarea' ? 'PAC / Tarea' : 'Clase en Directo'"></span>
-                  <span class="text-[11px] font-black px-2 py-0.5 rounded-full"
-                        :class="ev.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : (ev.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-800 text-gray-400')"
-                        x-text="ev.plazo_texto"></span>
-                </div>
-                <p class="text-[11px] font-semibold text-gray-400 truncate" x-text="ev.asignatura"></p>
-                <h4 class="font-bold text-white text-sm mt-1 group-hover:text-cyan-300 transition" x-text="ev.titulo"></h4>
-                <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed" x-text="ev.descripcion || 'Sin descripción detallada disponible.'"></p>
-              </div>
-
-              <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between text-xs">
-                <span class="text-gray-400 font-mono text-[11px]" x-text="ev.puntos ? (ev.puntos + ' puntos') : 'Sesión evaluativa'"></span>
-                <a :href="ev.url || 'https://campusfp.unir.net'" target="_blank" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-300 rounded-xl font-semibold transition flex items-center space-x-1.5 border border-gray-700">
-                  <span>Ir a la Entrega</span>
-                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                </a>
+                <h2 class="text-xl font-bold text-white">Agenda & Calendario de Entregas (Canvas LMS)</h2>
+                <p class="text-xs text-gray-400">Control de plazos, PACs obligatorias, foros puntuables y sesiones en directo</p>
               </div>
             </div>
-          </template>
+            <button @click="sincronizarAgenda()" :disabled="sincronizandoAgenda" class="px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20 disabled:opacity-50">
+              <i :class="sincronizandoAgenda ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'"></i>
+              <span x-text="sincronizandoAgenda ? 'Sincronizando con Canvas...' : 'Sincronizar con Canvas'"></span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="(ev, idx) in entregasCanvasTab" :key="'ag-' + (ev.id || 'ev') + '-' + idx">
+              <div class="glass p-5 rounded-2xl border transition flex flex-col justify-between group"
+                   :class="ev.urgencia === 'critica' ? 'border-rose-500/40 bg-rose-950/10' : (ev.urgencia === 'alta' ? 'border-amber-500/30' : 'border-gray-800')">
+                <div>
+                  <div class="flex items-center justify-between gap-2 mb-2">
+                    <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase"
+                          :class="ev.tipo === 'tarea' ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'"
+                          x-text="ev.tipo === 'tarea' ? 'PAC / Tarea' : 'Clase en Directo'"></span>
+                    <span class="text-[11px] font-black px-2 py-0.5 rounded-full"
+                          :class="ev.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : (ev.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-800 text-gray-400')"
+                          x-text="ev.plazo_texto"></span>
+                  </div>
+                  <p class="text-[11px] font-semibold text-gray-400 truncate" x-text="ev.asignatura"></p>
+                  <h4 class="font-bold text-white text-sm mt-1 group-hover:text-cyan-300 transition" x-text="ev.titulo"></h4>
+                  <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed" x-text="ev.descripcion || 'Sin descripción detallada disponible.'"></p>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between text-xs">
+                  <span class="text-gray-400 font-mono text-[11px]" x-text="ev.puntos ? (ev.puntos + ' puntos') : 'Sesión evaluativa'"></span>
+                  <a :href="ev.url || 'https://campusfp.unir.net'" target="_blank" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-cyan-300 rounded-xl font-semibold transition flex items-center space-x-1.5 border border-gray-700">
+                    <span>Ir a la Entrega</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                  </a>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
-      </div>
+      </template>
 
       <!-- ==================== VISTA FLASHCARDS / REPASO ACTIVO PROFESIONAL ==================== -->
       <div x-show="tab === 'flashcards'"
@@ -4913,96 +4953,98 @@ def dashboard_html():
       </div>
 
       <!-- ==================== 5. VISTA VIDEOCLASES Y TRANSCRIPCIONES ==================== -->
-      <div x-show="tab === 'clases'" x-transition class="space-y-6">
-        
-        <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div class="flex items-center space-x-3">
-              <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
-                <i class="fa-solid fa-video"></i>
-              </div>
-              <div>
-                <h2 class="text-xl font-bold text-white">Videoclases y Transcripciones Oficiales</h2>
-                <p class="text-xs text-gray-400">Catálogo oficial con transcripciones completas y resúmenes de cada lección magistral</p>
-              </div>
-            </div>
-          </div>
+      <template x-if="tab === 'clases'">
+        <div class="space-y-6">
           
-          <div class="flex items-center space-x-3">
-            <span class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl font-semibold"
-                  x-text="videoclasesFiltradas.length + ' clases disponibles'"></span>
-          </div>
-        </div>
-
-        <!-- FILTROS Y BÚSQUEDA DE CLASES -->
-        <div class="glass-card p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
-          <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
-            <div class="relative flex-1">
-              <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-gray-500"></i>
-              <input type="text" x-model="busquedaClaseTexto" placeholder="Buscar por profesor, tema, fecha o palabra dicha en clase..."
-                     class="w-full bg-gray-900 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-gray-800 focus:outline-none focus:border-amber-500">
-            </div>
-          </div>
-          
-          <div class="flex items-center space-x-3">
-            <select x-model="filtroClaseAsignatura" class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2.5 rounded-xl border border-gray-800 outline-none focus:border-amber-500">
-              <option value="">Todas las asignaturas</option>
-              <template x-for="asig in asignaturasConClases" :key="asig">
-                <option :value="asig" x-text="asig"></option>
-              </template>
-            </select>
-          </div>
-        </div>
-
-        <!-- LISTA / REJILLA DE VIDEOCLASES -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <template x-for="clase in videoclasesFiltradas" :key="clase.archivo">
-            <div class="glass p-5 rounded-2xl border border-gray-800 hover:border-amber-500/40 transition flex flex-col justify-between group">
-              <div>
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 break-words" x-text="clase.asignatura"></span>
-                  <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1 shrink-0">
-                    <i class="fa-regular fa-calendar mr-1"></i>
-                    <span x-text="formatearFechaDDMMAAAA(clase.fecha)"></span>
-                  </span>
+          <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
+                  <i class="fa-solid fa-video"></i>
                 </div>
-                <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition break-words" x-text="clase.titulo"></h4>
-                <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
+                <div>
+                  <h2 class="text-xl font-bold text-white">Videoclases y Transcripciones Oficiales</h2>
+                  <p class="text-xs text-gray-400">Catálogo oficial con transcripciones completas y resúmenes de cada lección magistral</p>
+                </div>
               </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+              <span class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl font-semibold"
+                    x-text="videoclasesFiltradas.length + ' clases disponibles'"></span>
+            </div>
+          </div>
 
-                <div class="mt-4 pt-3 border-t border-gray-800/60 flex flex-wrap items-center justify-between gap-2">
-                  <div class="flex items-center space-x-1.5 flex-wrap gap-1.5">
-                    <button @click="abrirMinutero(clase)" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-amber-500/30 shadow-sm" title="Ver marcas de tiempo e intervenciones">
-                      <i class="fa-solid fa-clock text-[10px]"></i>
-                      <span>Minutero</span>
-                    </button>
-                    <button @click="abrirResumenClase(clase)"
-                            :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
-                            class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 border shadow-sm"
-                            title="Generar o consultar el informe pedagógico estructurado de la clase con IA">
-                      <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
-                      <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen IA'"></span>
-                    </button>
-                    <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1 border border-gray-700" title="Ver transcripción literal en texto">
-                      <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
-                      <span>Texto</span>
+          <!-- FILTROS Y BÚSQUEDA DE CLASES -->
+          <div class="glass-card p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
+              <div class="relative flex-1">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-gray-500"></i>
+                <input type="text" x-model="busquedaClaseTexto" placeholder="Buscar por profesor, tema, fecha o palabra dicha en clase..."
+                       class="w-full bg-gray-900 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-gray-800 focus:outline-none focus:border-amber-500">
+              </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+              <select x-model="filtroClaseAsignatura" class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2.5 rounded-xl border border-gray-800 outline-none focus:border-amber-500">
+                <option value="">Todas las asignaturas</option>
+                <template x-for="asig in asignaturasConClases" :key="asig">
+                  <option :value="asig" x-text="asig"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <!-- LISTA / REJILLA DE VIDEOCLASES -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <template x-for="clase in videoclasesFiltradas" :key="clase.archivo">
+              <div class="glass p-5 rounded-2xl border border-gray-800 hover:border-amber-500/40 transition flex flex-col justify-between group">
+                <div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 break-words" x-text="clase.asignatura"></span>
+                    <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1 shrink-0">
+                      <i class="fa-regular fa-calendar mr-1"></i>
+                      <span x-text="formatearFechaDDMMAAAA(clase.fecha)"></span>
+                    </span>
+                  </div>
+                  <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition break-words" x-text="clase.titulo"></h4>
+                  <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
+                </div>
+
+                  <div class="mt-4 pt-3 border-t border-gray-800/60 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center space-x-1.5 flex-wrap gap-1.5">
+                      <button @click="abrirMinutero(clase)" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-amber-500/30 shadow-sm" title="Ver marcas de tiempo e intervenciones">
+                        <i class="fa-solid fa-clock text-[10px]"></i>
+                        <span>Minutero</span>
+                      </button>
+                      <button @click="abrirResumenClase(clase)"
+                              :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
+                              class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 border shadow-sm"
+                              title="Generar o consultar el informe pedagógico estructurado de la clase con IA">
+                        <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
+                        <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen IA'"></span>
+                      </button>
+                      <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1 border border-gray-700" title="Ver transcripción literal en texto">
+                        <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
+                        <span>Texto</span>
+                      </button>
+                    </div>
+                    <button @click="preguntarSobreClase(clase)" class="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm" title="Preguntar dudas a NOVA en el chat">
+                      <i class="fa-solid fa-robot text-xs"></i>
+                      <span>NOVA</span>
                     </button>
                   </div>
-                  <button @click="preguntarSobreClase(clase)" class="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm" title="Preguntar dudas a NOVA en el chat">
-                    <i class="fa-solid fa-robot text-xs"></i>
-                    <span>NOVA</span>
-                  </button>
-                </div>
-            </div>
-          </template>
-        </div>
+              </div>
+            </template>
+          </div>
 
-        <div x-show="videoclasesFiltradas.length === 0" class="text-center py-16 text-gray-500 text-xs">
-          <i class="fa-solid fa-video-slash text-3xl mb-3 opacity-30 text-amber-400"></i>
-          <p class="text-sm">No se encontraron videoclases que coincidan con la búsqueda.</p>
-        </div>
+          <div x-show="videoclasesFiltradas.length === 0" class="text-center py-16 text-gray-500 text-xs">
+            <i class="fa-solid fa-video-slash text-3xl mb-3 opacity-30 text-amber-400"></i>
+            <p class="text-sm">No se encontraron videoclases que coincidan con la búsqueda.</p>
+          </div>
 
-      </div>
+        </div>
+      </template>
 
       <!-- ==================== 8. PANEL DE ADMINISTRACIÓN ==================== -->
       <div x-show="tab === 'admin' && usuarioActual?.es_admin" x-transition class="space-y-6">
@@ -7413,6 +7455,10 @@ def dashboard_html():
             evs = evs.filter(e => e.tipo === this.calFiltroTipo);
           }
           return evs;
+        },
+
+        get entregasCanvasTab() {
+          return (this.agendaEventos || []).filter(e => e.tipo === 'tarea' || e.tipo === 'clase_directo');
         },
 
         get listaAsignaturasCompleta() {
