@@ -1,8 +1,9 @@
 {
+  "id": "/",
   "name": "NOVA Study Hub — Plataforma Inteligente",
   "short_name": "NOVA Hub",
   "description": "Plataforma Inteligente Multi-Titulación y Estudio Oficial UNIR",
-  "start_url": "/?source=pwa",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0f1d",
@@ -10,6 +11,7 @@
   "orientation": "any",
   "lang": "es-ES",
   "categories": ["education", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/static/pwa-icon-192.png",
@@ -18,10 +20,22 @@
       "purpose": "any"
     },
     {
+      "src": "/static/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/static/pwa-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/static/pwa-icon.svg",

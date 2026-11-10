@@ -6096,8 +6096,10 @@ def dashboard_html(response: Response):
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm"
                   :class="visorVistaActiva === 'test' 
                     ? (visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40')
-                    : (visorModoLectura === 'claro' ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-500/40')"
-                  x-text="visorVistaActiva === 'test' ? 'Práctica Test' : 'Flashcards'"></span>
+                    : (visorVistaActiva === 'flashcards' 
+                      ? (visorModoLectura === 'claro' ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-500/40')
+                      : (visorModoLectura === 'claro' ? 'bg-sky-50 text-sky-700 border-sky-300' : 'bg-sky-500/20 text-sky-300 border-sky-500/40'))"
+                  x-text="visorVistaActiva === 'test' ? 'Práctica Test' : (visorVistaActiva === 'flashcards' ? 'Flashcards' : 'Resumen IA')"></span>
             <button @click="visorVistaActiva = 'lectura'"
                     class="px-2 py-0.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1 cursor-pointer"
                     :class="visorModoLectura === 'claro' 
@@ -6230,17 +6232,25 @@ def dashboard_html(response: Response):
           <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Descargar PDF</span>
         </button>
 
-        <!-- RESUMEN -->
+        <!-- RESUMEN IA -->
         <button @click="abrirModalResumenVisor()"
                 :disabled="generandoResumenVisor"
-                :class="modalSubResumen 
-                  ? (visorModoLectura === 'claro' ? 'bg-sky-100 text-sky-800 border-sky-300 ring-2 ring-sky-200' : 'bg-sky-500/20 text-sky-200 border-sky-500/50 ring-2 ring-sky-500/30')
+                :class="visorVistaActiva === 'resumen' 
+                  ? (visorModoLectura === 'claro' ? 'bg-sky-100 text-sky-800 border-sky-300 ring-2 ring-sky-200' : 'bg-sky-500/25 text-sky-200 border-sky-500/50 ring-2 ring-sky-500/30')
                   : (visorModoLectura === 'claro' ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200' : 'bg-surface-3/90 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border-gray-700/80 hover:border-sky-500/50')"
-                class="group flex items-center h-8 px-2.5 rounded-xl transition-all duration-200 border shadow-sm active:scale-95 disabled:opacity-75"
+                class="group flex items-center h-8 px-2.5 rounded-xl transition-all duration-200 border shadow-sm active:scale-95 disabled:opacity-75 cursor-pointer"
                 title="Ver resumen sintetizado con IA">
           <i :class="generandoResumenVisor ? 'fa-solid fa-spinner fa-spin text-xs shrink-0 text-sky-400' : 'fa-solid fa-file-lines text-xs shrink-0'"></i>
           <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
-                x-text="generandoResumenVisor ? 'Redactando resumen...' : 'Resumen'"></span>
+                x-text="generandoResumenVisor ? 'Redactando resumen...' : (visorVistaActiva === 'resumen' ? 'Ver Ideas clave' : 'Resumen IA')"></span>
+        </button>
+
+        <!-- BOTÓN INSTALAR APP PWA DENTRO DEL VISOR -->
+        <button @click="instalarPwaDirecta()"
+                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-cyan-300 border-cyan-500/30"
+                title="Añadir NOVA a la pantalla de inicio (Android, iOS, PC)">
+          <i class="fa-solid fa-mobile-screen-button text-xs shrink-0 text-cyan-400"></i>
+          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Instalar App</span>
         </button>
       </div>
     </header>
@@ -6820,6 +6830,101 @@ def dashboard_html(response: Response):
             </template>
           </div>
         </div>
+
+        <!-- VISTA 4: RESUMEN IA INTEGRADO DENTRO DEL CUERPO DEL VISOR -->
+        <div x-show="visorVistaActiva === 'resumen'"
+             class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-10 transition-all duration-200 space-y-6 pb-24 min-h-[calc(100vh-130px)]"
+             :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
+          
+          <!-- CABECERA DEL RESUMEN DENTRO DEL VISOR -->
+          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4 shrink-0"
+               :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
+            <div class="flex items-center space-x-3 min-w-0">
+              <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
+                   :class="visorModoLectura === 'claro' ? 'bg-sky-50 text-sky-600 border border-sky-200' : 'bg-sky-500/20 text-sky-400 border border-sky-500/30'">
+                <i class="fa-solid fa-file-lines"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight truncate"
+                      :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">
+                    Resumen Oficial con IA
+                  </h3>
+                  <span class="text-xs font-bold px-2.5 py-0.5 rounded-full border shrink-0"
+                        :class="visorModoLectura === 'claro' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'">
+                    Síntesis Robusta UNIR
+                  </span>
+                </div>
+                <p class="text-xs sm:text-sm mt-0.5 truncate"
+                   :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'"
+                   x-text="modalTitulo"></p>
+              </div>
+            </div>
+
+            <!-- CONTROLES SUPERIORES (COPIAR + REHACER + VOLVER A IDEAS CLAVE) -->
+            <div class="flex items-center space-x-2 shrink-0">
+              <button x-show="resumenTextoTema" @click="copiarTexto(resumenTextoTema)"
+                      class="px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300' : 'bg-surface-3 hover:bg-surface-4 text-gray-200 border-gray-700'"
+                      title="Copiar resumen al portapapeles">
+                <i class="fa-regular fa-copy text-xs"></i>
+                <span>Copiar</span>
+              </button>
+
+              <button @click="rehacerGuiaDesdeVisor()"
+                      class="px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300' : 'bg-surface-3 hover:bg-surface-4 text-cyan-300 border-gray-700'"
+                      title="Volver a redactar resumen con IA">
+                <i class="fa-solid fa-arrows-rotate text-xs"></i>
+                <span>Regenerar</span>
+              </button>
+
+              <button @click="visorVistaActiva = 'lectura'"
+                      class="px-3.5 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+                      :class="visorModoLectura === 'claro' ? 'bg-[#0f5b9e] hover:bg-[#0c4a80] text-white border-transparent' : 'bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-black border-transparent'"
+                      title="Volver a la lectura oficial del temario">
+                <i class="fa-solid fa-book-open text-xs"></i>
+                <span>Ideas clave</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ESTADO CARGANDO CON IA -->
+          <div x-show="generandoResumenVisor" class="py-20 px-4 text-center space-y-4">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-3xl">
+              <i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i>
+            </div>
+            <h4 class="font-bold text-white text-base">Redactando Resumen Oficial con IA (Plan Robusto)</h4>
+            <p class="text-xs text-gray-400 max-w-md mx-auto">Sintetizando temario oficial en formato académico UNIR. Se mostrará aquí automáticamente en unos segundos sin salir del tema...</p>
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
+              <i class="fa-solid fa-spinner fa-spin text-sky-400"></i>
+              <span>Procesando sin salir del tema...</span>
+            </div>
+          </div>
+
+          <!-- RESUMEN DISPONIBLE: CONTENIDO MARKDOWN RENDERIZADO CON LA MISMA TIPOGRAFÍA EXCELENTE -->
+          <div x-show="!generandoResumenVisor && resumenTextoTema && resumenTextoTema.length > 50"
+               class="leading-relaxed font-sans text-base space-y-4"
+               :class="visorModoLectura === 'claro' ? 'markdown-content-unir-light' : 'markdown-content text-gray-200'"
+               :style="'font-size: ' + visorTamanoFuente + 'px;'"
+               x-html="renderMarkdown(resumenTextoTema)">
+          </div>
+
+          <!-- SI NO EXISTE RESUMEN -->
+          <div x-show="!generandoResumenVisor && (!resumenTextoTema || resumenTextoTema.length <= 50)"
+               class="py-16 px-4 text-center space-y-4">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-2xl">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <h4 class="font-bold text-base" :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">Resumen con Inteligencia Artificial</h4>
+            <p class="text-xs max-w-md mx-auto" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Pulsa para redactar automáticamente el Resumen oficial de este tema en formato Robusto de UNIR.</p>
+            <button @click="generarResumenDesdeVisor()"
+                    class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-sky-500/20 transition flex items-center space-x-2 mx-auto active:scale-95 cursor-pointer">
+              <i class="fa-solid fa-bolt"></i>
+              <span>Generar Resumen Automático (Robusto)</span>
+            </button>
+          </div>
+        </div>
       </main>
 
       <!-- ==================== ÍNDICE FLOTANTE LATERAL ESTILO OFICIAL UNIR ==================== -->
@@ -7146,65 +7251,10 @@ def dashboard_html(response: Response):
       </aside>
     </div>
 
-    <!-- ==================== SUB-MODAL 1: RESUMEN DEL TEMA (ESTILO OFICIAL UNIR) ==================== -->
-    <div x-show="modalSubResumen" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
-      <div class="glass w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-sky-500/40 shadow-2xl bg-surface-1/95">
-        <!-- Header modal Resumen -->
-        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between shrink-0">
-          <div class="flex items-center space-x-2.5">
-            <div class="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center text-sm border border-sky-500/30">
-              <i class="fa-solid fa-file-lines"></i>
-            </div>
-            <div>
-              <h3 class="font-bold text-white text-sm">Resumen</h3>
-              <p class="text-[11px] text-gray-400" x-text="modalTitulo"></p>
-            </div>
-          </div>
-          <div class="flex items-center space-x-1.5">
-            <button x-show="resumenTextoTema" @click="copiarTexto(resumenTextoTema)" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-3 transition" title="Copiar resumen">
-              <i class="fa-regular fa-copy text-sm"></i>
-            </button>
-            <button @click="modalSubResumen = false" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-3 transition">
-              <i class="fa-solid fa-xmark text-base"></i>
-            </button>
-          </div>
-        </div>
-        <!-- Contenido del Resumen -->
-        <div class="flex-1 p-6 md:p-10 overflow-y-auto space-y-4 text-sm leading-relaxed text-gray-200 markdown-content">
-          <!-- 1. Estado: Generando resumen automáticamente con IA -->
-          <div x-show="generandoResumenVisor" class="py-16 px-4 text-center space-y-4">
-            <div class="w-16 h-16 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-3xl">
-              <i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i>
-            </div>
-            <h4 class="font-bold text-white text-base">Redactando Resumen Oficial con IA (Plan Robusto)</h4>
-            <p class="text-xs text-gray-400 max-w-md mx-auto">Sintetizando temario oficial en formato académico UNIR. Se mostrará aquí automáticamente en unos segundos sin salir del tema...</p>
-            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
-              <i class="fa-solid fa-spinner fa-spin text-sky-400"></i>
-              <span>Procesando sin salir del tema...</span>
-            </div>
-          </div>
 
-          <!-- 2. Estado: Resumen generado disponible -->
-          <div x-show="!generandoResumenVisor && resumenTextoTema && resumenTextoTema.length > 50" x-html="renderMarkdown(resumenTextoTema)"></div>
-
-          <!-- 3. Estado: Botón si aún no está generado y no está en proceso -->
-          <div x-show="!generandoResumenVisor && (!resumenTextoTema || resumenTextoTema.length <= 50)" class="py-10 px-4 text-center space-y-4">
-            <div class="w-14 h-14 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-2xl">
-              <i class="fa-solid fa-wand-magic-sparkles"></i>
-            </div>
-            <h4 class="font-bold text-white text-base">Resumen con Inteligencia Artificial</h4>
-            <p class="text-xs text-gray-400 max-w-md mx-auto">Pulsa para redactar automáticamente el Resumen oficial de este tema en formato Robusto de UNIR.</p>
-            <button @click="generarResumenDesdeVisor()" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-sky-500/20 transition flex items-center space-x-2 mx-auto active:scale-95">
-              <i class="fa-solid fa-bolt"></i>
-              <span>Generar Resumen Automático (Robusto)</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- ==================== SUB-MODAL 2: ESQUEMA CONCEPTUAL VISUAL (CAPTURA 5 UNIR) ==================== -->
-    <div x-show="modalSubEsquema" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+    <div x-show="modalSubEsquema" x-transition class="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
       <div class="glass w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-indigo-500/40 shadow-2xl bg-surface-1/95">
         <!-- Header modal Esquema -->
         <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between shrink-0">
@@ -7250,7 +7300,7 @@ def dashboard_html(response: Response):
            }
          }
        "
-       class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+       class="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
       <div class="glass w-full max-w-3xl xl:max-w-4xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/40 shadow-2xl bg-surface-1/95">
         <!-- Header modal Flashcards -->
         <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
@@ -7441,7 +7491,7 @@ def dashboard_html(response: Response):
     </div>
 
   <!-- ==================== MODAL: SIMULADOR DE EXAMEN WEB (MODO NOTEBOOK & EXAMEN) ==================== -->
-  <div x-show="modalTest" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+  <div x-show="modalTest" x-transition class="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
     <div class="glass w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
       
       <!-- HEADER TEST -->
@@ -8533,7 +8583,7 @@ def dashboard_html(response: Response):
        x-transition:leave="transition ease-in duration-150"
        x-transition:leave-start="opacity-100"
        x-transition:leave-end="opacity-0"
-       class="fixed inset-0 bg-black/85 backdrop-blur-md z-60 flex items-center justify-center p-3 sm:p-4"
+       class="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4"
        style="display: none;">
     <div @click.away="modalInstalarPwa = false"
          class="bg-surface-1 border border-cyan-500/30 rounded-3xl max-w-2xl xl:max-w-3xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
@@ -12770,10 +12820,10 @@ def dashboard_html(response: Response):
                 this.modalContenido = data.contenido;
                 this.modalRutaActiva = tm.pdf;
                 this.modalVisor = true;
-                this.visorVistaActiva = 'lectura';
+                this.visorVistaActiva = abrirResumenDirecto ? 'resumen' : 'lectura';
                 this.modalTest = false;
                 this.modalVisorPdf = false;
-                this.modalSubResumen = !!abrirResumenDirecto;
+                this.modalSubResumen = false;
                 this.modalSubEsquema = false;
 
                 this.registrarActividadReciente('tema', asig, (tm.prefijo || 'Tema') + ' ' + tm.numero + '. ' + tm.titulo, tm.pdf);
@@ -12801,7 +12851,7 @@ def dashboard_html(response: Response):
               rutaGuia = 'data/procesado/guias/' + asig + '/' + rutaGuia;
             }
             await this.verContenidoArchivo(rutaGuia, tm);
-            if (abrirResumenDirecto) this.modalSubResumen = true;
+            if (abrirResumenDirecto) this.visorVistaActiva = 'resumen';
           } else {
             alert('No hay material oficial disponible para este tema todavía.');
           }
@@ -12864,7 +12914,8 @@ def dashboard_html(response: Response):
           const asig = this.asigSeleccionada?.nombre || '';
           if (!asig) return;
 
-          this.modalSubResumen = true;
+          this.visorVistaActiva = 'resumen';
+          this.modalSubResumen = false;
           this.modalSubEsquema = false;
           this.generandoResumenVisor = true;
 
@@ -13102,11 +13153,18 @@ def dashboard_html(response: Response):
         },
 
         abrirModalResumenVisor() {
-          this.modalSubResumen = true;
+          if (this.visorVistaActiva === 'resumen') {
+            this.visorVistaActiva = 'lectura';
+            return;
+          }
+          this.visorVistaActiva = 'resumen';
+          this.modalSubResumen = false;
           this.modalSubEsquema = false;
           if (!this.resumenTextoTema || this.resumenTextoTema.trim().length <= 50) {
             this.generarResumenDesdeVisor();
           }
+          const scrollElem = document.getElementById('visor-contenido-scroll');
+          if (scrollElem) scrollElem.scrollTop = 0;
         },
 
         abrirModalEsquemaVisor() {
@@ -13508,9 +13566,9 @@ def dashboard_html(response: Response):
 
         rehacerGuiaDesdeVisor() {
           if (!this.visorTemaActual) return;
-          if (confirm(`¿Deseas volver a generar el resumen con IA para "${this.modalTitulo}" con NOVA?`)) {
-            this.cerrarModalVisor();
-            this.rehacerGuiaTema(this.visorTemaActual);
+          if (confirm(`¿Deseas volver a redactar el resumen con IA para "${this.modalTitulo}" con NOVA?`)) {
+            this.resumenTextoTema = '';
+            this.generarResumenDesdeVisor();
           }
         },
 
