@@ -564,15 +564,24 @@ def normalizar_y_limpiar_biblioteca():
     """
     Motor integral de normalización y deduplicación.
     Se ejecuta automáticamente en local y en la nube tras cualquier sincronización:
+    - Normaliza MATERIALES_DIR y espacios privados de usuarios
     - Elimina duplicados *_esl-ES.pdf y *_esl2-ES.pdf
-    - Elimina 'Tema X.pdf' genéricos si existe la versión con título completo
+    - Elimina 'Tema X.pdf' genéricos si existe la versión con título completo (o Módulo/Unit)
     - Normaliza nombres de actividades (tisupdamXX_act... -> Actividad X - Enunciado/Plantilla)
     - Unifica Guías, Programaciones y Criterios de Evaluación sin duplicados
-    - Normaliza prácticas, repasos y títulos de módulos
+    - Normaliza prácticas, presentaciones y títulos de módulos
+    - Corrige dobles extensiones (.pdf.pdf) y caracteres erróneos
     - Elimina archivos no documentales (.mp4, .zip, .psc, .pptx, etc.)
     """
     if not MATERIALES_DIR.exists():
         return
+
+    directorios_base = [MATERIALES_DIR]
+    espacios_dir = BASE_DIR / "data" / "usuarios_espacios"
+    if espacios_dir.exists():
+        for u in espacios_dir.iterdir():
+            if u.is_dir() and (u / "materiales").is_dir():
+                directorios_base.append(u / "materiales")
 
     def safe_rename(folder: Path, old_name: str, new_name: str):
         old_p = folder / old_name
@@ -588,137 +597,155 @@ def normalizar_y_limpiar_biblioteca():
         else:
             old_p.rename(new_p)
 
-    # 1. Eliminar archivos que no sean PDF ni DOCX (y temporales ._* o ~$*)
-    for folder in MATERIALES_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        for f in list(folder.iterdir()):
-            if f.is_file():
+    # 1. Eliminar archivos no documentales, reparar dobles extensiones (.pdf.pdf) y trailing underscores
+    for dir_base in directorios_base:
+        for folder in dir_base.iterdir():
+            if not folder.is_dir():
+                continue
+            for f in list(folder.iterdir()):
+                if not f.is_file():
+                    continue
+                if f.name.endswith(".pdf.pdf"):
+                    safe_rename(folder, f.name, f.name[:-4])
+                    continue
+                if f.name.endswith(".docx.docx"):
+                    safe_rename(folder, f.name, f.name[:-5])
+                    continue
+                if f.name.endswith("_.pdf"):
+                    safe_rename(folder, f.name, f.name[:-5] + ".pdf")
+                    continue
                 if f.name.startswith(("._", "~$")) or f.suffix.lower() not in EXTENSIONES_DOCUMENTOS:
                     f.unlink(missing_ok=True)
 
     # 2. Eliminar duplicados *_esl-ES.pdf y *_esl2-ES.pdf
-    for folder in MATERIALES_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        for f in list(folder.iterdir()):
-            if f.is_file() and re.search(r"_esl2?-ES\.pdf$", f.name, re.I):
-                f.unlink(missing_ok=True)
-
-    # 3. Eliminar temas/módulos genéricos (ej: Tema 1.pdf) si ya existe el descriptivo (Tema 1. Ficheros.pdf)
-    for folder in MATERIALES_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        for f in list(folder.iterdir()):
-            if not f.is_file():
+    for dir_base in directorios_base:
+        for folder in dir_base.iterdir():
+            if not folder.is_dir():
                 continue
-            m = re.match(r"^(Tema|Unit|M[óo]dulo)\s+0?(\d+)\.pdf$", f.name, re.I)
-            if m:
-                prefix = m.group(1).lower()
-                num = int(m.group(2))
-                has_desc = any(
-                    other != f and re.match(rf"^{prefix[:3]}[a-záéíóú]*\s+0?{num}\.\s+.+\.pdf$", other.name, re.I)
-                    for other in folder.iterdir() if other.is_file()
-                )
-                if has_desc:
+            for f in list(folder.iterdir()):
+                if f.is_file() and re.search(r"_esl2?-ES\.pdf$", f.name, re.I):
                     f.unlink(missing_ok=True)
+
+    # 3. Eliminar temas/módulos genéricos (ej: Tema 1.pdf) si ya existe el descriptivo (Tema 1. Ficheros.pdf o Módulo 1...)
+    for dir_base in directorios_base:
+        for folder in dir_base.iterdir():
+            if not folder.is_dir():
+                continue
+            for f in list(folder.iterdir()):
+                if not f.is_file():
+                    continue
+                m = re.match(r"^(Tema|Unit|M[óo]dulo|Modulo)\s+0?(\d+)\.pdf$", f.name, re.I)
+                if m:
+                    num = int(m.group(2))
+                    has_desc = any(
+                        other != f and re.match(r"^(?:tema|unit|m[óo]dulo|modulo|unidad)\s+0?" + str(num) + r"[\.\s_-]+[a-záéíóúüñ0-9].+\.pdf$", other.name, re.I)
+                        for other in folder.iterdir() if other.is_file()
+                    )
+                    if has_desc:
+                        f.unlink(missing_ok=True)
 
     # 4. Normalizar "Tema 0X..." -> "Tema X..."
-    for folder in MATERIALES_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        for f in list(folder.iterdir()):
-            if not f.is_file():
+    for dir_base in directorios_base:
+        for folder in dir_base.iterdir():
+            if not folder.is_dir():
                 continue
-            m = re.match(r"^Tema\s+0(\d)\.\s+(.+\.pdf)$", f.name)
-            if m:
-                safe_rename(folder, f.name, f"Tema {m.group(1)}. {m.group(2)}")
+            for f in list(folder.iterdir()):
+                if not f.is_file():
+                    continue
+                m = re.match(r"^(Tema|Unit|M[óo]dulo)\s+0(\d)\.\s+(.+\.pdf)$", f.name, re.I)
+                if m:
+                    safe_rename(folder, f.name, f"{m.group(1)} {m.group(2)}. {m.group(3)}")
 
     # 5. Normalizar enunciados y plantillas de actividades
-    for folder in MATERIALES_DIR.iterdir():
-        if not folder.is_dir():
-            continue
-        for f in list(folder.iterdir()):
-            if not f.is_file():
+    for dir_base in directorios_base:
+        for folder in dir_base.iterdir():
+            if not folder.is_dir():
                 continue
-            nl = f.name.lower()
-            if re.match(r"^(tisupdam\d+|consetesutralo\d+|tecsupasir\d+)_act1.*\.(docx|pdf)$", nl):
-                if "(1)" in nl:
-                    f.unlink(missing_ok=True)
-                else:
-                    safe_rename(folder, f.name, f"Actividad 1 - Enunciado{f.suffix.lower()}")
-            elif re.match(r"^(tisupdam\d+|consetesutralo\d+|tecsupasir\d+)_act2.*\.(docx|pdf)$", nl):
-                safe_rename(folder, f.name, f"Actividad 2 - Enunciado{f.suffix.lower()}")
-            elif re.match(r"^(tisupdam\d+|consetesutralo\d+|tecsupasir\d+)_act3.*\.(docx|pdf)$", nl):
-                safe_rename(folder, f.name, f"Actividad 3 - Enunciado{f.suffix.lower()}")
-            elif nl == "unir_fp_plantilla_actividad_1_ed.docx":
-                safe_rename(folder, f.name, "Actividad 1 - Plantilla.docx")
-            elif nl == "unir_fp_plantilla_actividad_2_ed.docx":
-                safe_rename(folder, f.name, "Actividad 2 - Plantilla.docx")
+            for f in list(folder.iterdir()):
+                if not f.is_file():
+                    continue
+                nl = f.name.lower()
+                if re.match(r"^(tisupdam\d+|consetesutralo\d+|tecsupasir\d+)_act1.*\.(docx|pdf)$", nl):
+                    if "(1)" in nl:
+                        f.unlink(missing_ok=True)
+                    else:
+                        safe_rename(folder, f.name, f"Actividad 1 - Enunciado{f.suffix.lower()}")
+                elif re.match(r"^(tisupdam\d+|consetesutralo\d+|tecsupasir\d+)_act2.*\.(docx|pdf)$", nl):
+                    safe_rename(folder, f.name, f"Actividad 2 - Enunciado{f.suffix.lower()}")
+                elif re.match(r"^(tisupdam\d+|consetesutralo\d+|tecsupasir\d+)_act3.*\.(docx|pdf)$", nl):
+                    safe_rename(folder, f.name, f"Actividad 3 - Enunciado{f.suffix.lower()}")
+                elif nl == "unir_fp_plantilla_actividad_1_ed.docx":
+                    safe_rename(folder, f.name, "Actividad 1 - Plantilla.docx")
+                elif nl == "unir_fp_plantilla_actividad_2_ed.docx":
+                    safe_rename(folder, f.name, "Actividad 2 - Plantilla.docx")
 
     # 6. Unificar Guías, Programación Didáctica y Criterios de Evaluación sin duplicados
-    for folder in MATERIALES_DIR.iterdir():
-        if not folder.is_dir() or folder.name in ["Secretaría 26-27", "Aula de Información General", "Formación en Empresa (FFE)", "Proyecto Intermodular DAM"]:
-            continue
-        for f in list(folder.iterdir()):
-            if not f.is_file() or f.suffix.lower() != ".pdf":
+    for dir_base in directorios_base:
+        for folder in dir_base.iterdir():
+            if not folder.is_dir() or folder.name in ["Secretaría 26-27", "Aula de Información General", "Formación en Empresa (FFE)", "Proyecto Intermodular DAM"]:
                 continue
-            nl = f.name.lower()
-            if any(k in nl for k in ["glosario", "comandos", "introducción y objetivos", "interpretación", "az-900", "coaching", "java", "principios que guían"]):
-                continue
-            if nl.startswith("tema") or nl.startswith("unit") or nl.startswith("módulo"):
-                continue
-            if any(k in nl for k in ["guia", "guía", "guía"]):
-                safe_rename(folder, f.name, "Guía del Estudiante.pdf")
-            elif any(k in nl for k in ["programacion", "programación", "programación"]) and not nl.startswith("resumen"):
-                safe_rename(folder, f.name, "Programación Didáctica.pdf")
-            elif "criterio" in nl:
-                safe_rename(folder, f.name, "Criterios de Evaluación.pdf")
+            for f in list(folder.iterdir()):
+                if not f.is_file() or f.suffix.lower() != ".pdf":
+                    continue
+                nl = f.name.lower()
+                if any(k in nl for k in ["glosario", "comandos", "introducción y objetivos", "interpretación", "az-900", "coaching", "java", "principios que guían"]):
+                    continue
+                if nl.startswith("tema") or nl.startswith("unit") or nl.startswith("módulo"):
+                    continue
+                if any(k in nl for k in ["guia", "guía", "guía"]):
+                    safe_rename(folder, f.name, "Guía del Estudiante.pdf")
+                elif any(k in nl for k in ["programacion", "programación", "programación"]) and not nl.startswith("resumen"):
+                    safe_rename(folder, f.name, "Programación Didáctica.pdf")
+                elif "criterio" in nl:
+                    safe_rename(folder, f.name, "Criterios de Evaluación.pdf")
 
     # 7. Correcciones específicas por asignatura
-    ad = MATERIALES_DIR / "Acceso a Datos"
-    if ad.exists():
-        safe_rename(ad, "ejercicio mongo.pdf", "Práctica 1 - Ejercicio MongoDB.pdf")
-        safe_rename(ad, "Ejercicio MongoDB 1.pdf", "Práctica 1 - Ejercicio MongoDB.pdf")
-        safe_rename(ad, "ejercicio mongo java.pdf", "Práctica 2 - Ejercicio MongoDB con Java.pdf")
-        safe_rename(ad, "Ejercicio MongoDB Java 2.pdf", "Práctica 2 - Ejercicio MongoDB con Java.pdf")
-        safe_rename(ad, "Preguntas_test_AD.pdf", "Banco de Preguntas Tipo Test.pdf")
-        safe_rename(ad, "Preguntas tipo test Acceso a Datos.pdf", "Banco de Preguntas Tipo Test.pdf")
+    for dir_base in directorios_base:
+        ad = dir_base / "Acceso a Datos"
+        if ad.exists():
+            safe_rename(ad, "ejercicio mongo.pdf", "Práctica 1 - Ejercicio MongoDB.pdf")
+            safe_rename(ad, "Ejercicio MongoDB 1.pdf", "Práctica 1 - Ejercicio MongoDB.pdf")
+            safe_rename(ad, "ejercicio mongo java.pdf", "Práctica 2 - Ejercicio MongoDB con Java.pdf")
+            safe_rename(ad, "Ejercicio MongoDB Java 2.pdf", "Práctica 2 - Ejercicio MongoDB con Java.pdf")
+            safe_rename(ad, "Preguntas_test_AD.pdf", "Banco de Preguntas Tipo Test.pdf")
+            safe_rename(ad, "Preguntas tipo test Acceso a Datos.pdf", "Banco de Preguntas Tipo Test.pdf")
 
-    psp = MATERIALES_DIR / "Programación de Servicios y Procesos"
-    if psp.exists():
-        (psp / "Documento A4 Portada Memoria Proyecto Foto Corporativo Crema y Negro.pdf").unlink(missing_ok=True)
-        safe_rename(psp, "prepaso PSP Java_basico.pdf", "Repaso Java Básico para PSP.pdf")
-        safe_rename(psp, "Repaso PSP Java básico.pdf", "Repaso Java Básico para PSP.pdf")
-        safe_rename(psp, "23-9-2026 - TEMA1 - Programas, ejecutables, procesos y servicios.pdf", "Presentación Clase - Tema 1 (Procesos y Servicios).pdf")
-        safe_rename(psp, "Memoria_Actividad1.pdf", "Actividad 1 - Memoria Entregada.pdf")
+        psp = dir_base / "Programación de Servicios y Procesos"
+        if psp.exists():
+            (psp / "Documento A4 Portada Memoria Proyecto Foto Corporativo Crema y Negro.pdf").unlink(missing_ok=True)
+            safe_rename(psp, "prepaso PSP Java_basico.pdf", "Repaso Java Básico para PSP.pdf")
+            safe_rename(psp, "Repaso PSP Java básico.pdf", "Repaso Java Básico para PSP.pdf")
+            safe_rename(psp, "23-9-2026 - TEMA1 - Programas, ejecutables, procesos y servicios.pdf", "Presentación Clase - Tema 1 (Procesos y Servicios).pdf")
+            safe_rename(psp, "Memoria_Actividad1.pdf", "Actividad 1 - Memoria Entregada.pdf")
 
-    an = MATERIALES_DIR / "Arquitecturas en la Nube"
-    if an.exists():
-        safe_rename(an, "AN_Practica0.pdf", "Práctica 0 - Configuración AWS.pdf")
-        safe_rename(an, "AN_Practica2.pdf", "Práctica 2 - Laboratorio AWS.pdf")
-        safe_rename(an, "AN_Clase05_diapositivas.pdf", "Presentación Clase 5 - Arquitecturas Cloud.pdf")
-        safe_rename(an, "AN_Hoja_comandos_AWS_CLI.pdf", "Guía Rápida - Comandos AWS CLI.pdf")
+        an = dir_base / "Arquitecturas en la Nube"
+        if an.exists():
+            safe_rename(an, "AN_Practica0.pdf", "Práctica 0 - Configuración AWS.pdf")
+            safe_rename(an, "AN_Practica2.pdf", "Práctica 2 - Laboratorio AWS.pdf")
+            safe_rename(an, "AN_Clase05_diapositivas.pdf", "Presentación Clase 5 - Arquitecturas Cloud.pdf")
+            safe_rename(an, "AN_Hoja_comandos_AWS_CLI.pdf", "Guía Rápida - Comandos AWS CLI.pdf")
 
-    di = MATERIALES_DIR / "Desarrollo de Interfaces"
-    if di.exists():
-        safe_rename(di, "Conceptos sobre el desarrollo de interfaces_.pdf", "Introducción - Conceptos sobre Desarrollo de Interfaces.pdf")
-        safe_rename(di, "DI_Tema1_Reto_Entrenamiento_6.pdf", "Práctica - Reto de Entrenamiento 6 (Tema 1).pdf")
-        safe_rename(di, "Guia_glosario_tutorial_JavaScript_interfaces.pdf", "Guía y Glosario - Tutorial JavaScript para Interfaces.pdf")
+        di = dir_base / "Desarrollo de Interfaces"
+        if di.exists():
+            safe_rename(di, "Conceptos sobre el desarrollo de interfaces_.pdf", "Introducción - Conceptos sobre Desarrollo de Interfaces.pdf")
+            safe_rename(di, "DI_Tema1_Reto_Entrenamiento_6.pdf", "Práctica - Reto de Entrenamiento 6 (Tema 1).pdf")
+            safe_rename(di, "DI_Presentacion_TEMA3.pdf", "Presentación Clase - Tema 3.pdf")
+            safe_rename(di, "Tema4_DI_presentacion.pdf", "Presentación Clase - Tema 4.pdf")
+            safe_rename(di, "Guia_glosario_tutorial_JavaScript_interfaces.pdf", "Guía y Glosario - Tutorial JavaScript para Interfaces.pdf")
 
-    dig = MATERIALES_DIR / "Digitalización Aplicada"
-    if dig.exists():
-        safe_rename(dig, "SESIÓNBIENVENIDADAM.pdf", "Presentación - Sesión de Bienvenida.pdf")
-        safe_rename(dig, "SESIÓN1DIGDAMT1.pdf", "Presentación Clase 1 - Tema 1.pdf")
-        safe_rename(dig, "SESIÓN1DIGDAMT2.pdf", "Presentación Clase 2 - Tema 2.pdf")
+        dig = dir_base / "Digitalización Aplicada"
+        if dig.exists():
+            safe_rename(dig, "SESIÓNBIENVENIDADAM.pdf", "Presentación - Sesión de Bienvenida.pdf")
+            safe_rename(dig, "SESIÓN1DIGDAMT1.pdf", "Presentación Clase 1 - Tema 1.pdf")
+            safe_rename(dig, "SESIÓN1DIGDAMT2.pdf", "Presentación Clase 2 - Tema 2.pdf")
 
-    proy = MATERIALES_DIR / "Proyecto Intermodular DAM"
-    if proy.exists():
-        safe_rename(proy, "Anteproyecto_Final_de_Curso.pdf", "Anteproyecto Final de Curso.pdf")
-        safe_rename(proy, "compromiso_trabajos_grupales.pdf", "Compromiso de Trabajos Grupales.pdf")
-        safe_rename(proy, "guia.pdf", "Guía del Proyecto Intermodular.pdf")
-        safe_rename(proy, "rubrica.pdf", "Rúbrica de Evaluación del Proyecto.pdf")
-        safe_rename(proy, "plantilla_proyecto.docx", "Plantilla - Memoria del Proyecto.docx")
+        proy = dir_base / "Proyecto Intermodular DAM"
+        if proy.exists():
+            safe_rename(proy, "Anteproyecto_Final_de_Curso.pdf", "Anteproyecto Final de Curso.pdf")
+            safe_rename(proy, "compromiso_trabajos_grupales.pdf", "Compromiso de Trabajos Grupales.pdf")
+            safe_rename(proy, "guia.pdf", "Guía del Proyecto Intermodular.pdf")
+            safe_rename(proy, "rubrica.pdf", "Rúbrica de Evaluación del Proyecto.pdf")
+            safe_rename(proy, "plantilla_proyecto.docx", "Plantilla - Memoria del Proyecto.docx")
 
 
 def obtener_info_asignatura(asig: str) -> Dict[str, Any]:

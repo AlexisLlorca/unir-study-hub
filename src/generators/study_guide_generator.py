@@ -59,13 +59,16 @@ class GeneradorGuiaEstudio:
 
         tipo_generacion = (tipo_generacion or "ambos").lower().strip()
         generar_guia = tipo_generacion in ("ambos", "solo_guia")
-        generar_test = tipo_generacion in ("ambos", "solo_test")
+        generar_test = tipo_generacion in ("ambos", "solo_test", "verdadero_falso")
+        es_vf = tipo_generacion == "verdadero_falso"
 
-        if not num_preguntas or num_preguntas <= 0:
+        if es_vf:
+            num_preguntas = 10
+        elif not num_preguntas or num_preguntas <= 0:
             if profundidad == "corta":
                 num_preguntas = 5
             elif profundidad == "robusta":
-                num_preguntas = 15
+                num_preguntas = 20
             else:
                 num_preguntas = 10
         else:
@@ -144,91 +147,25 @@ class GeneradorGuiaEstudio:
             console.print(f"\n[cyan]3/4. Redactando Guía de Estudio de Alto Rendimiento ({profundidad.upper()})...[/cyan]")
 
             directivas_veracidad = (
-                "\n\nDIRECTRICES OBLIGATORIAS DE MÁXIMA FIDELIDAD AL MATERIAL OFICIAL (PROHIBIDO INVENTAR):\n"
-                "- Basa todo el contenido EXCLUSIVAMENTE en el temario oficial y las transcripciones de clase aportadas arriba.\n"
-                "- PROHIBIDO INVENTAR: No introduzcas librerías ajenas a UNIR, conceptos no tratados en el tema ni declaraciones o fechas ficticias del profesor.\n"
-                "- Código adaptado al nivel de clase (2º DAM): claro, limpio, compilable, usando 'System.out.println()' estándar para ejemplos sin sobreingeniería de Logger.\n"
-                "- Si en la transcripción no hay menciones explícitas a avisos de examen, enfoca los avisos en las dificultades técnicas reales del temario oficial sin inventar citas docentes falsas.\n"
-                "- ESTUDIO ACTIVO (ACTIVE RECALL): Incluye cajas de autoevaluación interactiva utilizando etiquetas HTML nativas <details><summary>💡 Ver respuesta y razonamiento técnico</summary>...</details> para que el estudiante pueda ponerse a prueba antes de ver la solución.\n"
+                "\n\nDIRECTRICES OBLIGATORIAS DE ESTILO Y FORMATO IDÉNTICO AL SISTEMA OFICIAL DE UNIR:\n"
+                "- CERO EMOJIS: Prohibido estrictamente utilizar emoticonos o iconos (nada de ⚡, 🚀, 📌, 💡, 💻, etc.) en títulos ni texto.\n"
+                "- TÍTULO PRINCIPAL (H1): Encabezado conceptual, limpio y académico (ejemplo: '# Naturaleza del software y sus retos'). Sin 'Tema X', sin 'Guía' ni adornos.\n"
+                "- ESTRUCTURA TEMÁTICA (H2 y H3): Divide el tema en 4 a 6 secciones conceptuales sólidas ('## ...') y subsecciones ('### ...') cuando se detallen modelos, variantes o fases específicas.\n"
+                "- TONO Y REDACCIÓN: Prosa académica universitaria, rigurosa, didáctica y formal en castellano impecable. Desarrolla párrafos claros y articulados que expliquen las causas, consecuencias, funcionamiento y distinciones técnicas.\n"
+                "- CONCEPTOS EN NEGRITA: Enfatiza en **negrita** los términos técnicos clave, nombres de estándares, modelos y metodologías para favorecer la lectura activa.\n"
+                "- LISTAS Y CLASIFICACIONES: Cuando se presenten listas o dimensiones, usa viñetas con el concepto en negrita al inicio (* **Concepto:** Explicación...). Anida sub-viñetas cuando haya clasificaciones secundarias (como factores externos vs internos).\n"
+                "- SÍNTESIS FINAL OBLIGATORIA (H2): Concluye siempre con una sección '## Síntesis esencial' (o '## Síntesis de los aspectos clave' / '## Ideas esenciales') con 2-3 párrafos profundos o 4-6 viñetas que condensen las conclusiones fundamentales de todo el tema.\n"
+                "- PIE DE PÁGINA: Termina el documento con:\n---\n*Resumen generado con IA*\n"
+                "- PROHIBIDO INVENTAR: Basa el contenido rigurosamente en el material aportado sin añadir conceptos ajenos ni descontextualizados.\n"
             )
 
-            if profundidad == "corta":
-                prompt_guia = (
-                    f"Eres NOVA, mentora de alto rendimiento y tutora de FP DAM en UNIR.\n"
-                    f"Basándote en el siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
-                    f"{contexto_combinado}\n\n"
-                    f"{directivas_veracidad}\n\n"
-                    "Genera un REPASO EXPRÉS de alta densidad conceptual (~1.500 palabras) en Markdown estructurado exactamente así:\n"
-                    f"# ⚡ REPASO EXPRÉS: {nombre_tema.upper()} — {asignatura.upper()}\n"
-                    "> Guía rápida y condensada para repaso intensivo antes de exámenes y asimilación ágil de conceptos clave.\n\n"
-                    "## 🚀 1. Resumen de Alto Impacto (Ideas fuerza y conceptos imprescindibles sin relleno)\n"
-                    "## 📑 2. Chuleta Rápida de Examen y Sintaxis (Cheatsheet Markdown con clases, comandos, métodos clave y firmas)\n"
-                    "## 💡 3. Conceptos Mínimos Viables de Aprobado (Tabla Markdown con Término, Definición concisa y Clave en Test)\n"
-                    "## 💻 4. Micro-ejemplo de Código Práctico (Snippet conciso, limpio, moderno con System.out.println() y comentado)\n"
-                    "## ❓ 5. Reto de Active Recall Rápido (Pregunta de autoevaluación con <details><summary>💡 Ver respuesta</summary>...</details>)\n"
-                    "## ⚠️ 6. Los 3 Errores Fatales en Examen (Trampas habituales de UNIR y cómo evitarlas)\n"
-                )
-            elif profundidad == "robusta":
-                prompt_guia = (
-                    f"Eres NOVA, mentora de élite, consultora senior de software y tutora de FP DAM en UNIR.\n"
-                    f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
-                    f"{contexto_combinado}\n\n"
-                    f"{directivas_veracidad}\n\n"
-                    "Redacta una GUÍA MAESTRA DE ALTO RENDIMIENTO (MÉTODO CORNELL & ACTIVE RECALL / NIVEL PRO) exhaustiva, profunda y de máxima ingeniería (~4.500+ palabras) en Markdown estructurado exactamente así:\n"
-                    f"# 🏆 GUÍA MAESTRA DE ALTO RENDIMIENTO (NIVEL PRO): {nombre_tema.upper()} — {asignatura.upper()}\n"
-                    "> Dossier técnico exhaustivo con Método Cornell y Active Recall para dominio absoluto de la materia y preparación de examen en UNIR (2º DAM).\n\n"
-                    "## 🧭 1. Mapa Conceptual y Arquitectura del Tema\n"
-                    "- Resumen ejecutivo de alto nivel y marco arquitectónico.\n"
-                    "- Diagrama visual de flujo, ciclo de vida o arquitectura técnica (en formato ASCII estructurado o bloque Mermaid ```mermaid ... ``` explicativo).\n\n"
-                    "## 🏛️ 2. Fundamentos Teóricos Profundos y Funcionamiento Interno\n"
-                    "- Explicación exhaustiva, rigurosa y sin saltarse ningún epígrafe del PDF oficial de UNIR.\n"
-                    "- Análisis de funcionamiento interno a bajo nivel (JVM, hilos, memoria RAM/Stack/Heap, gestión del Sistema Operativo o Sockets de red).\n"
-                    "- Cajas de autoevaluación inmediata (Active Recall) usando bloques interactivos:\n"
-                    "  <details><summary>💡 Pregunta Active Recall: [Concepto clave del tema]</summary>\n"
-                    "  [Explicación concisa y técnica de la respuesta]\n"
-                    "  </details>\n\n"
-                    "## 📑 3. Chuleta Exhaustiva de Sintaxis, Clases y Firmas de Métodos (Cheatsheet)\n"
-                    "- Tabla Markdown completa con todos los métodos y clases indispensables del tema:\n"
-                    "  | Clase / Interfaz | Método y Firma | Parámetros | Tipo Retorno | Excepciones Obligatorias (`throws`) | Clave en Examen |\n"
-                    "- Reglas nemotécnicas para no confundir métodos parecidos.\n\n"
-                    "## 🎙️ 4. Énfasis del Profesor en Videoclase y Dificultades Críticas\n"
-                    "- Puntos críticos destacados en clase magistral, dudas frecuentes de alumnos y aclaraciones del docente.\n"
-                    "- <details><summary>💡 Pregunta Active Recall de Videoclase: [Duda habitual de alumnos]</summary>[Solución explicada]</details>\n\n"
-                    "## 💻 5. Laboratorio de Código Práctico (Implementación Paso a Paso)\n"
-                    "- Implementación Java completa, limpia, moderna y 100% compilable adaptada al temario de 2º DAM.\n"
-                    "- Sin sobreingeniería ni Logger: uso de `System.out.println()` pedagógico.\n"
-                    "- Código ampliamente comentado línea a línea explicando el porqué de cada sentencia.\n"
-                    "- Traza de ejecución paso a paso con salida por consola esperada.\n\n"
-                    "## 🔄 6. Comparativas Técnicas y Cuándo Usar Cada Solución\n"
-                    "- Tabla comparativa entre las diferentes alternativas que ofrece la tecnología explicada (pros, contras, rendimiento y casos de uso).\n\n"
-                    "## ⚠️ 7. Desglose de Preguntas Trampa y Distractores de Exámenes UNIR\n"
-                    "- Análisis detallado de cómo formula UNIR las preguntas capciosas de este tema.\n"
-                    "- Análisis de distractores en preguntas tipo test: por qué una respuesta incorrecta parece correcta a primera vista y cuál es el fallo técnico sutil.\n"
-                    "- <details><summary>💡 Simulacro de Pregunta Trampa de Examen</summary>[Análisis del distractor y respuesta correcta fundamentada]</details>\n\n"
-                    "## 🧠 8. Glosario Técnico Exhaustivo (Diccionario de Examen)\n"
-                    "- Tabla Markdown completa: | Término Técnico | Definición Rigurosa | Trampa Asociada en Test |\n\n"
-                    "## 🚀 9. Checklist de Dominio Pre-Examen\n"
-                    "- Lista de comprobación interactiva `[ ]` con:\n"
-                    "  - [ ] Objetivos mínimos imprescindibles para asegurar el Aprobado (5.0)\n"
-                    "  - [ ] Hitos avanzados para aspirar a Matrícula de Honor (9.0 - 10)\n"
-                )
-            else:  # media
-                prompt_guia = (
-                    f"Eres NOVA, tutor de IA especializado en FP DAM (Desarrollo de Aplicaciones Multiplataforma) de UNIR.\n"
-                    f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
-                    f"{contexto_combinado}\n\n"
-                    f"{directivas_veracidad}\n\n"
-                    "Redacta una GUÍA DE ESTUDIO OFICIAL EQUILIBRADA Y PRODUCTIVA (~3.000 palabras) con Método Cornell y Active Recall en Markdown estructurado así:\n"
-                    f"# 📘 GUÍA DE ESTUDIO OFICIAL: {nombre_tema.upper()} — {asignatura.upper()}\n"
-                    "> Material de alto rendimiento sintetizado con temario oficial, clases magistrales de UNIR y herramientas de estudio activo.\n\n"
-                    "## 📌 1. Resumen Ejecutivo y Marco Teórico (Fundamentos y arquitectura general del tema)\n"
-                    "## 📑 2. Chuleta de Sintaxis y Firmas de Métodos (Tabla Markdown con Clase, Método, Tipo Retorno y Excepciones)\n"
-                    "## 📢 3. Avisos y Trampas del Profesor en Clase (Qué enfatizó el docente en videoclase, avisos y errores comunes)\n"
-                    "## 🧠 4. Conceptos Clave y Cajas Active Recall (Definiciones de examen + <details><summary>💡 Comprobar comprensión</summary>...</details>)\n"
-                    "## 💻 5. Laboratorio de Código Práctico (Código completo, pedagógico, compilable con System.out.println() y comentado)\n"
-                    "## ⚠️ 6. Puntos Críticos y Preguntas Capciosas de Examen (Distractores típicos de UNIR y cómo detectarlos)\n"
-                    "## 🚀 7. Checklist de Comprobación Pre-Examen (Lista [ ] de conceptos que debes dominar)\n"
-                )
+            prompt_guia = (
+                f"Eres el sistema oficial de síntesis académica universitaria de UNIR.\n"
+                f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
+                f"{contexto_combinado}\n\n"
+                f"{directivas_veracidad}\n\n"
+                "Redacta el RESUMEN OFICIAL COMPLETO CON INTELIGENCIA ARTIFICIAL del tema, siguiendo exactamente la estructura, tono formal y elegancia de los resúmenes oficiales de UNIR en Markdown."
+            )
 
             guia_md = self.tutor.client.generar_contenido(
                 prompt_guia,
@@ -239,19 +176,11 @@ class GeneradorGuiaEstudio:
             if not guia_md:
                 console.print("[yellow]⚠ Reintentando redacción de guía con versión concisa...[/yellow]")
                 prompt_guia_conciso = (
-                    f"Eres NOVA, tutor de IA de FP DAM en UNIR.\n"
+                    f"Eres el sistema oficial de síntesis académica universitaria de UNIR.\n"
                     f"A partir del siguiente material oficial de '{asignatura}' ({nombre_tema}):\n\n"
-                    f"{contexto_combinado[:35000]}\n\n"
+                    f"{contexto_combinado[:40000]}\n\n"
                     f"{directivas_veracidad}\n\n"
-                    "Redacta una GUÍA DE ESTUDIO COMPLETA en Markdown con:\n"
-                    f"# 📘 GUÍA DE ESTUDIO: {nombre_tema.upper()}\n"
-                    "## 📌 1. Resumen Ejecutivo y Mapa Conceptual\n"
-                    "## 📑 2. Chuleta de Métodos y Clases Clave\n"
-                    "## 📢 3. Avisos de Examen y Trampas Docentes\n"
-                    "## 🧠 4. Conceptos Clave (Tabla con Active Recall)\n"
-                    "## 💻 5. Código Ejemplo Comentado\n"
-                    "## ⚠️ 6. Puntos Críticos y Preguntas Trampa\n"
-                    "## 🚀 7. Checklist Pre-Examen\n"
+                    "Redacta el RESUMEN OFICIAL CON INTELIGENCIA ARTIFICIAL del tema, con sus secciones temáticas conceptuales y su Síntesis esencial final en Markdown."
                 )
                 guia_md = self.tutor.client.generar_contenido(
                     prompt_guia_conciso,
@@ -264,15 +193,10 @@ class GeneradorGuiaEstudio:
                 dir_asig_guia = (guias_dir or GUIAS_DIR) / asignatura
                 dir_asig_guia.mkdir(parents=True, exist_ok=True)
                 ruta_guia_base = dir_asig_guia / f"{slug_tema}_guia.md"
-                # B4: Evitar que una guía corta machaque silenciosamente una guía robusta previa
-                if ruta_guia_base.exists() and profundidad != "media":
-                    ruta_guia = dir_asig_guia / f"{slug_tema}_{profundidad}_guia.md"
-                else:
-                    ruta_guia = ruta_guia_base
-                with open(ruta_guia, "w", encoding="utf-8") as f:
+                with open(ruta_guia_base, "w", encoding="utf-8") as f:
                     f.write(guia_md)
-                resultados["guia"] = ruta_guia
-                console.print(f"[bold green]✔ Guía guardada en:[/bold green] {ruta_guia}")
+                resultados["guia"] = ruta_guia_base
+                console.print(f"[bold green]✔ Guía guardada en:[/bold green] {ruta_guia_base}")
             else:
                 console.print(f"[bold red]❌ No se pudo redactar la guía de estudio para '{nombre_tema}'[/bold red]")
         else:
@@ -280,42 +204,83 @@ class GeneradorGuiaEstudio:
 
         # 4. Generar Banco de Preguntas Tipo Test (JSON + MD)
         if generar_test:
-            console.print(f"\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial de UNIR ({num_preguntas} preguntas, nivel {profundidad.upper()})...[/cyan]")
-            prompt_test = (
-                f"Genera un examen tipo test oficial de {num_preguntas} preguntas con rigor pedagógico y técnico, "
-                f"basado en el tema '{nombre_tema}' de '{asignatura}'. Nivel de profundidad: {profundidad.upper()}.\n\n"
-                f"{contexto_combinado[:60000]}\n\n"
-                f"REGLAS OBLIGATORIAS:\n"
-                f"1. Genera exactamente {num_preguntas} preguntas.\n"
-                "2. Incluye preguntas conceptuales rigurosas, análisis de fragmentos de código y trampas de examen de UNIR.\n"
-                "3. Cada pregunta debe tener 4 opciones (A, B, C, D) con distractores verosímiles y técnicos.\n"
-                "4. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la letra de la respuesta.\n"
-                "5. 'justificacion': Justificación exhaustiva: por qué la opción correcta lo es Y por qué cada uno de los 3 distractores es incorrecto.\n"
-                "6. FIDELIDAD ESTRICTA AL TEMARIO (PROHIBIDO INVENTAR): Todas las preguntas, opciones y códigos deben basarse EXCLUSIVAMENTE en el contenido del temario oficial y las clases proporcionadas arriba. No inventes APIs o sintaxis que no correspondan a 2º DAM.\n"
-                "7. FORMATO VISUAL DEL CÓDIGO (CRUCIAL): Si la pregunta incluye un fragmento de código, NUNCA lo comprimas en una sola línea. Escribe el código con saltos de línea e indentación de 2 o 4 espacios dentro del bloque ```java ... ```. Separa claramente el texto introductorio, el bloque de código, y la pregunta final al final en un párrafo aparte.\n"
-                "8. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
-                "[\n"
-                "  {\n"
-                '    "enunciado": "Texto de la pregunta...",\n'
-                '    "opciones": {\n'
-                '      "A": "Opción A",\n'
-                '      "B": "Opción B",\n'
-                '      "C": "Opción C",\n'
-                '      "D": "Opción D"\n'
-                "    },\n"
-                '    "correcta": "A",\n'
-                '    "pista": "Pista conceptual breve que oriente al estudiante sin desvelar la letra de la respuesta...",\n'
-                '    "justificacion": "Explicación técnica detallada de por qué es la correcta y por qué las demás fallan..."\n'
-                "  }\n"
-                "]\n"
-            )
+            if es_vf:
+                console.print(f"\n[cyan]4/4. Diseñando Autoevaluación de Verdadero o Falso con IA ({num_preguntas} afirmaciones)...[/cyan]")
+                prompt_test = (
+                    f"Genera una actividad oficial de autoevaluación de VERDADERO O FALSO de exactamente {num_preguntas} preguntas con rigor pedagógico y técnico, "
+                    f"basada en el tema '{nombre_tema}' de '{asignatura}'.\n\n"
+                    f"{contexto_combinado[:35000]}\n\n"
+                    f"REGLAS OBLIGATORIAS:\n"
+                    f"1. Genera exactamente {num_preguntas} afirmaciones conceptuales basadas estrictamente en el contenido oficial.\n"
+                    "2. Debe haber un equilibrio aproximado entre afirmaciones Verdaderas y Falsas (aproximadamente 5 verdaderas y 5 falsas).\n"
+                    "3. Cada elemento debe tener exactamente 2 opciones: {\"A\": \"Verdadero\", \"B\": \"Falso\"}.\n"
+                    "4. 'correcta': 'A' si la afirmación es Verdadera, o 'B' si es Falsa.\n"
+                    "5. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la respuesta.\n"
+                    "6. 'justificacion': Justificación exhaustiva explicando por qué la afirmación es Verdadera o Falsa según el temario oficial.\n"
+                    "7. FIDELIDAD ESTRICTA AL TEMARIO (PROHIBIDO INVENTAR): Todo debe basarse exclusivamente en el contenido oficial.\n"
+                    "8. FORMATO VISUAL DEL CÓDIGO: Si incluye código, formátalo con saltos de línea e indentación adecuada dentro de bloques de código Markdown.\n"
+                    "9. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
+                    "[\n"
+                    "  {\n"
+                    '    "enunciado": "Afirmación técnica sobre el tema...",\n'
+                    '    "opciones": {\n'
+                    '      "A": "Verdadero",\n'
+                    '      "B": "Falso"\n'
+                    "    },\n"
+                    '    "correcta": "A",\n'
+                    '    "pista": "Pista orientativa...",\n'
+                    '    "justificacion": "Explicación técnica detallada de por qué es Verdadera o Falsa..."\n'
+                    "  }\n"
+                    "]\n"
+                )
+            else:
+                console.print(f"\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial de UNIR ({num_preguntas} preguntas, nivel {profundidad.upper()})...[/cyan]")
+                prompt_test = (
+                    f"Genera un examen tipo test oficial de {num_preguntas} preguntas con rigor pedagógico y técnico, "
+                    f"basado en el tema '{nombre_tema}' de '{asignatura}'. Nivel de profundidad: {profundidad.upper()}.\n\n"
+                    f"{contexto_combinado[:35000]}\n\n"
+                    f"REGLAS OBLIGATORIAS:\n"
+                    f"1. Genera exactamente {num_preguntas} preguntas.\n"
+                    "2. Incluye preguntas conceptuales rigurosas, análisis de fragmentos de código y trampas de examen de UNIR.\n"
+                    "3. Cada pregunta debe tener 4 opciones (A, B, C, D) con distractores verosímiles y técnicos.\n"
+                    "4. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la letra de la respuesta.\n"
+                    "5. 'justificacion': Justificación exhaustiva: por qué la opción correcta lo es Y por qué cada uno de los 3 distractores es incorrecto.\n"
+                    "6. FIDELIDAD ESTRICTA AL TEMARIO (PROHIBIDO INVENTAR): Todas las preguntas, opciones y códigos deben basarse EXCLUSIVAMENTE en el contenido del temario oficial y las clases proporcionadas arriba. No inventes APIs o sintaxis que no correspondan a 2º DAM.\n"
+                    "7. FORMATO VISUAL DEL CÓDIGO (CRUCIAL): Si la pregunta incluye un fragmento de código, NUNCA lo comprimas en una sola línea. Escribe el código con saltos de línea e indentación de 2 o 4 espacios dentro del bloque ```java ... ```. Separa claramente el texto introductorio, el bloque de código, y la pregunta final al final en un párrafo aparte.\n"
+                    "8. Devuelve ÚNICAMENTE un bloque JSON válido con el siguiente formato, sin texto antes ni después:\n"
+                    "[\n"
+                    "  {\n"
+                    '    "enunciado": "Texto de la pregunta...",\n'
+                    '    "opciones": {\n'
+                    '      "A": "Opción A",\n'
+                    '      "B": "Opción B",\n'
+                    '      "C": "Opción C",\n'
+                    '      "D": "Opción D"\n'
+                    "    },\n"
+                    '    "correcta": "A",\n'
+                    '    "pista": "Pista conceptual breve que oriente al estudiante sin desvelar la letra de la respuesta...",\n'
+                    '    "justificacion": "Explicación técnica detallada de por qué es la correcta y por qué las demás fallan..."\n'
+                    "  }\n"
+                    "]\n"
+                )
 
             test_json_str = self.tutor.client.generar_contenido(
                 prompt_test,
                 temperatura=0.2,
+                max_output_tokens=16384,
                 response_mime_type="application/json",
                 api_key_override=api_key_override,
             )
+            if not test_json_str:
+                console.print("[yellow]⚠ Reintentando generación de test con contexto sintetizado...[/yellow]")
+                prompt_test_reintento = prompt_test.replace(contexto_combinado[:35000], contexto_combinado[:20000])
+                test_json_str = self.tutor.client.generar_contenido(
+                    prompt_test_reintento,
+                    temperatura=0.2,
+                    max_output_tokens=16384,
+                    response_mime_type="application/json",
+                    api_key_override=api_key_override,
+                )
             if test_json_str:
                 preguntas_data = []
                 limpio = test_json_str.strip()
@@ -375,19 +340,21 @@ class GeneradorGuiaEstudio:
                         dir_examenes.mkdir(parents=True, exist_ok=True)
 
                         # Guardar JSON para el test interactivo
-                        ruta_test_json = dir_examenes / f"{slug_tema}_test.json"
+                        sufijo_test = "_vf_test" if es_vf else "_test"
+                        ruta_test_json = dir_examenes / f"{slug_tema}{sufijo_test}.json"
                         with open(ruta_test_json, "w", encoding="utf-8") as f:
                             json.dump(preguntas_data, f, indent=2, ensure_ascii=False)
                         resultados["test_json"] = ruta_test_json
 
                         # Guardar Markdown con respuestas ocultas
+                        titulo_examen = f"Autoevaluación Verdadero o Falso — {nombre_tema}" if es_vf else f"Test Oficial UNIR — {nombre_tema}"
                         md_examen = generar_markdown_examen(
                             asignatura=asignatura,
                             tema=nombre_tema,
-                            titulo=f"Test Oficial UNIR — {nombre_tema}",
+                            titulo=titulo_examen,
                             preguntas=preguntas_obj,
                         )
-                        ruta_test_md = dir_examenes / f"{slug_tema}_test.md"
+                        ruta_test_md = dir_examenes / f"{slug_tema}{sufijo_test}.md"
                         with open(ruta_test_md, "w", encoding="utf-8") as f:
                             f.write(md_examen)
                         resultados["test_md"] = ruta_test_md

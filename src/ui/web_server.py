@@ -36,6 +36,8 @@ from src.core.config import (
     GUIAS_DIR,
     EXAMENES_DIR,
     EJERCICIOS_DIR,
+    PROCESADO_DIR,
+    RESUMENES_CLASES_DIR,
 )
 from src.core.academic_structure import (
     PROGRAMAS,
@@ -428,14 +430,23 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
         dir_examenes = rutas["examenes"] / asig
         dir_mat_u = rutas["materiales"] / asig
 
-        guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
-        tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
+        guias_priv = [f.name for f in dir_guias.glob("*.md")] if dir_guias.exists() else []
+        dir_guias_glob = PROCESADO_DIR / "guias" / asig
+        guias_glob = [f.name for f in dir_guias_glob.glob("*.md")] if dir_guias_glob.exists() else []
+        guias = sorted(list(set(guias_priv + guias_glob)), key=_orden_natural_items)
+
+        tests_priv = [f.stem for f in dir_examenes.glob("*.json")] if dir_examenes.exists() else []
+        dir_examenes_glob = PROCESADO_DIR / "examenes" / asig
+        tests_glob = [f.stem for f in dir_examenes_glob.glob("*.json")] if dir_examenes_glob.exists() else []
+        tests = sorted(list(set(tests_priv + tests_glob)), key=_orden_natural_items)
 
         mats_base = [f.name for f in info["materiales"]]
         mats_privados = [f.name for f in dir_mat_u.glob("*.pdf")] if dir_mat_u.exists() else []
         mats_combinados = sorted(list(set(mats_base + mats_privados)), key=_orden_natural_items)
 
         resumen_progreso = tracker_u.obtener_resumen_asignatura(asig)
+        dir_res_priv = rutas["resumenes_clases"] / asig
+        dir_res_global = PROCESADO_DIR / "resumenes_clases" / asig
 
         resultado.append({
             "nombre": asig,
@@ -447,9 +458,12 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
             "clases": [
                 {
                     "nombre": t.stem,
+                    "nombre_archivo": t.name,
+                    "asignatura": asig,
                     "fecha": t.stem[:10] if len(t.stem) >= 10 and t.stem[:4].isdigit() else "Reciente",
                     "titulo": t.stem[11:] if len(t.stem) >= 11 and t.stem[:4].isdigit() else t.stem,
                     "archivo": str(t.relative_to(BASE_DIR)),
+                    "has_resumen": (dir_res_priv / f"{t.stem}_resumen.md").exists() or (dir_res_global / f"{t.stem}_resumen.md").exists(),
                 }
                 for t in info["transcripciones"]
             ],
@@ -469,8 +483,15 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
                 continue
             dir_guias = rutas["guias"] / asig
             dir_examenes = rutas["examenes"] / asig
-            guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
-            tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
+            guias_priv = [f.name for f in dir_guias.glob("*.md")] if dir_guias.exists() else []
+            dir_guias_glob = PROCESADO_DIR / "guias" / asig
+            guias_glob = [f.name for f in dir_guias_glob.glob("*.md")] if dir_guias_glob.exists() else []
+            guias = sorted(list(set(guias_priv + guias_glob)), key=_orden_natural_items)
+
+            tests_priv = [f.stem for f in dir_examenes.glob("*.json")] if dir_examenes.exists() else []
+            dir_examenes_glob = PROCESADO_DIR / "examenes" / asig
+            tests_glob = [f.stem for f in dir_examenes_glob.glob("*.json")] if dir_examenes_glob.exists() else []
+            tests = sorted(list(set(tests_priv + tests_glob)), key=_orden_natural_items)
             resultado.append({
                 "nombre": asig,
                 "programa_id": programa or "dam",
@@ -530,10 +551,26 @@ def api_acceso_movil(request: Request):
 
 
 @app.get("/api/contenido")
-def api_contenido(ruta: str, request: Request):
+def api_contenido(ruta: str, request: Request, asig: Optional[str] = None):
     """Devuelve el contenido en texto de cualquier guía (del espacio privado del usuario), transcripción o .docx."""
     ruta_normalizada = (ruta or "").strip().replace("\\", "/").lstrip("/")
     rutas_u = _rutas_usuario_request(request)
+
+    if "/" not in ruta_normalizada and (ruta_normalizada.endswith("_guia.md") or ruta_normalizada.endswith(".md")):
+        if asig:
+            ruta_normalizada = f"data/procesado/guias/{asig}/{ruta_normalizada}"
+        else:
+            encontrado = None
+            for f in rutas_u["guias"].glob(f"**/{ruta_normalizada}"):
+                encontrado = f
+                break
+            if not encontrado and (PROCESADO_DIR / "guias").exists():
+                for f in (PROCESADO_DIR / "guias").glob(f"**/{ruta_normalizada}"):
+                    encontrado = f
+                    break
+            if encontrado:
+                ruta_normalizada = str(encontrado.relative_to(BASE_DIR)).replace("\\", "/")
+
     if ruta_normalizada.startswith("data/procesado/guias/"):
         rel_guia = ruta_normalizada[len("data/procesado/guias/"):]
         ruta_personal = rutas_u["guias"] / rel_guia
@@ -542,6 +579,8 @@ def api_contenido(ruta: str, request: Request):
         rel_res = ruta_normalizada[len("data/procesado/resumenes_clases/"):]
         ruta_personal = rutas_u["resumenes_clases"] / rel_res
         ruta = str(ruta_personal.relative_to(BASE_DIR))
+    else:
+        ruta = ruta_normalizada
 
     archivo = ruta_segura_lectura(ruta, extensiones={".md", ".txt", ".json", ".docx"})
     if archivo.suffix.lower() == ".docx":
@@ -551,6 +590,216 @@ def api_contenido(ruta: str, request: Request):
         return {"contenido": contenido, "nombre": archivo.name}
     with open(archivo, "r", encoding="utf-8") as f:
         return {"contenido": f.read(), "nombre": archivo.name}
+
+
+TEMAS_TEXTO_CACHE_DIR = PROCESADO_DIR / "temas_texto"
+TEMAS_TEXTO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def extraer_ideas_clave_unir_pdf(ruta_pdf: Path) -> str:
+    """
+    Extrae y formatea el texto íntegro del tema oficial de un PDF de UNIR reconstruyendo
+    párrafos fluidos, uniendo líneas naturales, limpiando viñetas y filtrando cabeceras/pies.
+    """
+    import re
+    try:
+        import pymupdf
+        doc = pymupdf.open(str(ruta_pdf))
+        paginas_reconstruidas = []
+        empezado = False
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            raw_text_full = (page.get_text() or "").lower()
+
+            # Descartar portadas, esquemas e índices
+            if not empezado:
+                if "índice" in raw_text_full or "esquema" in raw_text_full or "indice" in raw_text_full:
+                    continue
+
+            rect = pymupdf.Rect(0, 75, page.rect.width, 775)
+            raw_blocks = page.get_text("blocks", clip=rect)
+
+            blocks = []
+            bullet_y_positions = set()
+
+            for b in raw_blocks:
+                x0, y0, x1, y1, text, bno, btype = b
+                if btype != 0:
+                    continue
+                t = (text or "").strip()
+                if not t:
+                    continue
+                if t in ("▸", "•", "-", "▪", "◦", "►", "–", "*"):
+                    bullet_y_positions.add(round(y0, 1))
+                    continue
+                if re.search(r"^(?:©\s*Universidad|Tema\s*\d+\.\s*Ideas|Ideas\s*clave$|\d+$)", t, re.I):
+                    continue
+                if "Universidad Internacional de La Rioja" in t:
+                    continue
+                if re.search(r"^[A-Za-zÁÉÍÓÚÑa-záéíóúñ\s]{3,35}\s+\d{1,3}$", t):
+                    continue
+                blocks.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1, "text": t})
+
+            if not blocks:
+                continue
+
+            blocks.sort(key=lambda b: (round(b["y0"], -1), b["x0"]))
+
+            # Detectar inicio del primer apartado (ej. 1.1, 2.1, 3.1)
+            if not empezado:
+                idx_start = -1
+                for i, b in enumerate(blocks):
+                    if re.match(r"^\d+\.1\b", b["text"]):
+                        idx_start = i
+                        empezado = True
+                        break
+                if not empezado:
+                    continue
+                blocks = blocks[idx_start:]
+
+            paragraphs = []
+            current_p = []
+            current_is_bullet = False
+            prev_b = None
+
+            for b in blocks:
+                text = b["text"].replace("\n", " ").strip()
+                text = re.sub(r"\s{2,}", " ", text)
+
+                is_heading = bool(re.match(r"^\d+\.\d+(?:\.\d+)?\.?\s+[A-ZÁÉÍÓÚÑ]", text))
+                is_bullet = any(abs(b["y0"] - by) < 10 for by in bullet_y_positions) or (b["x0"] > 110 and not is_heading)
+
+                if is_heading:
+                    if current_p:
+                        prefix = "* " if current_is_bullet else ""
+                        paragraphs.append(prefix + " ".join(current_p))
+                        current_p = []
+                    paragraphs.append(f"## {text}")
+                    prev_b = b
+                    current_is_bullet = False
+                    continue
+
+                if prev_b is None:
+                    current_p.append(text)
+                    current_is_bullet = is_bullet
+                    prev_b = b
+                    continue
+
+                gap = b["y0"] - prev_b["y1"]
+
+                if is_bullet:
+                    if not current_is_bullet or gap > 13:
+                        if current_p:
+                            prefix = "* " if current_is_bullet else ""
+                            paragraphs.append(prefix + " ".join(current_p))
+                            current_p = []
+                        current_is_bullet = True
+                    current_p.append(text)
+                else:
+                    if current_is_bullet:
+                        paragraphs.append("* " + " ".join(current_p))
+                        current_p = [text]
+                        current_is_bullet = False
+                    elif gap > 14:
+                        paragraphs.append(" ".join(current_p))
+                        current_p = [text]
+                    else:
+                        current_p.append(text)
+
+                prev_b = b
+
+            if current_p:
+                prefix = "* " if current_is_bullet else ""
+                paragraphs.append(prefix + " ".join(current_p))
+
+            if paragraphs:
+                if paginas_reconstruidas and paragraphs:
+                    ult_p = paginas_reconstruidas[-1][-1]
+                    prim_p = paragraphs[0]
+                    if not ult_p.startswith("#") and not prim_p.startswith("#") and not ult_p.startswith("*") and not prim_p.startswith("*"):
+                        if not re.search(r"[\.\!\?\:]$", ult_p.strip()):
+                            paginas_reconstruidas[-1][-1] = ult_p + " " + prim_p
+                            paragraphs = paragraphs[1:]
+
+                if paragraphs:
+                    paginas_reconstruidas.append(paragraphs)
+
+        lineas_finales = []
+        for pag in paginas_reconstruidas:
+            lineas_finales.append("\n\n".join(pag))
+
+        texto_total = "\n\n".join(lineas_finales)
+        texto_total = re.sub(r"\n{3,}", "\n\n", texto_total)
+
+        if not texto_total.strip():
+            # Fallback para documentos sin epígrafes 1.1 (ej. Bootcamp, guías prácticas, fastbooks)
+            paginas_fb = []
+            for page in doc:
+                t = page.get_text()
+                if t and len(t.strip()) > 30:
+                    paginas_fb.append(t.strip())
+            texto_total = "\n\n---\n\n".join(paginas_fb)
+
+        return texto_total.strip()
+    except Exception as e:
+        from pypdf import PdfReader
+        reader = PdfReader(str(ruta_pdf))
+        return "\n\n".join(p.extract_text() or "" for p in reader.pages)
+
+
+@app.get("/api/tema/texto")
+def api_tema_texto(asig: str, pdf: str, request: Request):
+    """
+    Devuelve el texto completo y estructurado del tema oficial (Ideas clave)
+    extraído del PDF oficial, con caché en disco para respuesta instantánea.
+    """
+    asig_limpia = asig.strip()
+    pdf_limpio = pdf.strip()
+    slug_pdf = Path(pdf_limpio).stem
+    cache_asig_dir = TEMAS_TEXTO_CACHE_DIR / asig_limpia
+    cache_asig_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_asig_dir / f"{slug_pdf}.md"
+
+    if cache_file.exists() and cache_file.stat().st_size > 200:
+        return {
+            "contenido": cache_file.read_text(encoding="utf-8"),
+            "nombre": slug_pdf,
+            "origen": "cache"
+        }
+
+    rutas_u = _rutas_usuario_request(request)
+    candidatos = [
+        rutas_u["materiales"] / asig_limpia / pdf_limpio,
+        MATERIALES_DIR / asig_limpia / pdf_limpio,
+    ]
+    pdf_path = next((p for p in candidatos if p.exists() and p.is_file()), None)
+
+    if not pdf_path:
+        # Búsqueda por coincidencia parcial de nombre
+        dir_mat = MATERIALES_DIR / asig_limpia
+        if dir_mat.exists():
+            for f in dir_mat.glob("*.pdf"):
+                if slug_pdf.lower() in f.stem.lower() or f.stem.lower() in slug_pdf.lower():
+                    pdf_path = f
+                    break
+
+    if not pdf_path or not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="No se encontró el PDF oficial del tema.")
+
+    try:
+        texto = extraer_ideas_clave_unir_pdf(pdf_path)
+        if not texto or len(texto) < 100:
+            texto = f"# 📄 {slug_pdf}\n\n*(Documento oficial cargado desde PDF. No se detectó texto seleccionable estructurado).*"
+        cache_file.write_text(texto, encoding="utf-8")
+        return {
+            "contenido": texto,
+            "nombre": slug_pdf,
+            "origen": "extraido"
+        }
+    except Exception as e:
+        logger.error(f"Error procesando PDF del tema {pdf_path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al extraer texto del PDF: {e}")
 
 
 @app.get("/api/archivo-raw")
@@ -606,6 +855,18 @@ def api_obtener_test(asignatura: str, test_name: str, request: Request):
                 if norm(f.stem) == stem_norm:
                     archivo = f
                     break
+
+        if not archivo.exists() or not archivo.is_file() or archivo.stat().st_size == 0:
+            dir_global = EXAMENES_DIR / asig_limpia
+            archivo_global = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
+            if archivo_global.exists() and archivo_global.is_file() and archivo_global.stat().st_size > 0:
+                archivo = archivo_global
+            elif dir_global.exists():
+                stem_norm = norm(stem)
+                for f in dir_global.glob("*.json"):
+                    if norm(f.stem) == stem_norm:
+                        archivo = f
+                        break
 
     if not archivo.exists() or not archivo.is_file() or archivo.stat().st_size == 0:
         raise HTTPException(status_code=404, detail="Test no encontrado")
@@ -729,7 +990,7 @@ class GenerarGuiaRequest(BaseModel):
     nombre_tema: str
     archivo_pdf: Optional[str] = None
     profundidad: Optional[str] = "robusta"
-    num_preguntas: Optional[int] = 15
+    num_preguntas: Optional[int] = 20
     tipo_generacion: Optional[str] = "ambos"
     api_key: Optional[str] = None
 
@@ -746,11 +1007,11 @@ def _buscar_pdf_relevante(dir_mats: Path, nombre_tema: str) -> Optional[Path]:
         return None
 
     # 1. Coincidencia explícita por número de tema/unidad con límite de palabra (evita Tema 1 -> Tema 10)
-    num_match = re.search(r"(?:tema|ud|unidad|bloque|modulo|módulo)\s*0*(\d+)\b|\b0*(\d+)\b", nombre_tema.lower())
+    num_match = re.search(r"(?:tema|ud|unidad|unit|bloque|modulo|módulo)\s*0*(\d+)\b|\b0*(\d+)\b", nombre_tema.lower())
     if num_match:
         num = num_match.group(1) or num_match.group(2)
         patron_tema = re.compile(
-            rf"(?:^|[_\s\-.])(?:tema|ud|unidad|bloque|m[oó]dulo|t)[\s_\-.]*0*{num}(?!\d)(?:\b|[_\s\-.])|^0*{num}(?!\d)[_\s\-.]",
+            rf"(?:^|[_\s\-.])(?:tema|ud|unidad|unit|bloque|m[oó]dulo|t|u)[\s_\-.]*0*{num}(?!\d)(?:\b|[_\s\-.])|^0*{num}(?!\d)[_\s\-.]",
             re.IGNORECASE,
         )
         for f in pdfs:
@@ -824,9 +1085,17 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
             status_code=400,
             detail="No se encontró un PDF ni videoclase que coincida con ese nombre de tema. Selecciona el documento PDF en el desplegable.",
         )
+
+    nombre_tema_proc = (req.nombre_tema or "").strip()
+    ref_pdf = str(ruta_pdf.name if ruta_pdf else (req.archivo_pdf or ""))
+    m_pdf = re.match(r"^(Tema\s*\d+[\._\s-]*)\s*(.*)", ref_pdf, re.IGNORECASE)
+    if m_pdf and not re.match(r"^Tema\s*\d+", nombre_tema_proc, re.IGNORECASE):
+        prefijo_limpio = m_pdf.group(1).rstrip("._ -")
+        nombre_tema_proc = f"{prefijo_limpio}. {nombre_tema_proc}"
+
     res = generador.generar_paquete_tema(
         asignatura=asig_limpia,
-        nombre_tema=req.nombre_tema,
+        nombre_tema=nombre_tema_proc,
         ruta_pdf=ruta_pdf,
         ruta_transcripcion=ruta_trans,
         profundidad=req.profundidad or "media",
@@ -837,8 +1106,30 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
         examenes_dir=rutas_u["examenes"],
     )
 
+    _CACHE_CATALOGO.clear()
+
     tiene_guia = bool(res.get("guia"))
     tiene_test = bool(res.get("test_json"))
+
+    if tiene_guia and res.get("guia") and Path(res["guia"]).exists():
+        try:
+            dest_glob = PROCESADO_DIR / "guias" / asig_limpia / Path(res["guia"]).name
+            dest_glob.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(res["guia"], dest_glob)
+        except Exception:
+            pass
+
+    if tiene_test and res.get("test_json") and Path(res["test_json"]).exists():
+        try:
+            dest_glob_t = PROCESADO_DIR / "examenes" / asig_limpia / Path(res["test_json"]).name
+            dest_glob_t.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(res["test_json"], dest_glob_t)
+            if res.get("test_md") and Path(res["test_md"]).exists():
+                shutil.copy2(res["test_md"], dest_glob_t.with_suffix(".md"))
+        except Exception:
+            pass
 
     if not tiene_guia and not tiene_test:
         raise HTTPException(
@@ -851,10 +1142,18 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
         if res.get(k):
             respaldar_archivo_en_hf_async(Path(res[k]))
 
+    guia_contenido = ""
+    if tiene_guia and Path(res["guia"]).exists():
+        try:
+            guia_contenido = Path(res["guia"]).read_text(encoding="utf-8")
+        except Exception:
+            guia_contenido = ""
+
     return {
         "status": "ok",
         "resultado": {
             "guia": str(res.get("guia")) if tiene_guia else None,
+            "guia_contenido": guia_contenido,
             "test_json": str(res.get("test_json")) if tiene_test else None,
             "test_md": str(res.get("test_md")) if res.get("test_md") else None,
         },
@@ -1347,6 +1646,50 @@ def api_clase_cues(asig: str, nombre_archivo: str):
             pass
     f_md = ruta_dentro_de(TRANSCRIPCIONES_DIR, asig_limpia, f"{stem}.md")
     if f_md.exists():
+        try:
+            content = f_md.read_text(encoding="utf-8")
+            import re
+            speaker = "Profesor"
+            m_spk = re.search(r"\*\*🗣️\s*([^:]+):\*\*", content)
+            if m_spk:
+                speaker = m_spk.group(1).strip()
+            lines = [l for l in content.split("\n") if not l.startswith("#") and not l.startswith(">") and not l.startswith("---")]
+            clean_text = re.sub(r"^\*\*🗣️\s*[^:]+:\*\*\s*", "", " ".join(lines))
+            sentences = re.split(r"(?<=[.?!])\s+", clean_text)
+            cues = []
+            chunk = []
+            cur_len = 0
+            sec = 0
+            for s in sentences:
+                if not s.strip():
+                    continue
+                chunk.append(s)
+                cur_len += len(s)
+                if cur_len >= 550:
+                    mins = sec // 60
+                    secs = sec % 60
+                    cues.append({
+                        "start": sec,
+                        "start_str": f"{mins:02d}:{secs:02d}",
+                        "speaker": speaker,
+                        "text": " ".join(chunk)
+                    })
+                    chunk = []
+                    cur_len = 0
+                    sec += 120
+            if chunk:
+                mins = sec // 60
+                secs = sec % 60
+                cues.append({
+                    "start": sec,
+                    "start_str": f"{mins:02d}:{secs:02d}",
+                    "speaker": speaker,
+                    "text": " ".join(chunk)
+                })
+            if cues:
+                return cues
+        except Exception:
+            pass
         return [{"start_str": "00:00", "speaker": "Clase", "text": f_md.read_text(encoding="utf-8")[:4000]}]
     return []
 
@@ -1416,6 +1759,7 @@ def api_resumen_clase(req: ResumenClaseRequest, request: Request):
         raise HTTPException(status_code=500, detail="No se pudo generar el resumen con la IA.")
 
     cache_file.write_text(resumen, encoding="utf-8")
+    _CACHE_CATALOGO.clear()
     try:
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
         respaldar_archivo_en_hf_async(cache_file)
@@ -2565,7 +2909,10 @@ async def api_tts(req: TtsRequest):
 # --- FRONTEND HTML SPA CON SIDEBAR DE SECCIONES ---
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard_html():
+def dashboard_html(response: Response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return """<!DOCTYPE html>
 <html lang="es" class="dark">
 <head>
@@ -2649,9 +2996,10 @@ def dashboard_html():
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.7/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     html, body { overflow-x: hidden; max-width: 100vw; width: 100%; }
@@ -2691,17 +3039,21 @@ def dashboard_html():
 
     /* Ajuste responsivo de texto para evitar cortes y barras horizontales */
     .markdown-content {
-      word-break: break-word;
-      overflow-wrap: anywhere;
+      word-break: normal;
+      overflow-wrap: break-word;
       white-space: normal;
-      line-height: 1.7;
+      line-height: 1.68;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
     }
-    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: rgb(var(--c-sky-400)); line-height: 1.4; margin-top: 1.4rem; margin-bottom: 0.8rem; word-break: break-word; }
-    .markdown-content h2 { font-size: 1.25rem; font-weight: 700; color: rgb(var(--c-indigo-400)); line-height: 1.4; margin-top: 1.2rem; margin-bottom: 0.6rem; word-break: break-word; }
-    .markdown-content h3 { font-size: 1.1rem; font-weight: 600; color: rgb(var(--c-indigo-300)); line-height: 1.35; margin-top: 1rem; margin-bottom: 0.5rem; word-break: break-word; }
-    .markdown-content p { margin-bottom: 0.9rem; line-height: 1.75; color: #e2e8f0; word-break: break-word; overflow-wrap: anywhere; }
-    .markdown-content ul, .markdown-content ol { margin-bottom: 1rem; padding-left: 1.5rem; line-height: 1.65; word-break: break-word; }
-    .markdown-content li { margin-bottom: 0.35rem; word-break: break-word; }
+    .markdown-content h1, .markdown-content h2, .markdown-content h3 { scroll-margin-top: 2.2rem; }
+    .markdown-content h1 { font-size: 1.45rem; font-weight: 800; color: rgb(var(--c-cyan-400)); line-height: 1.35; margin-top: 2rem; margin-bottom: 0.85rem; word-break: normal; }
+    .markdown-content h2 { font-size: 1.35rem; font-weight: 800; color: rgb(var(--c-cyan-300)); line-height: 1.35; margin-top: 2rem; margin-bottom: 0.85rem; word-break: normal; }
+    .markdown-content h3 { font-size: 1.15rem; font-weight: 700; color: rgb(var(--c-sky-300)); line-height: 1.35; margin-top: 1.5rem; margin-bottom: 0.6rem; word-break: normal; }
+    .markdown-content p { margin-bottom: 1.25rem; line-height: 1.68; color: rgb(var(--c-gray-200)); word-break: normal; overflow-wrap: break-word; font-size: inherit; }
+    .markdown-content ul { list-style-type: disc; margin-bottom: 1.35rem; padding-left: 1.75rem; line-height: 1.68; color: rgb(var(--c-gray-200)); word-break: normal; }
+    .markdown-content ol { list-style-type: decimal; margin-bottom: 1.35rem; padding-left: 1.75rem; line-height: 1.68; color: rgb(var(--c-gray-200)); word-break: normal; }
+    .markdown-content li { margin-bottom: 0.55rem; word-break: normal; color: rgb(var(--c-gray-200)); line-height: 1.68; font-size: inherit; }
+    .markdown-content strong { color: rgb(var(--c-gray-50)); font-weight: 700; }
     
     /* Bloques de código y citas: auto-wrap para no forzar scroll horizontal */
     .markdown-content pre {
@@ -2789,6 +3141,87 @@ def dashboard_html():
       .glass { backdrop-filter: blur(10px); }
       .markdown-content pre { font-size: 0.78rem; padding: 0.75rem; }
       .markdown-content table { font-size: 0.75rem; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    }
+    /* Estilo de lectura oficial UNIR (Modo Papel / Lectura Diurna) */
+    .markdown-content-unir-light {
+      color: #374151;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      line-height: 1.68;
+    }
+    .markdown-content-unir-light h1, .markdown-content-unir-light h2, .markdown-content-unir-light h3 {
+      scroll-margin-top: 2.2rem;
+    }
+    .markdown-content-unir-light h1, .markdown-content-unir-light h2 {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #111827;
+      line-height: 1.35;
+      margin-top: 2.2rem;
+      margin-bottom: 0.9rem;
+      letter-spacing: -0.015em;
+      border-bottom: none;
+    }
+    .markdown-content-unir-light h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #1f2937;
+      line-height: 1.35;
+      margin-top: 1.6rem;
+      margin-bottom: 0.65rem;
+    }
+    .markdown-content-unir-light p {
+      margin-bottom: 1.25rem;
+      line-height: 1.68;
+      color: #374151;
+      font-size: inherit;
+      text-align: left;
+    }
+    .markdown-content-unir-light ul {
+      list-style-type: disc;
+      margin-bottom: 1.35rem;
+      padding-left: 1.75rem;
+      color: #374151;
+      line-height: 1.68;
+    }
+    .markdown-content-unir-light ol {
+      list-style-type: decimal;
+      margin-bottom: 1.35rem;
+      padding-left: 1.75rem;
+      color: #374151;
+      line-height: 1.68;
+    }
+    .markdown-content-unir-light li {
+      margin-bottom: 0.55rem;
+      color: #374151;
+      font-size: inherit;
+      line-height: 1.68;
+    }
+    .markdown-content-unir-light strong {
+      color: #111827;
+      font-weight: 700;
+    }
+    .markdown-content-unir-light code {
+      background: #f1f5f9;
+      color: #0f5b9e;
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-size: 0.9rem;
+    }
+    .markdown-content-unir-light pre {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #1e293b;
+      padding: 1rem;
+      border-radius: 0.75rem;
+      margin-bottom: 1.25rem;
+      overflow-x: auto;
+    }
+    .markdown-content-unir-light blockquote {
+      border-left: 4px solid #0f5b9e;
+      padding-left: 1rem;
+      color: #475569;
+      font-style: italic;
+      margin-bottom: 1.25rem;
     }
   </style>
 </head>
@@ -2900,29 +3333,7 @@ def dashboard_html():
             </a>
           </div>
 
-          <div class="flex items-center group/item">
-            <button @click="irASeccion('clases')"
-                    :class="tab === 'clases' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-              <i class="fa-solid fa-video w-4 text-center text-amber-400"></i>
-              <span>Videoclases y Transcripciones</span>
-            </button>
-            <a href="/?tab=clases" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
 
-          <div class="flex items-center group/item">
-            <button @click="irASeccion('flashcards')"
-                    :class="tab === 'flashcards' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center space-x-2.5">
-              <i class="fa-solid fa-clone w-4 text-center text-purple-400"></i>
-              <span>Flashcards (Repaso Activo)</span>
-            </button>
-            <a href="/?tab=flashcards" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-purple-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
 
           <div class="flex items-center group/item">
             <button @click="irASeccion('progreso')"
@@ -3647,7 +4058,7 @@ def dashboard_html():
                         <i class="fa-solid fa-book-open text-cyan-400 text-[11px]"></i>
                         <span x-text="(asig.guias?.length || 0)"></span>
                       </div>
-                      <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Guías</div>
+                      <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Resúmenes</div>
                     </div>
                     <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
                       <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
@@ -3664,7 +4075,7 @@ def dashboard_html():
                       <i class="fa-solid fa-folder-open text-cyan-400 text-[11px]"></i>
                       <span>Temario</span>
                     </button>
-                    <button @click="abrirGeneradorDirecto(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold transition border border-emerald-500/30 flex items-center justify-center space-x-1.5" title="Generar Guía o Test IA directamente">
+                    <button @click="abrirGeneradorDirecto(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold transition border border-emerald-500/30 flex items-center justify-center space-x-1.5" title="Generar Resumen o Test IA directamente">
                       <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
                       <span>Crear IA</span>
                     </button>
@@ -3712,18 +4123,6 @@ def dashboard_html():
                   </div>
                   <p class="text-xs text-gray-300 mt-1" x-text="temaVisualAsignatura(asigSeleccionada?.nombre).subtitulo"></p>
                 </div>
-              </div>
-              
-              <div class="flex flex-wrap items-center gap-2">
-                <button @click="abrirModalNuevoItemAgenda('Tema', asigSeleccionada?.nombre, '', 'calendario')" class="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-700 rounded-xl text-xs font-semibold text-gray-200 transition flex items-center space-x-1.5" title="Añadir clase, tema o tarea a esta asignatura">
-                  <i class="fa-solid fa-calendar-plus text-cyan-400"></i><span>+ Añadir al Calendario</span>
-                </button>
-                <button @click="modalGenerador = true" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl text-xs font-bold text-gray-900 hover:shadow-lg hover:shadow-emerald-500/20 transition flex items-center space-x-2">
-                  <i class="fa-solid fa-wand-magic-sparkles"></i><span>Generar Guía / Test IA</span>
-                </button>
-                <button @click="abrirChatConAsignatura(asigSeleccionada?.nombre)" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 rounded-xl text-xs font-semibold hover:shadow-lg hover:shadow-cyan-500/20 transition flex items-center space-x-2">
-                  <i class="fa-solid fa-robot"></i><span>Consultar con NOVA</span>
-                </button>
               </div>
             </div>
           </div>
@@ -3936,7 +4335,7 @@ def dashboard_html():
                       <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-bold"
                             x-text="(unidadesUnificadasAsignaturaActual.temas?.length || 0) + ' temas'"></span>
                     </div>
-                    <p class="text-xs text-gray-400 mt-0.5">Cada tema reúne en un solo lugar su temario oficial, su guía resumen con IA y su simulacro tipo test</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Cada tema reúne en un solo lugar su temario oficial, su resumen oficial con IA y su simulacro tipo test</p>
                   </div>
                 </div>
 
@@ -3966,7 +4365,7 @@ def dashboard_html():
                       <div class="flex items-center justify-between gap-2 text-[10px] mb-2">
                         <div class="flex items-center gap-2 flex-wrap">
                           <span class="font-black px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono uppercase tracking-wider"
-                                x-text="'Tema ' + tm.numero"></span>
+                                x-text="(tm.prefijo || 'Tema') + ' ' + tm.numero"></span>
 
                           <!-- SELECTOR DE ESTADO INTERACTIVO: Por hacer / En proceso / Hecho -->
                           <div class="relative" x-data="{ openMenu: false }" @click.outside="openMenu = false">
@@ -4008,57 +4407,50 @@ def dashboard_html():
                           </div>
                         </div>
 
-                        <!-- RECURSOS DISPONIBLES (PDF / GUÍA IA / TEST) -->
+                        <!-- RECURSOS DISPONIBLES (PDF / RESUMEN IA / TEST) -->
                         <div class="flex items-center gap-1.5 font-bold shrink-0">
                           <span x-show="tm.pdf" class="text-[9px] px-1.5 py-0.2 rounded bg-black/40 text-gray-400">PDF</span>
-                          <span x-show="tm.guia" class="text-[9px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300">Guía IA</span>
+                          <span x-show="tm.guia" class="text-[9px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300">Resumen IA</span>
                           <span x-show="tm.test" class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">Test</span>
                         </div>
                       </div>
-                      <h4 class="text-sm font-bold text-white group-hover:text-cyan-200 transition break-words" x-text="tm.titulo"></h4>
+                      <h4 @click="abrirVisorTema(tm)" class="text-sm font-bold text-white group-hover:text-cyan-200 transition break-words cursor-pointer" x-text="tm.titulo"></h4>
                     </div>
 
-                    <!-- BOTONES UNIFICADOS DEL TEMA (PDF | GUÍA IA | CALENDARIO | SIMULACRO TEST) -->
+                    <!-- BOTONES UNIFICADOS DEL TEMA (RESUMEN IA | ENTRENAMIENTOS | SIMULACRO TEST) -->
                     <div class="pt-2.5 border-t border-gray-800/80 flex flex-wrap items-center gap-2">
-                      <!-- 1. VER PDF OFICIAL -->
-                      <button x-show="tm.pdf"
-                              @click="abrirPdf('data/materiales/' + asigSeleccionada.nombre + '/' + tm.pdf, tm.pdf)"
-                              class="px-2.5 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white text-xs font-semibold transition flex items-center gap-1.5">
-                        <i class="fa-regular fa-file-pdf text-rose-400 text-xs"></i>
-                        <span>PDF Oficial</span>
-                      </button>
-
-                      <!-- 2. GUÍA DE ESTUDIO IA -->
+                      <!-- 1. RESUMEN DE ESTUDIO IA -->
                       <template x-if="tm.guia">
                         <div class="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/15 overflow-hidden shadow-sm">
-                          <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + tm.guia)"
+                          <button @click="abrirVisorTema(tm, true)"
                                   class="px-2.5 py-1.5 hover:bg-sky-500/25 text-sky-300 text-xs font-bold transition flex items-center gap-1.5"
-                                  title="Abrir y leer Guía de Estudio">
-                            <i class="fa-solid fa-book-open text-sky-400 text-xs"></i>
-                            <span>Guía IA</span>
+                                  title="Abrir Resumen con IA estilo UNIR">
+                            <i class="fa-solid fa-file-lines text-sky-400 text-xs"></i>
+                            <span>Resumen IA</span>
                           </button>
                           <button @click.stop="rehacerGuiaTema(tm)"
                                   class="px-2 py-1.5 hover:bg-sky-500/35 text-sky-300/80 hover:text-white text-[11px] border-l border-sky-500/30 transition"
-                                  title="Rehacer / Regenerar Guía con IA">
+                                  title="Rehacer / Regenerar Resumen con IA">
                             <i class="fa-solid fa-arrows-rotate"></i>
                           </button>
                           <button @click.stop="eliminarGuiaTema(tm)"
                                   class="px-2 py-1.5 hover:bg-rose-500/30 text-sky-300/80 hover:text-rose-300 text-[11px] border-l border-sky-500/30 transition"
-                                  title="Eliminar Guía de Estudio">
+                                  title="Eliminar Resumen con IA">
                             <i class="fa-solid fa-trash-can"></i>
                           </button>
                         </div>
                       </template>
                       <template x-if="!tm.guia && tm.pdf">
-                        <button @click="generarGuiaDesdePdf(tm.pdf, 'solo_guia')"
-                                class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-sky-500/20 text-gray-400 hover:text-sky-300 text-xs font-medium transition flex items-center gap-1.5"
-                                title="Crear guía resumen con Inteligencia Artificial">
-                          <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
-                          <span>Crear Guía</span>
+                        <button @click="generarIaDirectaTema(tm, 'solo_guia')"
+                                :disabled="temasGenerando[tm.numero]"
+                                class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-sky-500/20 text-gray-400 hover:text-sky-300 text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-60"
+                                title="Crear resumen oficial con Inteligencia Artificial estilo UNIR (Plan Robusto)">
+                          <i :class="temasGenerando[tm.numero] === 'solo_guia' ? 'fa-solid fa-spinner fa-spin text-sky-400' : 'fa-solid fa-wand-magic-sparkles text-[10px]'"></i>
+                          <span x-text="temasGenerando[tm.numero] === 'solo_guia' ? 'Generando...' : 'Crear Resumen'"></span>
                         </button>
                       </template>
 
-                      <!-- 3. ENTRENAMIENTOS DE CÓDIGO (EJERCICIOS OFICIALES DEL PDF) -->
+                      <!-- 2. ENTRENAMIENTOS DE CÓDIGO (EJERCICIOS OFICIALES DEL PDF) -->
                       <button x-show="tm.pdf"
                               @click="abrirModalEntrenamientos(asigSeleccionada.nombre, tm.numero, tm.titulo)"
                               class="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
@@ -4067,26 +4459,15 @@ def dashboard_html():
                         <span>Entrenamientos</span>
                       </button>
 
-                      <!-- 3. CALENDARIO / PLANIFICACIÓN -->
-                      <template x-if="tm.fecha_dia">
-                        <button @click="tm.eventoAgenda ? abrirModalItemAgenda(tm.eventoAgenda) : planificarTemaEnCalendario(tm)"
-                                class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 group/cal"
-                                :title="'Planificado para el ' + formatearFechaDDMMAAAA(tm.fecha_dia) + '. Clic para editar o mover en el calendario'">
-                          <i class="fa-regular fa-calendar-check text-amber-400 text-xs"></i>
-                          <span x-text="formatearFechaDDMMAAAA(tm.fecha_dia)"></span>
-                          <i class="fa-solid fa-pen text-[9px] opacity-60 group-hover/cal:opacity-100"></i>
-                        </button>
-                      </template>
-                      <template x-if="!tm.fecha_dia">
-                        <button @click="planificarTemaEnCalendario(tm)"
-                                class="px-2.5 py-1.5 rounded-xl bg-gray-800 hover:bg-amber-500/20 border border-gray-700/80 hover:border-amber-500/40 text-gray-300 hover:text-amber-300 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm"
-                                title="Añadir a mi calendario / planificar fecha de estudio (o arrastra la tarjeta al día del calendario arriba)">
-                          <i class="fa-regular fa-calendar-plus text-amber-400 text-xs"></i>
-                          <span>+ Calendario</span>
-                        </button>
-                      </template>
+                      <!-- 3. FLASHCARDS DE REPASO ACTIVO DEL TEMA -->
+                      <button @click="abrirFlashcardsDesdeTarjeta(tm)"
+                              class="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                              title="Abrir Flashcards y tarjetas de repaso activo para este tema">
+                        <i class="fa-solid fa-clone text-purple-400 text-xs"></i>
+                        <span>Flashcards</span>
+                      </button>
 
-                      <!-- 4. SIMULACRO DE EXAMEN (TEST) -->
+                      <!-- 3. SIMULACRO DE EXAMEN (TEST) -->
                       <template x-if="tm.test">
                         <div class="inline-flex items-center rounded-xl border border-emerald-500/40 bg-emerald-500/20 overflow-hidden shadow-sm ml-auto">
                           <button @click="iniciarTestWeb(asigSeleccionada.nombre, tm.test)"
@@ -4097,7 +4478,7 @@ def dashboard_html():
                           </button>
                           <button @click.stop="rehacerTestTema(tm)"
                                   class="px-2 py-1.5 hover:bg-emerald-500/35 text-emerald-300/80 hover:text-white text-[11px] border-l border-emerald-500/35 transition"
-                                  title="Rehacer / Regenerar Test con IA (Nuevas preguntas)">
+                                  title="Rehacer / Regenerar Test con IA (20 preguntas, Plan Robusto)">
                             <i class="fa-solid fa-arrows-rotate"></i>
                           </button>
                           <button @click.stop="eliminarTestTema(tm)"
@@ -4108,11 +4489,12 @@ def dashboard_html():
                         </div>
                       </template>
                       <template x-if="!tm.test && tm.pdf">
-                        <button @click="generarGuiaDesdePdf(tm.pdf, 'solo_test')"
-                                class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-300 text-xs font-medium transition flex items-center gap-1.5 ml-auto"
-                                title="Crear test tipo examen con Inteligencia Artificial">
-                          <i class="fa-solid fa-plus text-[10px]"></i>
-                          <span>Crear Test</span>
+                        <button @click="generarIaDirectaTema(tm, 'solo_test', { abrirTestDirecto: true })"
+                                :disabled="temasGenerando[tm.numero]"
+                                class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-300 text-xs font-medium transition flex items-center gap-1.5 ml-auto disabled:opacity-60"
+                                title="Crear examen de 20 preguntas con Inteligencia Artificial (Plan Robusto)">
+                          <i :class="temasGenerando[tm.numero] === 'solo_test' ? 'fa-solid fa-spinner fa-spin text-emerald-400' : 'fa-solid fa-plus text-[10px]'"></i>
+                          <span x-text="temasGenerando[tm.numero] === 'solo_test' ? 'Generando (20p)...' : 'Crear Test'"></span>
                         </button>
                       </template>
                     </div>
@@ -4148,22 +4530,43 @@ def dashboard_html():
                   <i class="fa-solid fa-video text-amber-400"></i>
                   <span>Videoclases Oficiales y Transcripciones</span>
                 </h3>
-                <span class="text-[11px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-semibold" x-text="asigSeleccionada?.clases.length + ' clases'"></span>
+                <span class="text-[11px] bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-full font-semibold border border-amber-500/20" x-text="asigSeleccionada?.clases.length + ' clases'"></span>
               </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 <template x-for="clase in asigSeleccionada?.clases" :key="clase.nombre">
-                  <div class="glass-card p-3 rounded-xl hover:border-amber-500/30 transition flex items-center justify-between">
-                    <div class="overflow-hidden pr-2 flex-1">
-                      <p class="text-[10px] text-amber-400 font-bold font-mono" x-text="formatearFechaDDMMAAAA(clase.fecha)"></p>
-                      <h5 class="text-xs font-medium text-white break-words line-clamp-2" x-text="clase.titulo"></h5>
+                  <div class="glass-card p-4 rounded-2xl hover:border-amber-500/30 transition flex flex-col justify-between space-y-3">
+                    <div class="space-y-1.5">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-[10px] text-amber-400 font-bold font-mono flex items-center space-x-1">
+                          <i class="fa-regular fa-calendar text-[10px]"></i>
+                          <span x-text="formatearFechaDDMMAAAA(clase.fecha)"></span>
+                        </span>
+                        <button @click="verContenidoArchivo(clase.archivo)"
+                                title="Leer la transcripción completa en texto"
+                                class="text-[10px] text-gray-400 hover:text-amber-300 transition flex items-center space-x-1">
+                          <i class="fa-solid fa-file-lines text-[10px]"></i>
+                          <span>Transcripción</span>
+                        </button>
+                      </div>
+                      <h5 @click="verContenidoArchivo(clase.archivo)"
+                          class="text-xs font-semibold text-white break-words line-clamp-2 hover:text-amber-300 transition cursor-pointer"
+                          :title="clase.titulo"
+                          x-text="clase.titulo"></h5>
                     </div>
-                    <div class="flex items-center space-x-1 shrink-0 ml-2">
-                      <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1 bg-gray-800 hover:bg-amber-500/20 hover:text-amber-300 text-gray-300 rounded-lg text-xs font-semibold transition">
-                        Leer
+                    <div class="flex items-center space-x-2 pt-2.5 border-t border-gray-800/60">
+                      <button @click="abrirMinutero(clase)"
+                              class="flex-1 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 border border-amber-500/30 shadow-sm"
+                              title="Ver marcas de tiempo e intervenciones">
+                        <i class="fa-solid fa-clock text-[10px]"></i>
+                        <span>Minutero</span>
                       </button>
-                      <a :href="'/?guia=' + encodeURIComponent(clase.archivo) + '&asig=' + encodeURIComponent(asigSeleccionada.nombre)" target="_blank" title="Abrir en pestaña nueva" class="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-gray-800 rounded-lg transition text-xs">
-                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                      </a>
+                      <button @click="abrirResumenClase(clase)"
+                              :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
+                              class="flex-1 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 border shadow-sm"
+                              title="Generar o consultar el Resumen de la clase con IA">
+                        <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
+                        <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen con IA'"></span>
+                      </button>
                     </div>
                   </div>
                 </template>
@@ -4181,7 +4584,7 @@ def dashboard_html():
                   <i class="fa-solid fa-layer-group text-cyan-400"></i>
                   <span>Materias y Módulos de <span x-text="programaActual?.nombre"></span></span>
                 </h3>
-                <p class="text-xs text-gray-400 mt-1">Explora tus asignaturas, guías oficiales, videoclases y bancos de preguntas</p>
+                <p class="text-xs text-gray-400 mt-1">Explora tus asignaturas, resúmenes oficiales, videoclases y bancos de preguntas</p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2">
@@ -4290,7 +4693,7 @@ def dashboard_html():
                           <i class="fa-solid fa-book-open text-cyan-400 text-[11px]"></i>
                           <span x-text="(asig.guias?.length || 0)"></span>
                         </div>
-                        <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Guías</div>
+                        <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">Resúmenes</div>
                       </div>
                       <div class="bg-gray-900/90 border border-gray-800/90 rounded-xl py-1.5 px-1">
                         <div class="text-xs font-extrabold text-white flex items-center justify-center gap-1">
@@ -4306,7 +4709,7 @@ def dashboard_html():
                         <i class="fa-solid fa-folder-open text-cyan-400 text-[11px]"></i>
                         <span>Temario</span>
                       </button>
-                      <button @click="abrirGeneradorDirecto(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold transition border border-emerald-500/30 flex items-center justify-center space-x-1.5" title="Generar Guía o Test IA directamente">
+                      <button @click="abrirGeneradorDirecto(asig)" class="flex-1 py-2 px-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold transition border border-emerald-500/30 flex items-center justify-center space-x-1.5" title="Generar Resumen o Test IA directamente">
                         <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
                         <span>Crear IA</span>
                       </button>
@@ -4915,9 +5318,9 @@ def dashboard_html():
                       <i class="fa-regular fa-copy text-[10px]"></i>
                       <span class="text-[10px]">Copiar</span>
                     </button>
-                    <button x-show="msg.texto && msg.texto.length > 200" @click="guardarRespuestaComoGuia(msg.texto)" class="px-2 py-0.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 transition flex items-center space-x-1" title="Guardar esta explicación como archivo de Guía Oficial">
+                    <button x-show="msg.texto && msg.texto.length > 200" @click="guardarRespuestaComoGuia(msg.texto)" class="px-2 py-0.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 transition flex items-center space-x-1" title="Guardar esta explicación como archivo de Resumen Oficial">
                       <i class="fa-solid fa-floppy-disk text-[10px]"></i>
-                      <span class="text-[10px]">Guardar como Guía</span>
+                      <span class="text-[10px]">Guardar como Resumen</span>
                     </button>
                   </div>
                 </div>
@@ -4978,100 +5381,6 @@ def dashboard_html():
           </button>
         </div>
       </div>
-
-      <!-- ==================== 5. VISTA VIDEOCLASES Y TRANSCRIPCIONES ==================== -->
-      <template x-if="tab === 'clases'">
-        <div class="space-y-6">
-          
-          <div class="glass p-6 rounded-3xl border border-gray-800 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg">
-                  <i class="fa-solid fa-video"></i>
-                </div>
-                <div>
-                  <h2 class="text-xl font-bold text-white">Videoclases y Transcripciones Oficiales</h2>
-                  <p class="text-xs text-gray-400">Catálogo oficial con transcripciones completas y resúmenes de cada lección magistral</p>
-                </div>
-              </div>
-            </div>
-            
-            <div class="flex items-center space-x-3">
-              <span class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl font-semibold"
-                    x-text="videoclasesFiltradas.length + ' clases disponibles'"></span>
-            </div>
-          </div>
-
-          <!-- FILTROS Y BÚSQUEDA DE CLASES -->
-          <div class="glass-card p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center space-x-3 flex-1 min-w-[280px]">
-              <div class="relative flex-1">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-gray-500"></i>
-                <input type="text" x-model="busquedaClaseTexto" placeholder="Buscar por profesor, tema, fecha o palabra dicha en clase..."
-                       class="w-full bg-gray-900 text-white placeholder-gray-500 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-gray-800 focus:outline-none focus:border-amber-500">
-              </div>
-            </div>
-            
-            <div class="flex items-center space-x-3">
-              <select x-model="filtroClaseAsignatura" class="bg-gray-900 text-gray-200 text-xs px-3.5 py-2.5 rounded-xl border border-gray-800 outline-none focus:border-amber-500">
-                <option value="">Todas las asignaturas</option>
-                <template x-for="asig in asignaturasConClases" :key="asig">
-                  <option :value="asig" x-text="asig"></option>
-                </template>
-              </select>
-            </div>
-          </div>
-
-          <!-- LISTA / REJILLA DE VIDEOCLASES -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <template x-for="clase in videoclasesFiltradas" :key="clase.archivo">
-              <div class="glass p-5 rounded-2xl border border-gray-800 hover:border-amber-500/40 transition flex flex-col justify-between group">
-                <div>
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 break-words" x-text="clase.asignatura"></span>
-                    <span class="text-[11px] font-semibold text-amber-400 flex items-center space-x-1 shrink-0">
-                      <i class="fa-regular fa-calendar mr-1"></i>
-                      <span x-text="formatearFechaDDMMAAAA(clase.fecha)"></span>
-                    </span>
-                  </div>
-                  <h4 class="font-bold text-white text-sm mt-3 group-hover:text-amber-300 transition break-words" x-text="clase.titulo"></h4>
-                  <p class="text-xs text-gray-400 mt-2 line-clamp-3 leading-relaxed break-words" x-text="clase.summary || 'Transcripción oficial completa disponible con registro detallado de la intervención del profesor y dudas de los estudiantes.'"></p>
-                </div>
-
-                  <div class="mt-4 pt-3 border-t border-gray-800/60 flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex items-center space-x-1.5 flex-wrap gap-1.5">
-                      <button @click="abrirMinutero(clase)" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1 border border-amber-500/30 shadow-sm" title="Ver marcas de tiempo e intervenciones">
-                        <i class="fa-solid fa-clock text-[10px]"></i>
-                        <span>Minutero</span>
-                      </button>
-                      <button @click="abrirResumenClase(clase)"
-                              :class="clase.has_resumen ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'"
-                              class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1 border shadow-sm"
-                              title="Generar o consultar el informe pedagógico estructurado de la clase con IA">
-                        <i class="fa-solid fa-wand-magic-sparkles text-[10px]" :class="clase.has_resumen ? 'text-purple-400' : 'text-gray-400'"></i>
-                        <span x-text="clase.has_resumen ? 'Resumen IA ✔' : 'Resumen IA'"></span>
-                      </button>
-                      <button @click="verContenidoArchivo(clase.archivo)" class="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1 border border-gray-700" title="Ver transcripción literal en texto">
-                        <i class="fa-solid fa-file-lines text-xs text-gray-400"></i>
-                        <span>Texto</span>
-                      </button>
-                    </div>
-                    <button @click="preguntarSobreClase(clase)" class="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm" title="Preguntar dudas a NOVA en el chat">
-                      <i class="fa-solid fa-robot text-xs"></i>
-                      <span>NOVA</span>
-                    </button>
-                  </div>
-              </div>
-            </template>
-          </div>
-
-          <div x-show="videoclasesFiltradas.length === 0" class="text-center py-16 text-gray-500 text-xs">
-            <i class="fa-solid fa-video-slash text-3xl mb-3 opacity-30 text-amber-400"></i>
-            <p class="text-sm">No se encontraron videoclases que coincidan con la búsqueda.</p>
-          </div>
-
-        </div>
-      </template>
 
       <!-- ==================== 8. PANEL DE ADMINISTRACIÓN ==================== -->
       <div x-show="tab === 'admin' && usuarioActual?.es_admin" x-transition class="space-y-6">
@@ -5474,20 +5783,20 @@ def dashboard_html():
 
   </div>
 
-  <!-- ==================== MODAL: GENERADOR DE GUÍA IA ==================== -->
-  <div x-show="modalGenerador" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+  <!-- ==================== MODAL: GENERADOR DE GUÍA IA (DESACTIVADO: AHORA LA GENERACIÓN ES AUTOMÁTICA EN 1 CLIC) ==================== -->
+  <div x-show="false" class="hidden">
     <div class="glass w-full max-w-xl rounded-3xl p-6 border border-emerald-500/30 shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-gray-800 pb-3">
         <h4 class="font-bold text-white text-base flex items-center space-x-2">
           <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i>
-          <span>Generar Guía y Test con IA</span>
+          <span>Generar Resumen y Test con IA</span>
         </h4>
         <button @click="modalGenerador = false" class="text-gray-400 hover:text-white p-1 rounded-lg">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
 
-      <p class="text-xs text-gray-400">NOVA sintetiza el temario oficial en PDF y las lecciones del profesor para crear apuntes de alto nivel y simulacros tipo test con justificación detallada.</p>
+      <p class="text-xs text-gray-400">NOVA sintetiza el temario oficial en PDF y las lecciones del profesor para crear resúmenes de alto nivel estilo UNIR y simulacros tipo test con justificación detallada.</p>
 
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-1">Materia Seleccionada:</label>
@@ -5511,7 +5820,7 @@ def dashboard_html():
         <input type="text" x-model="generadorTemaNombre" placeholder="Ej: Tema 1 - Fundamentos y Arquitectura" class="w-full bg-gray-900 text-white text-xs p-3 rounded-xl border border-gray-700 focus:outline-none focus:border-emerald-500">
       </div>
 
-      <!-- Selector de Tipo de Generación: Ambos / Solo Guía / Solo Test -->
+      <!-- Selector de Tipo de Generación: Ambos / Solo Resumen / Solo Test -->
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-2">¿Qué deseas generar con IA?</label>
         <div class="grid grid-cols-3 gap-2">
@@ -5521,18 +5830,18 @@ def dashboard_html():
                   :class="generadorTipo === 'ambos' ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500 font-bold' : 'border-gray-800 bg-gray-900/60 text-gray-400 hover:border-gray-700'"
                   class="p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1">
             <i class="fa-solid fa-wand-magic-sparkles text-sm" :class="generadorTipo === 'ambos' ? 'text-emerald-400' : 'text-gray-500'"></i>
-            <span class="text-xs">Guía + Test</span>
+            <span class="text-xs">Resumen + Test</span>
             <span class="text-[10px] opacity-75">Completo</span>
           </button>
 
-          <!-- Opción Solo Guía -->
+          <!-- Opción Solo Resumen -->
           <button type="button" 
                   @click="generadorTipo = 'solo_guia'"
                   :class="generadorTipo === 'solo_guia' ? 'border-cyan-500 bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500 font-bold' : 'border-gray-800 bg-gray-900/60 text-gray-400 hover:border-gray-700'"
                   class="p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1">
             <i class="fa-solid fa-book-bookmark text-sm" :class="generadorTipo === 'solo_guia' ? 'text-cyan-400' : 'text-gray-500'"></i>
-            <span class="text-xs">Solo Guía</span>
-            <span class="text-[10px] opacity-75">Apuntes MD</span>
+            <span class="text-xs">Solo Resumen</span>
+            <span class="text-[10px] opacity-75">Resumen UNIR</span>
           </button>
 
           <!-- Opción Solo Test -->
@@ -5547,10 +5856,10 @@ def dashboard_html():
         </div>
       </div>
 
-      <!-- Selector de Profundidad de la Guía -->
+      <!-- Selector de Profundidad del Resumen -->
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-2">
-          <span x-text="generadorTipo === 'solo_test' ? 'Dificultad del Test:' : 'Profundidad y Rigor de la Guía:'"></span>
+          <span x-text="generadorTipo === 'solo_test' ? 'Dificultad del Test:' : 'Profundidad y Rigor del Resumen:'"></span>
         </label>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <!-- Opción Robusta (Recomendada por defecto) -->
@@ -5559,10 +5868,10 @@ def dashboard_html():
                class="p-3 rounded-2xl border cursor-pointer transition flex flex-col justify-between space-y-1.5 order-first sm:order-last">
             <div class="flex items-center space-x-1.5">
               <i class="fa-solid fa-crown text-amber-400 text-xs"></i>
-              <span class="text-xs font-bold text-purple-400">Robusta</span>
+              <span class="text-xs font-bold text-purple-400">Robusto</span>
             </div>
-            <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Cornell & Active Recall)</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~4.500+ palabras, cajas interactivas de autoevaluación, chuleta de firmas/métodos, trampas de examen y 15 preguntas.</p>
+            <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Formato Oficial UNIR)</p>
+            <p class="text-[10px] text-gray-400 leading-tight">Síntesis académica rigurosa, conceptos técnicos en negrita, explicaciones fluidas y síntesis esencial de examen.</p>
           </div>
 
           <!-- Opción Media -->
@@ -5574,7 +5883,7 @@ def dashboard_html():
               <span class="text-xs font-bold text-blue-400">Media</span>
             </div>
             <p class="text-[11px] text-gray-300 font-medium">Equilibrada</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~3.000 palabras, resumen ejecutivo, tabla de métodos clave, avisos docentes y 10 preguntas.</p>
+            <p class="text-[10px] text-gray-400 leading-tight">Resumen conciso con conceptos clave estructurados y 10 preguntas de autoevaluación.</p>
           </div>
 
           <!-- Opción Corta -->
@@ -5586,7 +5895,7 @@ def dashboard_html():
               <span class="text-xs font-bold text-emerald-400">Corta</span>
             </div>
             <p class="text-[11px] text-gray-300 font-medium">Repaso Rápido</p>
-            <p class="text-[10px] text-gray-400 leading-tight">~1.500 palabras, chuleta rápida de sintaxis y test de 5 preguntas de última hora.</p>
+            <p class="text-[10px] text-gray-400 leading-tight">Síntesis exprés de ideas principales y test de 5 preguntas de última hora.</p>
           </div>
         </div>
       </div>
@@ -5614,7 +5923,7 @@ def dashboard_html():
         <div class="flex items-center justify-between text-xs">
           <span class="font-bold text-emerald-300 flex items-center space-x-2">
             <i class="fa-solid fa-spinner fa-spin text-emerald-400"></i>
-            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Guía de Estudio con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando guía oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas de examen)...'))"></span>
+            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Resumen UNIR con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando resumen oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas de examen)...'))"></span>
           </span>
           <span class="text-[11px] font-mono text-emerald-400" x-text="generandoIaPaso + ' / 3'"></span>
         </div>
@@ -5639,39 +5948,1417 @@ def dashboard_html():
         <button @click="modalGenerador = false" class="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl text-xs font-semibold">Cancelar</button>
         <button @click="ejecutarGeneracionIa()" :disabled="generandoIa || !generadorTemaNombre.trim()" class="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-xl text-xs transition flex items-center space-x-2 disabled:opacity-50">
           <i :class="generandoIa ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-bolt'"></i>
-          <span x-text="generandoIa ? 'Generando con IA...' : (generadorTipo === 'solo_guia' ? 'Generar Guía de Estudio' : (generadorTipo === 'solo_test' ? 'Generar Examen Tipo Test' : 'Generar Guía y Test'))"></span>
+          <span x-text="generandoIa ? 'Generando con IA...' : (generadorTipo === 'solo_guia' ? 'Generar Resumen UNIR' : (generadorTipo === 'solo_test' ? 'Generar Examen Tipo Test' : 'Generar Resumen y Test'))"></span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ==================== MODAL: VISOR DE DOCUMENTOS ==================== -->
-  <div x-show="modalVisor" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/80 backdrop-blur-sm">
-    <div class="glass w-full max-w-5xl lg:max-w-6xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-gray-700 shadow-2xl">
-      <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between gap-4">
-        <h4 class="font-bold text-white text-sm break-words pr-2 line-clamp-2" x-text="modalTitulo"></h4>
-        <div class="flex items-center space-x-1.5 shrink-0">
-          <button @click="rehacerGuiaDesdeVisor()" title="Rehacer esta guía con IA" class="p-2 text-gray-400 hover:text-sky-400 rounded-lg hover:bg-gray-800 transition">
-            <i class="fa-solid fa-arrows-rotate text-sm"></i>
+  <!-- ==================== VISOR INTERACTIVO DE CONTENIDOS ESTILO UNIR ==================== -->
+  <div x-show="modalVisor" x-transition 
+       @keydown.window="
+         if (modalVisor && visorVistaActiva === 'flashcards' && !modalGenerarFlashcards) {
+           if ($event.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT'].includes($event.target.tagName)) {
+             $event.preventDefault();
+             flashcardVolteada = !flashcardVolteada;
+           } else if ($event.key === 'ArrowRight') {
+             siguienteFlashcard();
+           } else if ($event.key === 'ArrowLeft') {
+             anteriorFlashcard();
+           } else if (flashcardVolteada) {
+             if ($event.key === '1') calificarTarjeta('dificil');
+             else if ($event.key === '2') calificarTarjeta('medio');
+             else if ($event.key === '3') calificarTarjeta('facil');
+           }
+         }
+       "
+       class="fixed inset-0 z-50 flex flex-col overflow-hidden select-text transition-colors duration-200"
+       :class="visorModoLectura === 'claro' ? 'bg-[#f4f6f9] text-gray-900' : 'bg-surface-0 text-gray-100'">
+    <!-- BARRA ÚNICA CONSOLIDADA (BOTONES CONTRAÍDOS QUE SE EXPANDEN AL PASAR EL RATÓN) -->
+    <header class="h-14 px-4 md:px-6 flex items-center justify-between gap-3 shrink-0 shadow-sm z-20 backdrop-blur-md transition-colors duration-200"
+            :class="visorModoLectura === 'claro' ? 'bg-white/95 border-b border-slate-200' : 'bg-surface-1/95 border-b border-gray-800'">
+      <!-- Izquierda: Botón Volver + Badge Estado + Título del Tema -->
+      <div class="flex items-center space-x-3 min-w-0 pr-2">
+        <!-- BOTÓN VOLVER (CONTRAÍDO CON HOVER) -->
+        <button @click="cerrarModalVisor()" 
+                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shrink-0 shadow-sm"
+                :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border-slate-200' : 'bg-surface-3/90 hover:bg-surface-4 text-gray-300 hover:text-white border-gray-700/80'"
+                title="Volver al temario">
+          <i class="fa-solid fa-arrow-left text-xs" :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'"></i>
+          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Volver</span>
+        </button>
+
+        <!-- BADGE ESTADO DEL TEMA (COMPLETADO / POR HACER) -->
+        <button @click="toggleEstadoTemaVisor()"
+                :class="visorTemaActual?.estado === 'Hecho' 
+                  ? (visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10')
+                  : (visorModoLectura === 'claro' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-surface-3/80 text-gray-300 border-gray-700')"
+                class="px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center space-x-1.5 border shadow-sm cursor-pointer hover:scale-105 active:scale-95 shrink-0"
+                title="Clic para alternar estado: Hecho / Por hacer">
+          <i class="fa-solid fa-circle-check text-xs" :class="visorTemaActual?.estado === 'Hecho' ? 'text-emerald-500' : (visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500')"></i>
+          <span class="text-xs" x-text="visorTemaActual?.estado === 'Hecho' ? 'Completado' : (visorTemaActual?.estado || 'Por hacer')"></span>
+        </button>
+
+        <!-- TÍTULO DEL TEMA -->
+        <h2 class="text-xs sm:text-sm md:text-base font-extrabold tracking-tight truncate"
+            :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
+            x-text="modalTitulo"></h2>
+
+        <!-- INDICADOR / SELECTOR DE MODO EN HEADER -->
+        <template x-if="visorVistaActiva !== 'lectura'">
+          <div class="flex items-center space-x-1.5 shrink-0 ml-1">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm"
+                  :class="visorVistaActiva === 'test' 
+                    ? (visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40')
+                    : (visorModoLectura === 'claro' ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-purple-500/20 text-purple-300 border-purple-500/40')"
+                  x-text="visorVistaActiva === 'test' ? 'Práctica Test' : 'Flashcards'"></span>
+            <button @click="visorVistaActiva = 'lectura'"
+                    class="px-2 py-0.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1 cursor-pointer"
+                    :class="visorModoLectura === 'claro' 
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300' 
+                      : 'bg-surface-3 hover:bg-surface-4 text-cyan-300 border-gray-700'"
+                    title="Volver a la lectura oficial del temario">
+              <i class="fa-solid fa-book-open text-[10px]"></i>
+              <span class="hidden sm:inline">Ideas clave</span>
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Derecha: BOTONES DE ACCIÓN CONTRAÍDOS -->
+      <div class="flex items-center space-x-1.5 shrink-0">
+        <!-- BOTÓN MODO LECTURA UNIR / NOCHE -->
+        <button @click="cambiarModoVisor(visorModoLectura === 'claro' ? 'oscuro' : 'claro')"
+                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
+                :class="visorModoLectura === 'claro' ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200' : 'bg-surface-3/90 hover:bg-surface-4 text-amber-400 border-gray-700/80'"
+                :title="visorModoLectura === 'claro' ? 'Cambiar a modo noche' : 'Cambiar a modo lectura UNIR (claro)'">
+          <i :class="visorModoLectura === 'claro' ? 'fa-solid fa-moon text-xs text-indigo-600' : 'fa-solid fa-sun text-xs text-amber-400'"></i>
+          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
+                x-text="visorModoLectura === 'claro' ? 'Modo Noche' : 'Modo UNIR'"></span>
+        </button>
+
+        <!-- BOTÓN PRÁCTICA CON DESPLEGABLE OFICIAL UNIR (TEST, VERDADERO O FALSO, FLASHCARDS) -->
+        <div class="relative">
+          <button @click="menuPracticaVisorAbierto = !menuPracticaVisorAbierto"
+                  class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
+                  :class="menuPracticaVisorAbierto 
+                    ? (visorModoLectura === 'claro' ? 'bg-slate-200 text-slate-900 border-slate-300 ring-2 ring-slate-200' : 'bg-surface-4 text-white border-gray-600 ring-2 ring-gray-600/30')
+                    : (visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-surface-3/90 hover:bg-surface-4 text-gray-200 border-gray-700/80')"
+                  title="Practica el tema: Test, Verdadero o Falso, Flashcards">
+            <i class="fa-solid fa-pen text-xs shrink-0" :class="visorModoLectura === 'claro' ? 'text-slate-600' : 'text-gray-300'"></i>
+            <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Practica</span>
           </button>
-          <button @click="eliminarGuiaDesdeVisor()" title="Eliminar esta guía de estudio" class="p-2 text-gray-400 hover:text-rose-400 rounded-lg hover:bg-gray-800 transition">
-            <i class="fa-solid fa-trash-can text-sm"></i>
+
+          <!-- DESPLEGABLE / TARJETA POPOVER "Practica el tema" (ESTILO OFICIAL UNIR) -->
+          <div x-show="menuPracticaVisorAbierto"
+               @click.outside="menuPracticaVisorAbierto = false"
+               x-transition:enter="transition ease-out duration-150"
+               x-transition:enter-start="opacity-0 scale-95 -translate-y-1"
+               x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+               x-transition:leave="transition ease-in duration-100"
+               x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+               x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
+               class="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl p-5 shadow-2xl border z-50 select-none text-left backdrop-blur-xl"
+               :class="visorModoLectura === 'claro' 
+                 ? 'bg-white border-slate-200 shadow-xl text-slate-900' 
+                 : 'bg-[#151c2c] border-gray-700 shadow-2xl text-gray-100'">
+            
+            <h4 class="font-bold text-sm tracking-tight"
+                :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">
+              Practica el tema
+            </h4>
+            <p class="text-xs mt-1 leading-snug"
+               :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">
+              Estas actividades son opcionales y están pensadas para tu autoestudio.
+            </p>
+
+            <div class="mt-4 space-y-1">
+              <!-- ACTIVIDAD 1: PREGUNTAS TEST -->
+              <button @click="menuPracticaVisorAbierto = false; lanzarPreguntasTestVisor()"
+                      :disabled="generandoTestVisor"
+                      class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition text-left cursor-pointer group active:scale-95 disabled:opacity-50"
+                      :class="visorModoLectura === 'claro' ? 'hover:bg-slate-100 text-slate-800' : 'hover:bg-surface-3 text-gray-200'">
+                <div class="w-6 flex items-center justify-center shrink-0">
+                  <i :class="generandoTestVisor ? 'fa-solid fa-spinner fa-spin text-sm text-sky-500' : 'fa-regular fa-file-lines text-base group-hover:scale-110 transition-transform'"
+                     :class="visorModoLectura === 'claro' ? 'text-slate-600' : 'text-gray-300'"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs sm:text-sm font-medium block truncate" x-text="generandoTestVisor ? 'Generando test (20p)...' : 'Preguntas test'"></span>
+                </div>
+              </button>
+
+              <!-- ACTIVIDAD 2: VERDADERO O FALSO -->
+              <button @click="menuPracticaVisorAbierto = false; lanzarVerdaderoFalsoVisor()"
+                      :disabled="generandoVerdaderoFalsoVisor"
+                      class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition text-left cursor-pointer group active:scale-95 disabled:opacity-50"
+                      :class="visorModoLectura === 'claro' ? 'hover:bg-slate-100 text-slate-800' : 'hover:bg-surface-3 text-gray-200'">
+                <div class="w-6 flex items-center justify-center shrink-0">
+                  <i :class="generandoVerdaderoFalsoVisor ? 'fa-solid fa-spinner fa-spin text-sm text-emerald-500' : 'fa-regular fa-circle-check text-base group-hover:scale-110 transition-transform'"
+                     :class="visorModoLectura === 'claro' ? 'text-slate-600' : 'text-gray-300'"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs sm:text-sm font-medium block truncate" x-text="generandoVerdaderoFalsoVisor ? 'Generando V/F...' : 'Verdadero o falso'"></span>
+                </div>
+              </button>
+
+              <!-- ACTIVIDAD 3: FLASHCARDS -->
+              <button @click="menuPracticaVisorAbierto = false; lanzarFlashcardsVisor()"
+                      :disabled="generandoFlashcardsVisor"
+                      class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition text-left cursor-pointer group active:scale-95 disabled:opacity-50"
+                      :class="visorModoLectura === 'claro' ? 'hover:bg-slate-100 text-slate-800' : 'hover:bg-surface-3 text-gray-200'">
+                <div class="w-6 flex items-center justify-center shrink-0">
+                  <i :class="generandoFlashcardsVisor ? 'fa-solid fa-spinner fa-spin text-sm text-purple-500' : 'fa-solid fa-clone text-base group-hover:scale-110 transition-transform'"
+                     :class="visorModoLectura === 'claro' ? 'text-slate-600' : 'text-gray-300'"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs sm:text-sm font-medium block truncate" x-text="generandoFlashcardsVisor ? 'Generando flashcards...' : 'Flashcards'"></span>
+                </div>
+              </button>
+            </div>
+
+            <p class="text-[10px] mt-4 select-none"
+               :class="visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500'">
+              Actividades generadas con IA
+            </p>
+          </div>
+        </div>
+
+        <!-- BOTÓN AYUDA INTELIGENTE (NOVA TUTOR IA) -->
+        <button @click="toggleAyudaInteligenteVisor()"
+                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
+                :class="panelAyudaVisor 
+                  ? (visorModoLectura === 'claro' ? 'bg-purple-100 text-purple-800 border-purple-300 ring-2 ring-purple-200' : 'bg-purple-500/25 text-purple-200 border-purple-500/50 ring-2 ring-purple-500/30')
+                  : (visorModoLectura === 'claro' ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200' : 'bg-surface-3/90 hover:bg-purple-500/20 text-purple-400 hover:text-purple-300 border-gray-700/80 hover:border-purple-500/50')"
+                title="Ayuda Inteligente (NOVA Tutor IA)">
+          <i class="fa-solid fa-wand-magic-sparkles text-xs shrink-0"></i>
+          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Ayuda Inteligente</span>
+        </button>
+
+        <!-- DESCARGAR PDF -->
+        <button x-show="visorTemaActual?.pdf"
+                @click="abrirPdf('data/materiales/' + asigSeleccionada?.nombre + '/' + visorTemaActual?.pdf, visorTemaActual?.pdf)"
+                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
+                :class="visorModoLectura === 'claro' ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200' : 'bg-surface-3/90 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border-gray-700/80 hover:border-rose-500/50'"
+                title="Descargar PDF original">
+          <i class="fa-solid fa-download text-xs shrink-0"></i>
+          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Descargar PDF</span>
+        </button>
+
+        <!-- RESUMEN -->
+        <button @click="abrirModalResumenVisor()"
+                :disabled="generandoResumenVisor"
+                :class="modalSubResumen 
+                  ? (visorModoLectura === 'claro' ? 'bg-sky-100 text-sky-800 border-sky-300 ring-2 ring-sky-200' : 'bg-sky-500/20 text-sky-200 border-sky-500/50 ring-2 ring-sky-500/30')
+                  : (visorModoLectura === 'claro' ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200' : 'bg-surface-3/90 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border-gray-700/80 hover:border-sky-500/50')"
+                class="group flex items-center h-8 px-2.5 rounded-xl transition-all duration-200 border shadow-sm active:scale-95 disabled:opacity-75"
+                title="Ver resumen sintetizado con IA">
+          <i :class="generandoResumenVisor ? 'fa-solid fa-spinner fa-spin text-xs shrink-0 text-sky-400' : 'fa-solid fa-file-lines text-xs shrink-0'"></i>
+          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
+                x-text="generandoResumenVisor ? 'Redactando resumen...' : 'Resumen'"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- CUERPO PRINCIPAL DE LECTURA (IDEAS CLAVE ESTILO UNIR) -->
+    <div class="flex-1 flex overflow-hidden relative transition-colors duration-200"
+         :class="visorModoLectura === 'claro' ? 'bg-[#f4f6f9]' : 'bg-surface-0'">
+      <!-- ÁREA DE LECTURA (ANCHO COMPLETO SIN BARRA LATERAL) -->
+      <main class="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 py-6 scroll-smooth" 
+            id="visor-contenido-scroll"
+            @scroll.passive="actualizarSeccionActivaVisor()">
+        <!-- VISTA 1: LECTURA DE IDEAS CLAVE (ESTILO OFICIAL UNIR) -->
+        <div x-show="visorVistaActiva === 'lectura'"
+             class="w-full mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-10 transition-all duration-200 space-y-6 pb-32"
+             style="max-width: 946px;"
+             :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
+          <!-- TÍTULO DE SECCIÓN "Ideas clave" -->
+          <div class="border-b pb-4" :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
+            <div class="flex items-center justify-between">
+              <h3 class="text-2xl sm:text-3xl font-extrabold tracking-tight"
+                  :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'">
+                Ideas clave
+              </h3>
+              <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
+                    :class="visorModoLectura === 'claro' ? 'bg-sky-50 text-[#0f5b9e] border border-sky-100' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'">
+                Dossier oficial
+              </span>
+            </div>
+            <p class="text-xs sm:text-sm mt-1.5 font-medium" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">
+              Temario oficial íntegro estructurado para estudio intensivo y examen
+            </p>
+          </div>
+
+          <!-- CONTENIDO MARKDOWN RENDERIZADO CON TIPOGRAFÍA DE LECTURA CÓMODA -->
+          <div class="leading-relaxed font-sans text-base space-y-4"
+               :class="visorModoLectura === 'claro' ? 'markdown-content-unir-light' : 'markdown-content text-gray-200'"
+               :style="'font-size: ' + visorTamanoFuente + 'px;'"
+               x-html="renderMarkdownConIndices(modalContenido)">
+          </div>
+        </div>
+
+        <!-- VISTA 2: PREGUNTAS TEST INTEGRADO DENTRO DEL CUERPO DEL VISOR -->
+        <div x-show="visorVistaActiva === 'test'"
+             class="w-full mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-8 transition-all duration-200 space-y-6 pb-32"
+             style="max-width: 946px;"
+             :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
+          
+          <!-- CABECERA DEL TEST DENTRO DEL VISOR -->
+          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4"
+               :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
+            <div class="flex items-center space-x-3 min-w-0">
+              <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
+                   :class="visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'">
+                <i class="fa-solid fa-spell-check"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight truncate"
+                      :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
+                      x-text="'Práctica Test: ' + (modalTitulo || testActivoAsig)"></h3>
+                  <span class="text-xs font-bold px-2.5 py-0.5 rounded-full font-mono border shrink-0"
+                        :class="visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'"
+                        x-show="testPreguntas.length > 0 && !testFinalizado"
+                        x-text="'Pregunta ' + (testIndice + 1) + ' / ' + testPreguntas.length"></span>
+                </div>
+                <p class="text-xs sm:text-sm mt-0.5"
+                   :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">
+                  Simulacro oficial con justificación técnica y baremo UNIR (+1 / -0.33)
+                </p>
+              </div>
+            </div>
+
+            <!-- CONTROLES SUPERIORES (NOTEBOOK / EXAMEN + VOLVER A IDEAS CLAVE) -->
+            <div class="flex items-center space-x-2 shrink-0">
+              <div class="flex items-center rounded-xl p-1 border text-xs"
+                   :class="visorModoLectura === 'claro' ? 'bg-slate-100 border-slate-200' : 'bg-gray-950 border-gray-800'">
+                <button @click="testModo = 'notebook'"
+                        :class="testModo === 'notebook' 
+                          ? (visorModoLectura === 'claro' ? 'bg-white text-emerald-700 font-bold shadow-sm' : 'bg-emerald-500 text-gray-950 font-black shadow') 
+                          : (visorModoLectura === 'claro' ? 'text-slate-600 hover:text-slate-900' : 'text-gray-400 hover:text-white')"
+                        class="px-2.5 py-1 rounded-lg transition text-xs flex items-center space-x-1 cursor-pointer"
+                        title="Feedback inmediato pregunta a pregunta con explicaciones">
+                  <i class="fa-solid fa-bolt text-[10px]"></i>
+                  <span>Notebook</span>
+                </button>
+                <button @click="testModo = 'examen'"
+                        :class="testModo === 'examen' 
+                          ? (visorModoLectura === 'claro' ? 'bg-white text-emerald-700 font-bold shadow-sm' : 'bg-emerald-500 text-gray-950 font-black shadow') 
+                          : (visorModoLectura === 'claro' ? 'text-slate-600 hover:text-slate-900' : 'text-gray-400 hover:text-white')"
+                        class="px-2.5 py-1 rounded-lg transition text-xs flex items-center space-x-1 cursor-pointer"
+                        title="Examen oficial con corrección al terminar">
+                  <i class="fa-solid fa-clock text-[10px]"></i>
+                  <span>Examen</span>
+                </button>
+              </div>
+
+              <button @click="visorVistaActiva = 'lectura'"
+                      class="px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      :class="visorModoLectura === 'claro' 
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' 
+                        : 'bg-surface-3 hover:bg-surface-4 text-gray-200 border-gray-700'"
+                      title="Volver a la lectura oficial de Ideas clave">
+                <i class="fa-solid fa-book-open text-xs" :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'"></i>
+                <span>Volver a Ideas clave</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- BARRA DE PROGRESO DE PREGUNTAS -->
+          <div class="w-full h-2 rounded-full overflow-hidden"
+               :class="visorModoLectura === 'claro' ? 'bg-slate-100 border border-slate-200' : 'bg-gray-950 border border-gray-800'"
+               x-show="!testFinalizado && testPreguntas.length > 0">
+            <div class="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 transition-all duration-300 rounded-full"
+                 :style="'width: ' + (((testIndice + (testRespuestasUsuario[testIndice] ? 1 : 0)) / testPreguntas.length) * 100) + '%'"></div>
+          </div>
+
+          <!-- CUERPO DE PREGUNTA Y OPCIONES -->
+          <div class="space-y-4" x-show="!testFinalizado && testPreguntas.length > 0">
+            <!-- ENUNCIADO DE LA PREGUNTA -->
+            <div class="p-5 sm:p-6 rounded-2xl border transition-colors leading-relaxed text-base sm:text-lg font-semibold"
+                 :class="visorModoLectura === 'claro' ? 'bg-slate-50/90 border-slate-200 text-slate-900' : 'bg-surface-2/60 border-gray-800 text-white'"
+                 x-html="renderEnunciadoTest(testPreguntas[testIndice]?.enunciado)"></div>
+
+            <!-- PISTA CONCEPTUAL DESPLEGABLE -->
+            <div>
+              <button @click="testMostrarPista = !testMostrarPista"
+                      class="inline-flex items-center space-x-2 text-xs font-semibold px-3 py-1.5 rounded-xl transition border cursor-pointer"
+                      :class="testMostrarPista 
+                        ? (visorModoLectura === 'claro' ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-sm' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm')
+                        : (visorModoLectura === 'claro' ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-800 hover:bg-gray-700 text-amber-400/90 border-gray-700')">
+                <i class="fa-solid fa-lightbulb text-[11px] text-amber-500"></i>
+                <span x-text="testMostrarPista ? 'Ocultar pista' : '💡 ¿Dudas con la pregunta? Ver pista conceptual'"></span>
+              </button>
+              <div x-show="testMostrarPista"
+                   x-transition
+                   class="mt-2.5 p-4 rounded-2xl border text-xs leading-relaxed flex items-start space-x-3 shadow-sm"
+                   :class="visorModoLectura === 'claro' ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-amber-950/20 border-amber-500/30 text-amber-200'">
+                <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
+                  <i class="fa-solid fa-key text-xs"></i>
+                </div>
+                <div class="flex-1">
+                  <span class="font-bold block mb-0.5" :class="visorModoLectura === 'claro' ? 'text-amber-900' : 'text-amber-300'">Pista para razonar la respuesta:</span>
+                  <p class="text-xs leading-relaxed" x-html="renderTextoOpcion(obtenerPistaPregunta(testPreguntas[testIndice]))"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- LISTA DE OPCIONES A, B, C, D -->
+            <div class="space-y-3 pt-1">
+              <template x-for="(texto, letra) in opcionesValidas(testPreguntas[testIndice]?.opciones)" :key="letra">
+                <button @click="seleccionarOpcion(letra)"
+                        :disabled="testModo === 'notebook' && !!testRespuestasUsuario[testIndice]"
+                        :class="visorModoLectura === 'claro' ? {
+                          'border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-400 shadow-md':
+                            testModo === 'notebook' && testRespuestasUsuario[testIndice] && letra === testPreguntas[testIndice]?.correcta,
+                          'border-rose-400 bg-rose-50 text-rose-950 ring-2 ring-rose-400 shadow-md':
+                            testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta,
+                          'opacity-40 border-slate-200 bg-slate-50 text-slate-400':
+                            testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] !== letra && letra !== testPreguntas[testIndice]?.correcta,
+                          'border-sky-500 bg-sky-50 text-sky-950 ring-2 ring-sky-300':
+                            (testModo !== 'notebook' || !testRespuestasUsuario[testIndice]) && testRespuestaSeleccionada === letra,
+                          'border-slate-200 bg-white hover:bg-slate-50 text-slate-800 hover:border-slate-300':
+                            !testRespuestasUsuario[testIndice] && testRespuestaSeleccionada !== letra
+                        } : {
+                          'border-emerald-500 bg-emerald-500/20 text-emerald-100 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/10':
+                            testModo === 'notebook' && testRespuestasUsuario[testIndice] && letra === testPreguntas[testIndice]?.correcta,
+                          'border-rose-500 bg-rose-500/20 text-rose-100 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/10':
+                            testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta,
+                          'opacity-40 border-gray-800 bg-gray-900/40 text-gray-400':
+                            testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] !== letra && letra !== testPreguntas[testIndice]?.correcta,
+                          'border-cyan-500 bg-cyan-500/10 text-white':
+                            (testModo !== 'notebook' || !testRespuestasUsuario[testIndice]) && testRespuestaSeleccionada === letra,
+                          'border-gray-700/80 bg-gray-800/50 text-gray-300 hover:bg-gray-800 hover:border-gray-600':
+                            !testRespuestasUsuario[testIndice] && testRespuestaSeleccionada !== letra
+                        }"
+                        class="w-full text-left p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex items-start justify-between space-x-3 group relative cursor-pointer">
+                  
+                  <div class="flex items-start space-x-3.5 min-w-0">
+                    <span class="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors"
+                          :class="visorModoLectura === 'claro' ? {
+                            'bg-emerald-600 text-white font-black shadow':
+                              testModo === 'notebook' && testRespuestasUsuario[testIndice] && letra === testPreguntas[testIndice]?.correcta,
+                            'bg-rose-600 text-white font-black shadow':
+                              testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta,
+                            'bg-slate-200 text-slate-700 group-hover:bg-slate-300':
+                              !testRespuestasUsuario[testIndice] || testModo !== 'notebook'
+                          } : {
+                            'bg-emerald-500 text-gray-950 font-black shadow':
+                              testModo === 'notebook' && testRespuestasUsuario[testIndice] && letra === testPreguntas[testIndice]?.correcta,
+                            'bg-rose-500 text-white font-black shadow':
+                              testModo === 'notebook' && testRespuestasUsuario[testIndice] && testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta,
+                            'bg-gray-700 text-white group-hover:bg-gray-600':
+                              !testRespuestasUsuario[testIndice] || testModo !== 'notebook'
+                          }"
+                          x-text="letra"></span>
+                    <span class="text-sm font-medium leading-relaxed pt-0.5" x-html="renderTextoOpcion(texto)"></span>
+                  </div>
+
+                  <!-- Indicador de acierto / fallo -->
+                  <div x-show="testModo === 'notebook' && testRespuestasUsuario[testIndice]" class="shrink-0 pt-0.5">
+                    <span x-show="letra === testPreguntas[testIndice]?.correcta" class="flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 font-bold text-xs bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                      <i class="fa-solid fa-check"></i>
+                      <span>Correcta</span>
+                    </span>
+                    <span x-show="testRespuestasUsuario[testIndice] === letra && letra !== testPreguntas[testIndice]?.correcta" class="flex items-center space-x-1 text-rose-600 dark:text-rose-400 font-bold text-xs bg-rose-500/15 px-2.5 py-0.5 rounded-full border border-rose-500/30">
+                      <i class="fa-solid fa-xmark"></i>
+                      <span>Tu fallo</span>
+                    </span>
+                  </div>
+                </button>
+              </template>
+            </div>
+
+            <!-- EXPLICACIÓN INSTANTÁNEA (NOTEBOOK FEEDBACK) -->
+            <div x-show="testModo === 'notebook' && testRespuestasUsuario[testIndice]"
+                 x-transition:enter="transition ease-out duration-300 transform"
+                 x-transition:enter-start="opacity-0 translate-y-3"
+                 x-transition:enter-end="opacity-100 translate-y-0"
+                 class="mt-4 p-5 rounded-2xl border"
+                 :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta 
+                   ? (visorModoLectura === 'claro' ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950' : 'bg-emerald-950/30 border-emerald-500/40') 
+                   : (visorModoLectura === 'claro' ? 'bg-rose-50/80 border-rose-300 text-rose-950' : 'bg-rose-950/30 border-rose-500/40')">
+              
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center space-x-2.5">
+                  <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm"
+                       :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta 
+                         ? (visorModoLectura === 'claro' ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/20 text-emerald-400') 
+                         : (visorModoLectura === 'claro' ? 'bg-rose-100 text-rose-700' : 'bg-rose-500/20 text-rose-400')">
+                    <i :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'"></i>
+                  </div>
+                  <div>
+                    <h5 class="text-sm font-bold"
+                        :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta 
+                          ? (visorModoLectura === 'claro' ? 'text-emerald-800' : 'text-emerald-300') 
+                          : (visorModoLectura === 'claro' ? 'text-rose-800' : 'text-rose-300')"
+                        x-text="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? '¡Respuesta Correcta!' : '¡Respuesta Incorrecta!'"></h5>
+                    <p class="text-[11px]"
+                       :class="visorModoLectura === 'claro' ? 'text-slate-600' : 'text-gray-400'"
+                       x-show="testRespuestasUsuario[testIndice] !== testPreguntas[testIndice]?.correcta">
+                      La opción correcta es la <strong class="text-emerald-600 dark:text-emerald-400 font-bold" x-text="'[' + testPreguntas[testIndice]?.correcta + ']'"></strong>
+                    </p>
+                  </div>
+                </div>
+
+                <span class="text-[10px] font-mono px-2.5 py-1 rounded-full uppercase tracking-wider font-bold"
+                      :class="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta 
+                        ? (visorModoLectura === 'claro' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20') 
+                        : (visorModoLectura === 'claro' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20')">
+                  <span x-text="testRespuestasUsuario[testIndice] === testPreguntas[testIndice]?.correcta ? '+1.0 Punto' : '-0.33 Puntos'"></span>
+                </span>
+              </div>
+
+              <div class="rounded-xl p-4 border space-y-1.5 mt-2 shadow-sm"
+                   :class="visorModoLectura === 'claro' ? 'bg-white border-slate-200' : 'bg-gray-900/90 border-white/5'">
+                <div class="flex items-center space-x-1.5 text-xs font-bold"
+                     :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'">
+                  <i class="fa-solid fa-graduation-cap text-[11px]"></i>
+                  <span>¿Por qué? Justificación técnica oficial:</span>
+                </div>
+                <div class="text-xs leading-relaxed font-sans"
+                     :class="visorModoLectura === 'claro' ? 'text-slate-700' : 'text-gray-200'"
+                     x-html="renderTextoOpcion(testPreguntas[testIndice]?.justificacion)"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANTALLA DE RESULTADOS AL FINALIZAR TEST -->
+          <div class="p-8 text-center space-y-5" x-show="testFinalizado">
+            <div class="w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl shadow-lg"
+                 :class="testNota >= 5 
+                   ? (visorModoLectura === 'claro' ? 'bg-emerald-100 text-emerald-600 border border-emerald-300' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40') 
+                   : (visorModoLectura === 'claro' ? 'bg-rose-100 text-rose-600 border border-rose-300' : 'bg-rose-500/20 text-rose-400 border border-rose-500/40')">
+              <i :class="testNota >= 5 ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i>
+            </div>
+            <h3 class="text-2xl sm:text-3xl font-extrabold"
+                :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
+                x-text="testNota >= 5 ? '¡Enhorabuena, has aprobado!' : 'Necesitas repasar este tema'"></h3>
+            <p class="text-sm" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Tu puntuación oficial en el simulacro:</p>
+            <p class="text-5xl sm:text-6xl font-black" :class="testNota >= 5 ? 'text-emerald-500' : 'text-rose-500'" x-text="testNota.toFixed(2) + ' / 10'"></p>
+            
+            <!-- DESGLOSE OFICIAL UNIR -->
+            <div class="flex flex-wrap items-center justify-center gap-3 py-2.5 px-5 rounded-2xl border max-w-md mx-auto text-xs font-mono shadow-sm"
+                 :class="visorModoLectura === 'claro' ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-gray-900/90 border-gray-800 text-gray-200'">
+              <span class="text-emerald-600 dark:text-emerald-400 font-bold" x-text="'+' + testAciertos + ' Aciertos'"></span>
+              <span>•</span>
+              <span class="text-rose-600 dark:text-rose-400 font-bold" x-text="'-' + testFallos + ' Fallos (-' + (testFallos * 0.33).toFixed(2) + ')'"></span>
+              <span>•</span>
+              <span class="text-slate-500 dark:text-gray-400" x-text="testBlancos + ' Blanco'"></span>
+            </div>
+            <p class="text-xs" :class="visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500'">Baremo oficial UNIR: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
+            
+            <div class="flex flex-wrap items-center justify-center gap-3 pt-3">
+              <button x-show="(testFallos + testBlancos) > 0"
+                      @click="reintentarFallosIntentoActual()"
+                      class="px-5 py-2.5 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shadow-lg shadow-rose-500/20 cursor-pointer active:scale-95">
+                <i class="fa-solid fa-fire-flame-curved"></i>
+                <span x-text="'Repasar mis ' + (testFallos + testBlancos) + ' Errores / Blancos'"></span>
+              </button>
+              <button @click="lanzarPreguntasTestVisor()"
+                      class="px-5 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer active:scale-95 flex items-center gap-2"
+                      :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300' : 'bg-surface-3 hover:bg-surface-4 text-white border-gray-700'">
+                <i class="fa-solid fa-arrows-rotate text-xs"></i>
+                <span>Rehacer Test</span>
+              </button>
+              <button @click="visorVistaActiva = 'lectura'"
+                      class="px-6 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95 shadow-md"
+                      :class="visorModoLectura === 'claro' ? 'bg-[#0f5b9e] hover:bg-[#0c4a80] text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-gray-950'">
+                <span>Volver a Ideas clave</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- FOOTER NAVEGACIÓN PREGUNTA A PREGUNTA -->
+          <div class="pt-4 border-t flex items-center justify-between gap-3"
+               :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800'"
+               x-show="!testFinalizado && testPreguntas.length > 0">
+            <button @click="anteriorPregunta()" 
+                    :disabled="testIndice === 0" 
+                    class="px-4 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1.5 border shadow-sm cursor-pointer"
+                    :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'">
+              <i class="fa-solid fa-chevron-left text-[10px]"></i>
+              <span>Anterior</span>
+            </button>
+
+            <div class="hidden sm:flex items-center space-x-3 text-xs font-mono" x-show="testModo === 'notebook'">
+              <span class="text-emerald-600 dark:text-emerald-400 font-bold flex items-center space-x-1">
+                <i class="fa-solid fa-check text-[10px]"></i>
+                <span x-text="contarAciertosVivos() + ' Aciertos'"></span>
+              </span>
+              <span class="text-rose-600 dark:text-rose-400 font-bold flex items-center space-x-1">
+                <i class="fa-solid fa-xmark text-[10px]"></i>
+                <span x-text="contarFallosVivos() + ' Fallos'"></span>
+              </span>
+            </div>
+
+            <button @click="siguientePregunta()" 
+                    class="px-6 py-2.5 rounded-xl text-xs font-bold transition shadow-lg flex items-center space-x-2 cursor-pointer active:scale-95"
+                    :class="visorModoLectura === 'claro' 
+                      ? 'bg-[#0f5b9e] hover:bg-[#0c4a80] text-white shadow-sky-900/10' 
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-gray-950 font-black shadow-emerald-500/20'">
+              <span x-text="testIndice === testPreguntas.length - 1 ? 'Finalizar y Ver Nota' : (testModo === 'notebook' && !testRespuestasUsuario[testIndice] ? 'Saltar Pregunta' : 'Siguiente Pregunta')"></span>
+              <i class="fa-solid fa-chevron-right text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- VISTA 3: FLASHCARDS INTEGRADA DENTRO DEL CUERPO DEL VISOR -->
+        <div x-show="visorVistaActiva === 'flashcards'"
+             class="w-full mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-8 transition-all duration-200 space-y-6 pb-32"
+             style="max-width: 946px;"
+             :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
+          
+          <!-- CABECERA FLASHCARDS DENTRO DEL VISOR -->
+          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4"
+               :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
+            <div class="flex items-center space-x-3 min-w-0">
+              <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
+                   :class="visorModoLectura === 'claro' ? 'bg-purple-50 text-purple-600 border border-purple-200' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'">
+                <i class="fa-solid fa-clone"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight truncate"
+                      :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
+                      x-text="'Flashcards: ' + (modalTitulo || 'Repaso Activo')"></h3>
+                  <span class="text-xs font-bold px-2.5 py-0.5 rounded-full font-mono border shrink-0"
+                        :class="visorModoLectura === 'claro' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'"
+                        x-text="flashcardsFiltradas.length + ' tarjetas'"></span>
+                </div>
+                <p class="text-xs sm:text-sm mt-0.5"
+                   :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">
+                  Repaso espaciado activo (Active Recall) mnemotécnico para el examen
+                </p>
+              </div>
+            </div>
+
+            <!-- CONTROLES SUPERIORES (GENERAR IA + VOLVER A IDEAS CLAVE) -->
+            <div class="flex items-center space-x-2 shrink-0">
+              <button @click="generarFlashcardsTemaVisor()"
+                      :disabled="generandoFlashcardsVisor"
+                      class="px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                      :class="visorModoLectura === 'claro' 
+                        ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200' 
+                        : 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border-purple-500/40'"
+                      title="Generar 6 nuevas flashcards con IA para este tema">
+                <i :class="generandoFlashcardsVisor ? 'fa-solid fa-spinner fa-spin text-purple-500' : 'fa-solid fa-wand-magic-sparkles text-xs'"></i>
+                <span x-text="generandoFlashcardsVisor ? 'Generando...' : '+ Crear con IA'"></span>
+              </button>
+
+              <button @click="visorVistaActiva = 'lectura'"
+                      class="px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                      :class="visorModoLectura === 'claro' 
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' 
+                        : 'bg-surface-3 hover:bg-surface-4 text-gray-200 border-gray-700'"
+                      title="Volver a la lectura oficial de Ideas clave">
+                <i class="fa-solid fa-book-open text-xs" :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'"></i>
+                <span>Volver a Ideas clave</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- CUERPO FLASHCARDS -->
+          <div>
+            <!-- 1. Si NO hay tarjetas -->
+            <template x-if="flashcardsFiltradas.length === 0 && !generandoFlashcardsVisor">
+              <div class="py-12 px-4 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center text-2xl"
+                     :class="visorModoLectura === 'claro' ? 'bg-purple-50 text-purple-600 border border-purple-200' : 'bg-purple-500/15 border border-purple-500/30 text-purple-400'">
+                  <i class="fa-solid fa-clone"></i>
+                </div>
+                <h4 class="font-bold text-base" :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">Flashcards con Inteligencia Artificial</h4>
+                <p class="text-xs max-w-md mx-auto" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">
+                  Aún no hay tarjetas de repaso para este tema. Pulsa abajo para generar automáticamente tarjetas mnemotécnicas de examen a partir del temario oficial.
+                </p>
+                <button @click="generarFlashcardsTemaVisor()"
+                        class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-500/25 transition flex items-center space-x-2 mx-auto active:scale-95 cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  <span>Generar Flashcards con IA</span>
+                </button>
+              </div>
+            </template>
+
+            <!-- 2. Cargando con IA -->
+            <template x-if="generandoFlashcardsVisor">
+              <div class="py-14 text-center space-y-4">
+                <div class="w-12 h-12 mx-auto rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl animate-pulse">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </div>
+                <h4 class="font-bold text-sm" :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">Extrayendo conceptos clave del tema...</h4>
+                <p class="text-xs max-w-md mx-auto" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Generando tarjetas de anverso y reverso con IA. Aparecerán aquí en unos segundos...</p>
+              </div>
+            </template>
+
+            <!-- 3. Modo Activo: Sesión de Flashcards 3D -->
+            <template x-if="flashcardsFiltradas.length > 0 && !generandoFlashcardsVisor && !flashcardSesionCompletada">
+              <div class="max-w-xl mx-auto space-y-5">
+                <!-- Barra de progreso -->
+                <div class="p-3.5 rounded-2xl border flex items-center justify-between gap-4 text-xs shadow-sm"
+                     :class="visorModoLectura === 'claro' ? 'bg-slate-50 border-slate-200' : 'bg-surface-2 border-gray-800'">
+                  <div class="flex items-center space-x-2 shrink-0">
+                    <span class="font-extrabold text-xs" :class="visorModoLectura === 'claro' ? 'text-slate-800' : 'text-white'" x-text="'Tarjeta ' + (flashcardIndice + 1) + ' / ' + flashcardsFiltradas.length"></span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-mono" :class="visorModoLectura === 'claro' ? 'bg-slate-200 text-slate-700' : 'bg-gray-800 text-gray-300'" x-text="flashcardsPorcentajeProgreso + '%'"></span>
+                  </div>
+                  <div class="flex-1 h-2 rounded-full overflow-hidden border"
+                       :class="visorModoLectura === 'claro' ? 'bg-slate-200 border-slate-200' : 'bg-gray-950 border-gray-800'">
+                    <div class="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300 rounded-full"
+                         :style="'width: ' + flashcardsPorcentajeProgreso + '%'"></div>
+                  </div>
+                  <div class="flex items-center gap-1.5 shrink-0 text-[11px] font-bold">
+                    <span class="px-1.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30" x-text="'🟢 ' + flashcardStatsSesion.facil"></span>
+                    <span class="px-1.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30" x-text="'🟡 ' + flashcardStatsSesion.medio"></span>
+                    <span class="px-1.5 py-0.5 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30" x-text="'🔴 ' + flashcardStatsSesion.dificil"></span>
+                  </div>
+                </div>
+
+                <!-- Tarjeta 3D FLIP -->
+                <div class="flashcard-perspective cursor-pointer select-none"
+                     @click="flashcardVolteada = !flashcardVolteada">
+                  <div class="flashcard-inner rounded-3xl" :class="flashcardVolteada ? 'flipped' : ''">
+                    <!-- Frontal / Anverso -->
+                    <div class="flashcard-face p-6 sm:p-8 rounded-3xl border shadow-2xl transition-colors"
+                         :class="visorModoLectura === 'claro' 
+                           ? 'border-slate-200 bg-gradient-to-b from-white to-slate-50 text-slate-900 shadow-slate-200' 
+                           : 'border-gray-700/80 bg-gradient-to-b from-gray-900 to-gray-950 text-white shadow-black/80'">
+                      <div>
+                        <div class="flex items-center justify-between pb-3 mb-4 border-b"
+                             :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800'">
+                          <span class="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5"
+                                :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-300'">
+                            <i class="fa-solid fa-circle-question text-xs"></i>
+                            <span>Pregunta / Concepto Clave</span>
+                          </span>
+                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border"
+                                :class="visorModoLectura === 'claro' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-gray-800 text-gray-300 border-gray-700'"
+                                x-text="tarjetaActual?.nivel || 'Examen'"></span>
+                        </div>
+                        <p class="text-base sm:text-lg font-semibold leading-relaxed"
+                           :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
+                           x-text="tarjetaActual?.anverso"></p>
+                      </div>
+                      <div class="pt-4 border-t flex items-center justify-between text-xs"
+                           :class="visorModoLectura === 'claro' ? 'border-slate-200 text-slate-400' : 'border-gray-800/80 text-gray-400'">
+                        <span class="flex items-center gap-1.5">
+                          <i class="fa-solid fa-arrows-rotate text-[10px]"></i>
+                          <span>Clic o [Espacio] para voltear</span>
+                        </span>
+                        <span class="text-[11px] font-mono opacity-70">Girar tarjeta ↺</span>
+                      </div>
+                    </div>
+
+                    <!-- Reverso / Respuesta -->
+                    <div class="flashcard-face flashcard-back p-6 sm:p-8 rounded-3xl border shadow-2xl transition-colors"
+                         :class="visorModoLectura === 'claro' 
+                           ? 'border-purple-200 bg-gradient-to-b from-purple-50/50 via-white to-purple-50/30 text-slate-900 shadow-purple-100' 
+                           : 'border-purple-500/40 bg-gradient-to-b from-purple-950/40 via-gray-900 to-gray-950 text-gray-100 shadow-black/80'">
+                      <div>
+                        <div class="flex items-center justify-between pb-3 mb-4 border-b"
+                             :class="visorModoLectura === 'claro' ? 'border-purple-100' : 'border-purple-500/20'">
+                          <span class="font-extrabold uppercase tracking-wider text-[11px] text-purple-600 dark:text-purple-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-check text-xs"></i>
+                            <span>Respuesta Oficial</span>
+                          </span>
+                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 uppercase tracking-wider border border-purple-500/30">Solución</span>
+                        </div>
+                        <div class="text-sm sm:text-base leading-relaxed markdown-content max-h-[180px] overflow-y-auto"
+                             :class="visorModoLectura === 'claro' ? 'text-slate-800' : 'text-gray-100'"
+                             x-html="renderMarkdown(tarjetaActual?.reverso || '')"></div>
+                      </div>
+                      <!-- Botones de dificultad -->
+                      <div class="pt-4 border-t flex items-center justify-between gap-2"
+                           :class="visorModoLectura === 'claro' ? 'border-purple-100' : 'border-gray-800'"
+                           @click.stop>
+                        <button @click="calificarTarjeta('dificil')"
+                                class="flex-1 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer active:scale-95">
+                          <span>🔴 Difícil [1]</span>
+                        </button>
+                        <button @click="calificarTarjeta('medio')"
+                                class="flex-1 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer active:scale-95">
+                          <span>🟡 Medio [2]</span>
+                        </button>
+                        <button @click="calificarTarjeta('facil')"
+                                class="flex-1 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer active:scale-95">
+                          <span>🟢 Fácil [3]</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Controles de navegación manual -->
+                <div class="flex items-center justify-between pt-1">
+                  <button @click="anteriorFlashcard()" :disabled="flashcardIndice === 0"
+                          class="px-4 py-2 rounded-xl border text-xs font-semibold disabled:opacity-40 transition cursor-pointer"
+                          :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-gray-900 border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800'">
+                    ← Anterior
+                  </button>
+                  <span class="text-[11px] font-mono hidden sm:inline" :class="visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500'">Espacio: Voltear • Flechas: Navegar</span>
+                  <button @click="siguienteFlashcard()"
+                          class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition cursor-pointer active:scale-95">
+                    Siguiente →
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <!-- 4. Sesión completada -->
+            <template x-if="flashcardSesionCompletada && flashcardsFiltradas.length > 0">
+              <div class="py-10 text-center space-y-4 max-w-md mx-auto">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-gray-950 flex items-center justify-center text-2xl font-black shadow-lg shadow-emerald-500/25">
+                  <i class="fa-solid fa-trophy"></i>
+                </div>
+                <h3 class="text-xl font-black" :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">¡Mazo completado!</h3>
+                <p class="text-xs" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Has repasado todas las tarjetas del tema. Tu memoria de trabajo se ha consolidado.</p>
+                <div class="grid grid-cols-3 gap-2 py-2">
+                  <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                    <div class="text-lg font-black text-emerald-600 dark:text-emerald-300" x-text="flashcardStatsSesion.facil"></div>
+                    <div class="text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold">Fáciles</div>
+                  </div>
+                  <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+                    <div class="text-lg font-black text-amber-600 dark:text-amber-300" x-text="flashcardStatsSesion.medio"></div>
+                    <div class="text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold">En repaso</div>
+                  </div>
+                  <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-center">
+                    <div class="text-lg font-black text-rose-600 dark:text-rose-300" x-text="flashcardStatsSesion.dificil"></div>
+                    <div class="text-[10px] text-rose-700 dark:text-rose-400 uppercase font-bold">A reforzar</div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                  <button @click="reiniciarMazoFlashcards()" class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition shadow-md cursor-pointer active:scale-95">
+                    Repetir Mazo
+                  </button>
+                  <button @click="visorVistaActiva = 'lectura'" 
+                          class="px-5 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer active:scale-95"
+                          :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300' : 'bg-gray-800 hover:bg-gray-700 text-gray-200 border-gray-700'">
+                    Volver a Ideas clave
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </main>
+
+      <!-- ==================== ÍNDICE FLOTANTE LATERAL ESTILO OFICIAL UNIR ==================== -->
+      <aside x-show="visorVistaActiva === 'lectura' && indiceApartadosVisor && indiceApartadosVisor.length > 0"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-x-4"
+             x-transition:enter-end="opacity-100 translate-x-0"
+             class="fixed top-24 z-30 flex flex-col items-center select-none transition-all duration-300"
+             :class="panelAyudaVisor 
+               ? (ayudaVisorExpandida ? 'right-[540px] md:right-[600px]' : 'right-[395px] md:right-[435px]') 
+               : 'right-3 sm:right-6'"
+             aria-label="Índice de navegación del tema">
+        
+        <!-- CÁPSULA PRINCIPAL DE NAVEGACIÓN -->
+        <div class="rounded-full py-3 px-1.5 sm:px-2 flex flex-col items-center space-y-2 shadow-xl transition-all duration-200 border backdrop-blur-md"
+             :class="visorModoLectura === 'claro' 
+               ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-700' 
+               : 'bg-surface-2/95 border-gray-700/80 shadow-black/60 text-gray-200'">
+          
+          <!-- TIRADOR SUPERIOR -->
+          <div class="w-3.5 h-1 rounded-full transition-colors"
+               :class="visorModoLectura === 'claro' ? 'bg-slate-300' : 'bg-gray-600'"></div>
+
+          <!-- BOTÓN ÍNDICE GENERAL (DESPLEGABLE FLYOUT) -->
+          <div class="relative">
+            <button @click="menuIndiceVisorAbierto = !menuIndiceVisorAbierto"
+                    class="w-6 h-6 rounded-lg flex items-center justify-center transition-colors group cursor-pointer"
+                    :class="menuIndiceVisorAbierto 
+                      ? (visorModoLectura === 'claro' ? 'bg-slate-100 text-[#0f5b9e]' : 'bg-surface-3 text-cyan-400')
+                      : (visorModoLectura === 'claro' ? 'hover:bg-slate-100 text-slate-600 hover:text-[#0f5b9e]' : 'hover:bg-surface-3 text-gray-400 hover:text-white')"
+                    title="Ver índice completo de apartados">
+              <i class="fa-solid fa-list-ul text-xs"></i>
+            </button>
+
+            <!-- MENÚ FLYOUT EXPANDIDO CON TODOS LOS APARTADOS -->
+            <div x-show="menuIndiceVisorAbierto" 
+                 @click.away="menuIndiceVisorAbierto = false"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 -translate-x-2 scale-95"
+                 x-transition:enter-end="opacity-100 translate-x-0 scale-100"
+                 class="absolute right-full mr-4 top-0 w-72 sm:w-80 max-h-[70vh] overflow-y-auto rounded-2xl shadow-2xl border p-3 z-40 backdrop-blur-xl space-y-1.5"
+                 :class="visorModoLectura === 'claro' ? 'bg-white/98 border-slate-200 text-slate-800' : 'bg-surface-1/98 border-gray-700 text-gray-100'">
+              <div class="flex items-center justify-between pb-2 border-b"
+                   :class="visorModoLectura === 'claro' ? 'border-slate-100' : 'border-gray-800'">
+                <div class="flex items-center space-x-2">
+                  <i class="fa-solid fa-list-ul text-xs" :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'"></i>
+                  <span class="text-xs font-bold uppercase tracking-wider">Índice del tema</span>
+                </div>
+                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      :class="visorModoLectura === 'claro' ? 'bg-slate-100 text-slate-600' : 'bg-surface-3 text-gray-400'"
+                      x-text="indiceApartadosVisor.length + ' apartados'"></span>
+              </div>
+              <div class="space-y-1 pt-1">
+                <template x-for="(item, idx) in indiceApartadosVisor" :key="item.id">
+                  <button @click="scrollHaciaApartado(item.id); menuIndiceVisorAbierto = false"
+                          class="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium transition flex items-start space-x-2 group/row cursor-pointer"
+                          :class="seccionActivaVisor === item.id 
+                            ? (visorModoLectura === 'claro' ? 'bg-sky-50 text-[#0f5b9e] font-bold' : 'bg-surface-3 text-cyan-300 font-bold')
+                            : (visorModoLectura === 'claro' ? 'hover:bg-slate-50 text-slate-600 hover:text-slate-900' : 'hover:bg-surface-2 text-gray-300 hover:text-white')">
+                    <span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                          :class="seccionActivaVisor === item.id 
+                            ? (visorModoLectura === 'claro' ? 'bg-[#0f5b9e]' : 'bg-cyan-400')
+                            : (visorModoLectura === 'claro' ? 'bg-slate-300 group-hover/row:bg-slate-400' : 'bg-gray-600 group-hover/row:bg-gray-400')"></span>
+                    <span class="truncate leading-snug" x-text="item.titulo"></span>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- LÍNEA SEPARADORA SUTIL -->
+          <div class="w-3.5 h-[1px] transition-colors"
+               :class="visorModoLectura === 'claro' ? 'bg-slate-200' : 'bg-gray-700'"></div>
+
+          <!-- LISTA VERTICAL DE PUNTOS / DOTS DE CADA APARTADO -->
+          <div class="flex flex-col items-center space-y-1.5 py-0.5">
+            <template x-for="(item, idx) in indiceApartadosVisor" :key="item.id">
+              <div class="relative group flex items-center justify-center">
+                <!-- BOTÓN PUNTO / DOT -->
+                <button @click="scrollHaciaApartado(item.id)"
+                        class="w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer"
+                        :class="seccionActivaVisor === item.id 
+                          ? (visorModoLectura === 'claro' ? 'bg-[#eef3f8]' : 'bg-surface-3')
+                          : 'hover:bg-slate-100/60 dark:hover:bg-surface-3/60'"
+                        :aria-label="'Ir a ' + item.titulo">
+                  <span class="rounded-full transition-all duration-200"
+                        :class="seccionActivaVisor === item.id 
+                          ? (visorModoLectura === 'claro' ? 'w-2 h-2 bg-[#0f5b9e] shadow-sm' : 'w-2 h-2 bg-cyan-400 shadow-sm shadow-cyan-500/40')
+                          : (visorModoLectura === 'claro' ? 'w-1.5 h-1.5 bg-slate-400 group-hover:bg-[#0f5b9e] group-hover:scale-125' : 'w-1.5 h-1.5 bg-gray-500 group-hover:bg-cyan-400 group-hover:scale-125')">
+                  </span>
+                </button>
+
+                <!-- TOOLTIP FLOTANTE A LA IZQUIERDA (EXACTAMENTE COMO LA CAPTURA DE UNIR) -->
+                <div class="absolute right-full mr-3.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 transform group-hover:translate-x-0 translate-x-1.5 z-40 whitespace-nowrap shadow-xl">
+                  <div class="px-3.5 py-1.5 rounded-xl text-xs font-semibold tracking-wide flex items-center space-x-1.5 relative border shadow-2xl"
+                       :class="visorModoLectura === 'claro' 
+                         ? 'bg-[#061a3a] text-white border-[#0b2554]' 
+                         : 'bg-[#061a3a] text-white border-cyan-500/30'">
+                    <span class="text-slate-300 font-normal">Ideas clave:</span>
+                    <span class="text-white font-bold" x-text="item.titulo"></span>
+                    
+                    <!-- TRIÁNGULO / FLECHA QUE APUNTA AL PUNTO -->
+                    <div class="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-2 rotate-45 border-r border-t"
+                         :class="visorModoLectura === 'claro' 
+                           ? 'bg-[#061a3a] border-[#0b2554]' 
+                           : 'bg-[#061a3a] border-cyan-500/30'"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- LÍNEA SEPARADORA INFERIOR -->
+          <div class="w-3.5 h-[1px] transition-colors"
+               :class="visorModoLectura === 'claro' ? 'bg-slate-200' : 'bg-gray-700'"></div>
+
+          <!-- BOTÓN RESUMEN RÁPIDO AL FINAL DEL ÍNDICE -->
+          <div class="relative group flex items-center justify-center">
+            <button @click="abrirModalResumenVisor()"
+                    class="w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer"
+                    :class="visorModoLectura === 'claro' ? 'hover:bg-sky-50 text-slate-400 hover:text-sky-600' : 'hover:bg-surface-3 text-gray-500 hover:text-sky-400'"
+                    title="Ver Resumen Oficial">
+              <i class="fa-solid fa-file-lines text-[10px]"></i>
+            </button>
+            <div class="absolute right-full mr-3.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 transform group-hover:translate-x-0 translate-x-1.5 z-40 whitespace-nowrap shadow-xl">
+              <div class="px-3.5 py-1.5 rounded-xl text-xs font-semibold tracking-wide flex items-center space-x-1.5 relative border shadow-2xl bg-[#061a3a] text-white border-[#0b2554]">
+                <span class="text-white font-bold">Resumen con IA</span>
+                <div class="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-2 rotate-45 bg-[#061a3a] border-r border-t border-[#0b2554]"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CÁPSULA INFERIOR DE HERRAMIENTAS (ROTULADOR DESTACADOR ESTILO UNIR) -->
+        <div class="mt-2.5 rounded-full py-2 px-1.5 sm:px-2 flex flex-col items-center space-y-2 shadow-lg transition-all duration-200 border backdrop-blur-md"
+             :class="visorModoLectura === 'claro' 
+               ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-700' 
+               : 'bg-surface-2/95 border-gray-700/80 shadow-black/50 text-gray-200'">
+          <button @click="toggleModoResaltador()" 
+                  class="w-6 h-6 rounded-lg flex items-center justify-center transition-colors group cursor-pointer"
+                  :class="modoResaltadorActivo 
+                    ? (visorModoLectura === 'claro' ? 'bg-amber-100 text-amber-800' : 'bg-amber-500/20 text-amber-300')
+                    : (visorModoLectura === 'claro' ? 'hover:bg-slate-100 text-slate-600' : 'hover:bg-surface-3 text-gray-400')"
+                  title="Modo Marcador / Subrayado de estudio">
+            <i class="fa-solid fa-highlighter text-xs"></i>
           </button>
-          <a :href="'/?guia=' + encodeURIComponent(modalRutaActiva || '') + '&asig=' + encodeURIComponent(asigSeleccionada?.nombre || '')" 
-             target="_blank" title="Abrir en pestaña nueva del navegador" class="p-2 text-gray-400 hover:text-cyan-400 rounded-lg hover:bg-gray-800 transition">
-            <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
-          </a>
-          <button @click="cerrarModalVisor()" class="text-gray-400 hover:text-white p-2 rounded-lg" title="Cerrar visor">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
+          <div class="w-3.5 h-3.5 rounded-full bg-amber-400 border border-amber-500 shadow-sm cursor-pointer hover:scale-110 transition"
+               title="Color de subrayado activo: Amarillo estudio"></div>
+        </div>
+      </aside>
+
+      <!-- ==================== PANEL LATERAL: AYUDA INTELIGENTE (ESTILO OFICIAL UNIR) ==================== -->
+      <aside x-show="panelAyudaVisor"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full"
+             class="relative flex flex-col border-l shrink-0 transition-all duration-300 z-30 shadow-2xl overflow-hidden"
+             :class="[
+               ayudaVisorExpandida ? 'w-full sm:w-[520px] md:w-[580px]' : 'w-full sm:w-[380px] md:w-[420px]',
+               visorModoLectura === 'claro' ? 'bg-white border-slate-200 text-slate-800' : 'bg-surface-1 border-gray-800 text-gray-100'
+             ]">
+
+        <!-- BOTÓN DIVISOR RETRÁCTIL EN EL BORDE (< >) -->
+        <button @click="panelAyudaVisor = false"
+                class="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-9 rounded-full border shadow-md flex items-center justify-center cursor-pointer transition hover:scale-110 z-40"
+                :class="visorModoLectura === 'claro' ? 'bg-white border-slate-300 text-slate-500 hover:text-slate-800' : 'bg-surface-2 border-gray-700 text-gray-400 hover:text-white'"
+                title="Ocultar ayuda inteligente">
+          <div class="flex items-center -space-x-0.5 text-[7px] opacity-70">
+            <i class="fa-solid fa-chevron-left"></i>
+            <i class="fa-solid fa-chevron-right"></i>
+          </div>
+        </button>
+
+        <!-- CABECERA DEL PANEL AYUDA INTELIGENTE -->
+        <div class="h-14 px-4 flex items-center justify-between border-b shrink-0"
+             :class="visorModoLectura === 'claro' ? 'bg-slate-50/70 border-slate-200' : 'bg-surface-2/60 border-gray-800'">
+          <div class="flex items-center space-x-2.5 min-w-0">
+            <!-- Icono circular degradado púrpura estilo UNIR -->
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-sky-400 p-0.5 shadow-sm shrink-0">
+              <div class="w-full h-full rounded-full flex items-center justify-center"
+                   :class="visorModoLectura === 'claro' ? 'bg-white' : 'bg-surface-1'">
+                <i class="fa-solid fa-wand-magic-sparkles text-xs"
+                   :class="visorModoLectura === 'claro' ? 'text-purple-600' : 'text-purple-400'"></i>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <h3 class="font-bold text-sm tracking-tight truncate"
+                  :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">
+                Ayuda inteligente
+              </h3>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-1 shrink-0">
+            <!-- Botón Limpiar conversación -->
+            <button x-show="ayudaVisorMensajes.length > 0"
+                    @click="limpiarChatAyudaVisor()"
+                    class="p-1.5 rounded-lg transition text-gray-400 hover:text-rose-400"
+                    :class="visorModoLectura === 'claro' ? 'hover:bg-slate-200/70' : 'hover:bg-surface-3'"
+                    title="Reiniciar conversación">
+              <i class="fa-solid fa-arrow-rotate-right text-xs"></i>
+            </button>
+            <!-- Botón Expandir / Reducir ancho -->
+            <button @click="ayudaVisorExpandida = !ayudaVisorExpandida"
+                    class="p-1.5 rounded-lg transition"
+                    :class="visorModoLectura === 'claro' ? 'hover:bg-slate-200/70 text-slate-500 hover:text-slate-800' : 'hover:bg-surface-3 text-gray-400 hover:text-white'"
+                    :title="ayudaVisorExpandida ? 'Contraer panel' : 'Expandir panel'">
+              <i class="fa-solid" :class="ayudaVisorExpandida ? 'fa-compress text-xs' : 'fa-expand text-xs'"></i>
+            </button>
+            <!-- Botón Cerrar (X) -->
+            <button @click="panelAyudaVisor = false"
+                    class="p-1.5 rounded-lg transition"
+                    :class="visorModoLectura === 'claro' ? 'hover:bg-slate-200/70 text-slate-500 hover:text-slate-800' : 'hover:bg-surface-3 text-gray-400 hover:text-white'"
+                    title="Cerrar ayuda inteligente">
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- CUERPO DE MENSAJES DEL CHAT -->
+        <div id="ayuda-visor-scroll" class="flex-1 overflow-y-auto p-4 space-y-4">
+          <!-- Mensaje de bienvenida oficial de UNIR -->
+          <div class="flex items-start gap-2.5">
+            <div class="w-7 h-7 rounded-full bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-xs shrink-0 mt-0.5"
+                 :class="visorModoLectura === 'claro' ? 'text-purple-600' : 'text-purple-400'">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <div class="flex-1 p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-sm"
+                 :class="visorModoLectura === 'claro' ? 'bg-slate-100 text-slate-800 border border-slate-200/70' : 'bg-surface-2 text-gray-200 border border-gray-700/60'">
+              <p class="font-medium">Hola, estoy aquí para ayudarte con la asignatura. ¿Por dónde empezamos?</p>
+            </div>
+          </div>
+
+          <!-- Píldoras de sugerencias rápidas (si aún no hay preguntas del alumno) -->
+          <template x-if="ayudaVisorMensajes.length === 0">
+            <div class="pl-9 space-y-2 pt-1">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Sugerencias para este tema:</p>
+              <button @click="enviarMensajeAyudaVisor('¿Me haces un resumen conciso de los puntos clave de este tema?')"
+                      class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition border flex items-center gap-2 group active:scale-95"
+                      :class="visorModoLectura === 'claro' ? 'bg-white hover:bg-purple-50 text-slate-700 border-slate-200 hover:border-purple-200 shadow-sm' : 'bg-surface-2 hover:bg-purple-500/15 text-gray-300 border-gray-700/80 hover:border-purple-500/40'">
+                <i class="fa-solid fa-file-lines text-sky-400 text-xs shrink-0"></i>
+                <span class="truncate">¿Me haces un resumen clave de este tema?</span>
+              </button>
+              <button @click="enviarMensajeAyudaVisor('Explícame los conceptos más difíciles de esta unidad con un ejemplo de la vida real')"
+                      class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition border flex items-center gap-2 group active:scale-95"
+                      :class="visorModoLectura === 'claro' ? 'bg-white hover:bg-purple-50 text-slate-700 border-slate-200 hover:border-purple-200 shadow-sm' : 'bg-surface-2 hover:bg-purple-500/15 text-gray-300 border-gray-700/80 hover:border-purple-500/40'">
+                <i class="fa-solid fa-lightbulb text-amber-400 text-xs shrink-0"></i>
+                <span class="truncate">Explícame los conceptos clave con un ejemplo</span>
+              </button>
+              <button @click="enviarMensajeAyudaVisor('Hazme 3 preguntas tipo test de examen para ponerme a prueba sobre este tema')"
+                      class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition border flex items-center gap-2 group active:scale-95"
+                      :class="visorModoLectura === 'claro' ? 'bg-white hover:bg-purple-50 text-slate-700 border-slate-200 hover:border-purple-200 shadow-sm' : 'bg-surface-2 hover:bg-purple-500/15 text-gray-300 border-gray-700/80 hover:border-purple-500/40'">
+                <i class="fa-solid fa-bullseye text-emerald-400 text-xs shrink-0"></i>
+                <span class="truncate">Hazme 3 preguntas de test para practicar</span>
+              </button>
+            </div>
+          </template>
+
+          <!-- Hilo interactivo de conversación -->
+          <template x-for="(m, idx) in ayudaVisorMensajes" :key="'ayuda-msg-' + idx">
+            <div>
+              <!-- Mensaje del usuario -->
+              <template x-if="m.rol === 'user'">
+                <div class="flex justify-end">
+                  <div class="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm leading-relaxed break-words"
+                       x-text="m.texto"></div>
+                </div>
+              </template>
+
+              <!-- Mensaje del Asistente (NOVA) -->
+              <template x-if="m.rol === 'assistant'">
+                <div class="flex items-start gap-2.5">
+                  <div class="w-7 h-7 rounded-full bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-xs shrink-0 mt-0.5"
+                       :class="visorModoLectura === 'claro' ? 'text-purple-600' : 'text-purple-400'">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  </div>
+                  <div class="flex-1 max-w-[88%] p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-sm"
+                       :class="visorModoLectura === 'claro' ? 'bg-slate-100 text-slate-800 border border-slate-200/70' : 'bg-surface-2 text-gray-200 border border-gray-700/60'">
+                    <template x-if="!m.texto && ayudaVisorCargando">
+                      <div class="flex items-center space-x-2 text-purple-400">
+                        <i class="fa-solid fa-spinner fa-spin text-xs"></i>
+                        <span class="text-xs text-gray-400">NOVA está pensando...</span>
+                      </div>
+                    </template>
+                    <div x-show="m.texto" 
+                         :class="visorModoLectura === 'claro' ? 'markdown-content-unir-light' : 'markdown-content'"
+                         x-html="renderMarkdown(m.texto)"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- PIE: ENTRADA DE MENSAJE TIPO PÍLDORA (ESTILO CAPTURA UNIR) -->
+        <div class="p-3 sm:p-4 border-t shrink-0"
+             :class="visorModoLectura === 'claro' ? 'bg-white border-slate-200' : 'bg-surface-1 border-gray-800'">
+          <div class="relative flex items-center rounded-full border transition-all duration-200 shadow-sm"
+               :class="visorModoLectura === 'claro' 
+                 ? 'bg-slate-50 border-slate-300 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-200' 
+                 : 'bg-surface-2/90 border-gray-700 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-500/30'">
+            <input type="text"
+                   x-ref="ayudaVisorInputRef"
+                   x-model="ayudaVisorInput"
+                   @keydown.enter.prevent="enviarMensajeAyudaVisor()"
+                   placeholder="Mensaje"
+                   :disabled="ayudaVisorCargando"
+                   class="w-full bg-transparent py-2.5 pl-4 pr-10 text-xs sm:text-sm outline-none placeholder:text-gray-400"
+                   :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'" />
+            <button @click="enviarMensajeAyudaVisor()"
+                    :disabled="!ayudaVisorInput.trim() || ayudaVisorCargando"
+                    class="absolute right-1.5 p-1.5 rounded-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white transition active:scale-95 cursor-pointer"
+                    title="Enviar mensaje">
+              <i class="fa-solid fa-arrow-up text-xs"></i>
+            </button>
+          </div>
+          <p class="text-[10px] text-center text-gray-400 mt-2 leading-tight">
+            Respuestas generadas con IA. Pueden contener imprecisiones. Contrasta siempre la información con el contenido de la asignatura.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ==================== SUB-MODAL 1: RESUMEN DEL TEMA (ESTILO OFICIAL UNIR) ==================== -->
+    <div x-show="modalSubResumen" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div class="glass w-full max-w-3xl md:max-w-4xl max-h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-sky-500/40 shadow-2xl bg-surface-1/95">
+        <!-- Header modal Resumen -->
+        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center text-sm border border-sky-500/30">
+              <i class="fa-solid fa-file-lines"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-white text-sm">Resumen</h3>
+              <p class="text-[11px] text-gray-400" x-text="modalTitulo"></p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <button x-show="resumenTextoTema" @click="copiarTexto(resumenTextoTema)" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-3 transition" title="Copiar resumen">
+              <i class="fa-regular fa-copy text-sm"></i>
+            </button>
+            <button @click="modalSubResumen = false" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-3 transition">
+              <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+          </div>
+        </div>
+        <!-- Contenido del Resumen -->
+        <div class="flex-1 p-6 md:p-8 overflow-y-auto space-y-4 text-sm leading-relaxed text-gray-200 markdown-content">
+          <!-- 1. Estado: Generando resumen automáticamente con IA -->
+          <div x-show="generandoResumenVisor" class="py-16 px-4 text-center space-y-4">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-3xl">
+              <i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i>
+            </div>
+            <h4 class="font-bold text-white text-base">Redactando Resumen Oficial con IA (Plan Robusto)</h4>
+            <p class="text-xs text-gray-400 max-w-md mx-auto">Sintetizando temario oficial en formato académico UNIR. Se mostrará aquí automáticamente en unos segundos sin salir del tema...</p>
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
+              <i class="fa-solid fa-spinner fa-spin text-sky-400"></i>
+              <span>Procesando sin salir del tema...</span>
+            </div>
+          </div>
+
+          <!-- 2. Estado: Resumen generado disponible -->
+          <div x-show="!generandoResumenVisor && resumenTextoTema && resumenTextoTema.length > 50" x-html="renderMarkdown(resumenTextoTema)"></div>
+
+          <!-- 3. Estado: Botón si aún no está generado y no está en proceso -->
+          <div x-show="!generandoResumenVisor && (!resumenTextoTema || resumenTextoTema.length <= 50)" class="py-10 px-4 text-center space-y-4">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-2xl">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <h4 class="font-bold text-white text-base">Resumen con Inteligencia Artificial</h4>
+            <p class="text-xs text-gray-400 max-w-md mx-auto">Pulsa para redactar automáticamente el Resumen oficial de este tema en formato Robusto de UNIR.</p>
+            <button @click="generarResumenDesdeVisor()" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-sky-500/20 transition flex items-center space-x-2 mx-auto active:scale-95">
+              <i class="fa-solid fa-bolt"></i>
+              <span>Generar Resumen Automático (Robusto)</span>
+            </button>
+          </div>
         </div>
       </div>
-      <div class="flex-1 p-6 overflow-y-auto markdown-content text-sm leading-relaxed" x-html="renderMarkdown(modalContenido)"></div>
+    </div>
+
+    <!-- ==================== SUB-MODAL 2: ESQUEMA CONCEPTUAL VISUAL (CAPTURA 5 UNIR) ==================== -->
+    <div x-show="modalSubEsquema" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+      <div class="glass w-full max-w-4xl max-h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-indigo-500/40 shadow-2xl bg-surface-1/95">
+        <!-- Header modal Esquema -->
+        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-sm border border-indigo-500/30">
+              <i class="fa-solid fa-diagram-project"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-white text-sm">Esquema</h3>
+              <p class="text-[11px] text-gray-400" x-text="modalTitulo"></p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <button @click="modalSubEsquema = false" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-3 transition">
+              <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+          </div>
+        </div>
+        <!-- Render Diagrama Mermaid / Cajas del Esquema -->
+        <div class="flex-1 p-6 md:p-8 overflow-y-auto flex items-center justify-center bg-gray-950/60 min-h-[300px]">
+          <div id="visor-mermaid-render" class="w-full flex justify-center text-gray-100 overflow-x-auto p-4"></div>
+        </div>
+      </div>
     </div>
   </div>
 
+  <!-- ==================== MODAL: FLASHCARDS Y REPASO ACTIVO (DESDE VISOR O TARJETA) ==================== -->
+  <div x-show="modalSubFlashcards"
+       x-transition
+       @keydown.window="
+         if (modalSubFlashcards && !modalGenerarFlashcards) {
+           if ($event.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT'].includes($event.target.tagName)) {
+             $event.preventDefault();
+             flashcardVolteada = !flashcardVolteada;
+           } else if ($event.key === 'ArrowRight') {
+             siguienteFlashcard();
+           } else if ($event.key === 'ArrowLeft') {
+             anteriorFlashcard();
+           } else if (flashcardVolteada) {
+             if ($event.key === '1') calificarTarjeta('dificil');
+             else if ($event.key === '2') calificarTarjeta('medio');
+             else if ($event.key === '3') calificarTarjeta('facil');
+           }
+         }
+       "
+       class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md">
+      <div class="glass w-full max-w-2xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/40 shadow-2xl bg-surface-1/95">
+        <!-- Header modal Flashcards -->
+        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center text-sm border border-purple-500/30">
+              <i class="fa-solid fa-clone"></i>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-bold text-white text-sm">Flashcards de Repaso Activo</h3>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30"
+                      x-text="flashcardsFiltradas.length + ' tarjetas'"></span>
+              </div>
+              <p class="text-[11px] text-gray-400 truncate max-w-xs sm:max-w-md" x-text="modalTitulo"></p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button @click="generarFlashcardsTemaVisor()"
+                    :disabled="generandoFlashcardsVisor"
+                    class="px-2.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-semibold transition border border-purple-500/40 flex items-center gap-1.5 disabled:opacity-50"
+                    title="Generar 6 nuevas flashcards con IA para este tema">
+              <i :class="generandoFlashcardsVisor ? 'fa-solid fa-spinner fa-spin text-purple-400' : 'fa-solid fa-wand-magic-sparkles text-xs'"></i>
+              <span x-text="generandoFlashcardsVisor ? 'Generando...' : '+ Crear con IA'"></span>
+            </button>
+            <button @click="modalSubFlashcards = false" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-3 transition" title="Cerrar Flashcards">
+              <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- CUERPO MODAL FLASHCARDS -->
+        <div class="flex-1 p-5 sm:p-6 overflow-y-auto">
+          <!-- 1. Si NO hay tarjetas para esta materia -->
+          <template x-if="flashcardsFiltradas.length === 0 && !generandoFlashcardsVisor">
+            <div class="py-12 px-4 text-center space-y-4">
+              <div class="w-14 h-14 mx-auto rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center text-2xl">
+                <i class="fa-solid fa-clone"></i>
+              </div>
+              <h4 class="font-bold text-white text-base">Flashcards con Inteligencia Artificial</h4>
+              <p class="text-xs text-gray-400 max-w-md mx-auto">Aún no hay tarjetas de repaso para este tema. Pulsa abajo para generar automáticamente tarjetas mnemotécnicas de examen a partir del temario oficial.</p>
+              <button @click="generarFlashcardsTemaVisor()"
+                      class="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-500/25 transition flex items-center space-x-2 mx-auto active:scale-95">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Generar Flashcards con IA</span>
+              </button>
+            </div>
+          </template>
+
+          <!-- 2. Cargando generación con IA -->
+          <template x-if="generandoFlashcardsVisor">
+            <div class="py-14 text-center space-y-4">
+              <div class="w-12 h-12 mx-auto rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl animate-pulse">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <h4 class="text-white font-bold text-sm">Extrayendo conceptos clave del tema...</h4>
+              <p class="text-xs text-gray-400 max-w-md mx-auto">Generando tarjetas de anverso y reverso con IA. Aparecerán aquí en unos segundos...</p>
+            </div>
+          </template>
+
+          <!-- 3. Modo Activo: Sesión de Flashcards 3D -->
+          <template x-if="flashcardsFiltradas.length > 0 && !generandoFlashcardsVisor && !flashcardSesionCompletada">
+            <div class="max-w-xl mx-auto space-y-4">
+              <!-- Barra de progreso -->
+              <div class="glass-card p-3 rounded-2xl border border-gray-800 flex items-center justify-between gap-4 text-xs">
+                <div class="flex items-center space-x-2 shrink-0">
+                  <span class="font-extrabold text-white text-xs" x-text="'Tarjeta ' + (flashcardIndice + 1) + ' / ' + flashcardsFiltradas.length"></span>
+                  <span class="text-[10px] px-2 py-0.2 rounded-full bg-gray-800 text-gray-300 font-mono" x-text="flashcardsPorcentajeProgreso + '%'"></span>
+                </div>
+                <div class="flex-1 h-2 bg-gray-950 rounded-full overflow-hidden border border-gray-800">
+                  <div class="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300 rounded-full"
+                       :style="'width: ' + flashcardsPorcentajeProgreso + '%'"></div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0 text-[11px] font-bold">
+                  <span class="px-1.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" x-text="'🟢 ' + flashcardStatsSesion.facil"></span>
+                  <span class="px-1.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30" x-text="'🟡 ' + flashcardStatsSesion.medio"></span>
+                  <span class="px-1.5 py-0.5 rounded-lg bg-rose-500/15 text-rose-300 border border-rose-500/30" x-text="'🔴 ' + flashcardStatsSesion.dificil"></span>
+                </div>
+              </div>
+
+              <!-- Tarjeta 3D FLIP -->
+              <div class="flashcard-perspective cursor-pointer select-none"
+                   @click="flashcardVolteada = !flashcardVolteada">
+                <div class="flashcard-inner rounded-3xl" :class="flashcardVolteada ? 'flipped' : ''">
+                  <!-- Frontal / Anverso -->
+                  <div class="flashcard-face p-6 sm:p-8 rounded-3xl border border-gray-700/80 bg-gradient-to-b from-gray-900 to-gray-950 shadow-2xl">
+                    <div>
+                      <div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-800">
+                        <span class="font-extrabold uppercase tracking-wider text-[11px] text-cyan-300 flex items-center gap-1.5">
+                          <i class="fa-solid fa-circle-question text-xs"></i>
+                          <span>Pregunta / Concepto Clave</span>
+                        </span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 uppercase tracking-wider border border-gray-700"
+                              x-text="tarjetaActual?.nivel || 'Examen'"></span>
+                      </div>
+                      <p class="text-white text-base sm:text-lg font-semibold leading-relaxed"
+                         x-text="tarjetaActual?.anverso"></p>
+                    </div>
+                    <div class="pt-4 border-t border-gray-800/80 flex items-center justify-between text-xs text-gray-400">
+                      <span class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-rotate text-[10px]"></i>
+                        <span>Clic o [Espacio] para voltear</span>
+                      </span>
+                      <span class="text-[11px] font-mono opacity-60">Girar tarjeta ↺</span>
+                    </div>
+                  </div>
+
+                  <!-- Reverso / Respuesta -->
+                  <div class="flashcard-face flashcard-back p-6 sm:p-8 rounded-3xl border border-purple-500/40 bg-gradient-to-b from-purple-950/40 via-gray-900 to-gray-950 shadow-2xl">
+                    <div>
+                      <div class="flex items-center justify-between pb-3 mb-4 border-b border-purple-500/20">
+                        <span class="font-extrabold uppercase tracking-wider text-[11px] text-purple-300 flex items-center gap-1.5">
+                          <i class="fa-solid fa-circle-check text-xs"></i>
+                          <span>Respuesta Oficial</span>
+                        </span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 uppercase tracking-wider border border-purple-500/30">Solución</span>
+                      </div>
+                      <div class="text-gray-100 text-sm sm:text-base leading-relaxed markdown-content max-h-[180px] overflow-y-auto"
+                           x-html="renderMarkdown(tarjetaActual?.reverso || '')"></div>
+                    </div>
+                    <!-- Botones de dificultad -->
+                    <div class="pt-4 border-t border-gray-800 flex items-center justify-between gap-2" @click.stop>
+                      <button @click="calificarTarjeta('dificil')"
+                              class="flex-1 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer">
+                        <span>🔴 Difícil [1]</span>
+                      </button>
+                      <button @click="calificarTarjeta('medio')"
+                              class="flex-1 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer">
+                        <span>🟡 Medio [2]</span>
+                      </button>
+                      <button @click="calificarTarjeta('facil')"
+                              class="flex-1 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer">
+                        <span>🟢 Fácil [3]</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Controles de navegación manual -->
+              <div class="flex items-center justify-between pt-1">
+                <button @click="anteriorFlashcard()" :disabled="flashcardIndice === 0"
+                        class="px-3.5 py-1.5 rounded-xl bg-gray-900 border border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800 text-xs font-semibold disabled:opacity-40 transition cursor-pointer">
+                  ← Anterior
+                </button>
+                <span class="text-[11px] text-gray-500 font-mono hidden sm:inline">Espacio: Voltear • Flechas: Navegar</span>
+                <button @click="siguienteFlashcard()"
+                        class="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md transition cursor-pointer">
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <!-- 4. Sesión completada -->
+          <template x-if="flashcardSesionCompletada && flashcardsFiltradas.length > 0">
+            <div class="py-10 text-center space-y-4 max-w-md mx-auto">
+              <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-gray-950 flex items-center justify-center text-2xl font-black shadow-lg shadow-emerald-500/25">
+                <i class="fa-solid fa-trophy"></i>
+              </div>
+              <h3 class="text-xl font-black text-white">¡Mazo completado!</h3>
+              <p class="text-xs text-gray-400">Has repasado todas las tarjetas del tema. Tu memoria de trabajo se ha consolidado.</p>
+              <div class="grid grid-cols-3 gap-2 py-2">
+                <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div class="text-lg font-black text-emerald-300" x-text="flashcardStatsSesion.facil"></div>
+                  <div class="text-[10px] text-emerald-400 uppercase font-bold">Fáciles</div>
+                </div>
+                <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+                  <div class="text-lg font-black text-amber-300" x-text="flashcardStatsSesion.medio"></div>
+                  <div class="text-[10px] text-amber-400 uppercase font-bold">En repaso</div>
+                </div>
+                <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-center">
+                  <div class="text-lg font-black text-rose-300" x-text="flashcardStatsSesion.dificil"></div>
+                  <div class="text-[10px] text-rose-400 uppercase font-bold">A reforzar</div>
+                </div>
+              </div>
+              <div class="flex items-center justify-center gap-3 pt-2">
+                <button @click="reiniciarMazoFlashcards()" class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition shadow-md cursor-pointer">
+                  Repetir Mazo
+                </button>
+                <button @click="modalSubFlashcards = false" 
+                        class="px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold transition cursor-pointer"
+                        x-text="modalVisor ? 'Volver a la lectura' : 'Cerrar'"></button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
   <!-- ==================== MODAL: SIMULADOR DE EXAMEN WEB (MODO NOTEBOOK & EXAMEN) ==================== -->
-  <div x-show="modalTest" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
+  <div x-show="modalTest" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
     <div class="glass w-full max-w-3xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
       
       <!-- HEADER TEST -->
@@ -5874,8 +7561,8 @@ def dashboard_html():
             <i class="fa-solid fa-fire-flame-curved"></i>
             <span x-text="'Repasar Ahora mis ' + (testFallos + testBlancos) + ' Errores / Blancos'"></span>
           </button>
-          <button @click="modalTest = false" class="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
-            Cerrar y Guardar Nota
+          <button @click="cerrarModalTest()" class="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold transition">
+            <span x-text="testAbiertoDesdeVisor ? 'Volver a la lectura del tema' : 'Cerrar y Guardar Nota'"></span>
           </button>
         </div>
       </div>
@@ -7126,17 +8813,11 @@ def dashboard_html():
       <i class="fa-solid fa-folder-tree text-base mb-0.5" :class="tab === 'asignaturas' ? 'text-cyan-400' : 'text-gray-400'"></i>
       <span class="text-[10px]">Materias</span>
     </button>
-    <button @click="irASeccion('clases')" 
-            :class="tab === 'clases' ? 'text-amber-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
+    <button @click="irASeccion('progreso')" 
+            :class="tab === 'progreso' ? 'text-amber-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
             class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
-      <i class="fa-solid fa-video text-base mb-0.5" :class="tab === 'clases' ? 'text-amber-400' : 'text-gray-400'"></i>
-      <span class="text-[10px]">Clases</span>
-    </button>
-    <button @click="irASeccion('flashcards')" 
-            :class="tab === 'flashcards' ? 'text-purple-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
-            class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
-      <i class="fa-solid fa-clone text-base mb-0.5" :class="tab === 'flashcards' ? 'text-purple-400' : 'text-gray-400'"></i>
-      <span class="text-[10px]">Cards</span>
+      <i class="fa-solid fa-trophy text-base mb-0.5" :class="tab === 'progreso' ? 'text-amber-400' : 'text-gray-400'"></i>
+      <span class="text-[10px]">Expediente</span>
     </button>
     <button @click="irASeccion('tutor')" 
             :class="tab === 'tutor' ? 'text-cyan-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
@@ -7183,15 +8864,44 @@ def dashboard_html():
         generadorTemaNombre: '',
         generadorPdfSeleccionado: '',
         generadorProfundidad: 'robusta',
-        generadorNumPreguntas: 15,
+        generadorNumPreguntas: 20,
         generadorTipo: 'ambos', // 'ambos', 'solo_guia', 'solo_test'
         generandoIa: false,
         generandoIaPaso: 1,
+        generandoResumenVisor: false,
+        generandoTestVisor: false,
+        generandoVerdaderoFalsoVisor: false,
+        generandoFlashcardsVisor: false,
+        menuPracticaVisorAbierto: false,
+        modalSubFlashcards: false,
+        testAbiertoDesdeVisor: false,
+        visorVistaActiva: 'lectura', // 'lectura', 'test', 'flashcards'
+        temasGenerando: {},
         
-        // Modal Visor
+        // Modal Visor Interactivo estilo UNIR
         modalVisor: false,
         modalTitulo: '',
         modalContenido: '',
+        modalRutaActiva: '',
+        visorTemaActual: null,
+        modalSubResumen: false,
+        modalSubEsquema: false,
+        resumenTextoTema: '',
+        esquemaMermaidTema: '',
+        indiceApartadosVisor: [],
+        seccionActivaVisor: '',
+        menuIndiceVisorAbierto: false,
+        modoResaltadorActivo: false,
+        visorTamanoFuente: 15,
+        visorModoLectura: localStorage.getItem('unir_visor_modo') || 'claro',
+
+        // Ayuda Inteligente en Visor (Estilo UNIR)
+        panelAyudaVisor: false,
+        ayudaVisorExpandida: false,
+        ayudaVisorInput: '',
+        ayudaVisorCargando: false,
+        ayudaVisorMensajes: [],
+        ayudaVisorAbortController: null,
 
         // Chat
         chatInput: '',
@@ -8809,52 +10519,154 @@ def dashboard_html():
           const temasMap = {};
           const otrosDocs = [];
 
-          // 1. Mapear PDFs de temarios
+          // 1. Mapear PDFs de temarios principales (Tema, Módulo, Unit, Unidad)
           (asig.materiales || []).forEach(m => {
             const mStr = String(m || '').trim();
-            const match = mStr.match(/tema\\s*(\\d+)[\\.\\s_-]*(.*?)(?:\\.pdf|$)/i);
+            // Ignorar documentos auxiliares/complementarios para que no sustituyan al temario principal
+            const esAuxiliar = /^(?:presentaci[óo]n|pr[áa]ctica|reto|caso|resumen|actividad|gu[íi]a|criterio|programaci[óo]n|banco|evaluaci[óo]n|soluci[óo]n|di_presentacion)/i.test(mStr) ||
+                               /\\((?:tema|unit|m[óo]dulo)\\s*\\d+\\)/i.test(mStr);
+
+            if (!esAuxiliar) {
+              const mClean = mStr.replace(/\\.pdf$/i, '').trim();
+              const match = mClean.match(/^(?:(tema|unit|m[óo]dulo|modulo|unidad))\\s*(\\d+)[\\s\\.:\\-_]*(.*)$/i);
+              if (match) {
+                const tipoRaw = (match[1] || 'tema').toLowerCase();
+                let prefijo = 'Tema';
+                if (tipoRaw.startsWith('m')) prefijo = 'Módulo';
+                else if (tipoRaw.startsWith('u') && tipoRaw.includes('nit')) prefijo = 'Unit';
+                else if (tipoRaw.startsWith('u')) prefijo = 'Unidad';
+
+                const num = parseInt(match[2], 10);
+                let nom = (match[3] || '').replace(/[\\.\\-_]/g, ' ').trim();
+                if (!nom || nom.toLowerCase() === 'pdf') {
+                  nom = prefijo + ' ' + num;
+                }
+                const esGenerico = nom.toLowerCase() === (prefijo.toLowerCase() + ' ' + num) || nom.toLowerCase() === ('tema ' + num);
+
+                if (!temasMap[num]) {
+                  temasMap[num] = {
+                    numero: num,
+                    titulo: nom,
+                    prefijo: prefijo,
+                    pdf: mStr,
+                    guia: null,
+                    test: null
+                  };
+                } else {
+                  // Si ya existía con nombre genérico pero ahora encontramos uno descriptivo, actualizarlo
+                  const actualEsGenerico = (temasMap[num].titulo || '').toLowerCase() === ((temasMap[num].prefijo || 'tema').toLowerCase() + ' ' + num) || (temasMap[num].titulo || '').toLowerCase() === ('tema ' + num);
+                  if (actualEsGenerico && !esGenerico) {
+                    temasMap[num].titulo = nom;
+                    temasMap[num].prefijo = prefijo;
+                    temasMap[num].pdf = mStr;
+                  } else if (!temasMap[num].pdf) {
+                    temasMap[num].pdf = mStr;
+                  }
+                }
+                return;
+              }
+            }
+            otrosDocs.push(mStr);
+          });
+
+          // 2. Asociar Guías de Estudio IA (por número, por título o por coincidencia de slug)
+          const guiasDisponibles = asig.guias || [];
+          guiasDisponibles.forEach(g => {
+            const gLower = g.toLowerCase();
+            const match = gLower.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
             if (match) {
               const num = parseInt(match[1], 10);
-              const nom = (match[2] || '').replace(/[\\.\\-_]/g, ' ').trim() || ('Tema ' + num);
               if (!temasMap[num]) {
-                temasMap[num] = {
-                  numero: num,
-                  titulo: nom,
-                  pdf: mStr,
-                  guia: null,
-                  test: null
-                };
+                temasMap[num] = { numero: num, titulo: 'Tema ' + num, prefijo: 'Tema', pdf: null, guia: g, test: null };
               } else {
-                temasMap[num].pdf = mStr;
-                if (!temasMap[num].titulo) temasMap[num].titulo = nom;
+                temasMap[num].guia = g;
               }
-            } else {
-              otrosDocs.push(mStr);
+              return;
+            }
+
+            // Fallback por coincidencia de título o slug con temas existentes
+            const gLimpio = gLower.replace(/_guia\\.md$/i, '').replace(/_robusta_guia\\.md$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+            for (const num in temasMap) {
+              const tm = temasMap[num];
+              const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+              const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+              if (titLimpio.length > 5 && (gLimpio.includes(titLimpio) || titLimpio.includes(gLimpio))) {
+                temasMap[num].guia = g;
+                return;
+              }
+              if (pdfLimpio.length > 5 && (gLimpio.includes(pdfLimpio) || pdfLimpio.includes(gLimpio))) {
+                temasMap[num].guia = g;
+                return;
+              }
             }
           });
 
-          // 2. Asociar Guías de Estudio IA
-          (asig.guias || []).forEach(g => {
-            const match = g.match(/tema_(\\d+)/i);
-            if (match) {
-              const num = parseInt(match[1], 10);
-              if (!temasMap[num]) {
-                temasMap[num] = { numero: num, titulo: 'Tema ' + num, pdf: null, guia: g, test: null };
-              } else {
-                temasMap[num].guia = g;
+          // Paso extra de seguridad: asegurar que todo tema con guía disponible en cualquier formato la tenga enlazada
+          Object.values(temasMap).forEach(tm => {
+            if (!tm.guia) {
+              const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+              const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+              const encontrada = guiasDisponibles.find(g => {
+                const gL = g.toLowerCase();
+                const mNum = gL.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
+                if (mNum && parseInt(mNum[1], 10) === tm.numero) return true;
+                const gSinExt = gL.replace(/_guia\\.md$/i, '').replace(/_robusta_guia\\.md$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+                if (titLimpio.length > 5 && (gSinExt.includes(titLimpio) || titLimpio.includes(gSinExt))) return true;
+                if (pdfLimpio.length > 5 && (gSinExt.includes(pdfLimpio) || pdfLimpio.includes(gSinExt))) return true;
+                return false;
+              });
+              if (encontrada) {
+                tm.guia = encontrada;
               }
             }
           });
 
           // 3. Asociar Tests y Simulacros
-          (asig.tests || []).forEach(t => {
-            const match = t.match(/tema_(\\d+)/i);
+          const testsDisponibles = asig.tests || [];
+          testsDisponibles.forEach(t => {
+            const tLower = t.toLowerCase();
+            const match = tLower.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
             if (match) {
               const num = parseInt(match[1], 10);
               if (!temasMap[num]) {
-                temasMap[num] = { numero: num, titulo: 'Tema ' + num, pdf: null, guia: null, test: t };
+                temasMap[num] = { numero: num, titulo: 'Tema ' + num, prefijo: 'Tema', pdf: null, guia: null, test: t };
               } else {
                 temasMap[num].test = t;
+              }
+              return;
+            }
+
+            const tLimpio = tLower.replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+            for (const num in temasMap) {
+              const tm = temasMap[num];
+              const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+              const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+              if (titLimpio.length > 5 && (tLimpio.includes(titLimpio) || titLimpio.includes(tLimpio))) {
+                temasMap[num].test = t;
+                return;
+              }
+              if (pdfLimpio.length > 5 && (tLimpio.includes(pdfLimpio) || pdfLimpio.includes(tLimpio))) {
+                temasMap[num].test = t;
+                return;
+              }
+            }
+          });
+
+          Object.values(temasMap).forEach(tm => {
+            if (!tm.test) {
+              const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+              const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+              const encontrado = testsDisponibles.find(t => {
+                const tL = t.toLowerCase();
+                const mNum = tL.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
+                if (mNum && parseInt(mNum[1], 10) === tm.numero) return true;
+                const tSinExt = tL.replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+                if (titLimpio.length > 5 && (tSinExt.includes(titLimpio) || titLimpio.includes(tSinExt))) return true;
+                if (pdfLimpio.length > 5 && (tSinExt.includes(pdfLimpio) || pdfLimpio.includes(tSinExt))) return true;
+                return false;
+              });
+              if (encontrado) {
+                tm.test = encontrado;
               }
             }
           });
@@ -9032,6 +10844,25 @@ def dashboard_html():
               breaks: true,
             });
           }
+          if (window.mermaid) {
+            try {
+              window.mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                themeVariables: {
+                  darkMode: true,
+                  background: '#090d16',
+                  primaryColor: '#0ea5e9',
+                  primaryTextColor: '#f8fafc',
+                  primaryBorderColor: '#38bdf8',
+                  lineColor: '#64748b',
+                  secondaryColor: '#6366f1',
+                  tertiaryColor: '#1e293b'
+                },
+                securityLevel: 'loose'
+              });
+            } catch(e) { console.warn('Error inicializando Mermaid:', e); }
+          }
           window.addEventListener('popstate', () => this.procesarUrlInicial());
           await this.cargarUsuarioActual();
           await this.sincronizarClavesIa();
@@ -9169,13 +11000,17 @@ def dashboard_html():
         },
 
         abrirGeneradorDirecto(asig) {
-          this.asigSeleccionada = asig;
-          this.generadorPdfSeleccionado = asig.materiales?.[0] || '';
-          this.generadorTemaNombre = (asig.materiales?.[0] || 'Tema 1').replace('.pdf', '').replaceAll('_', ' ');
-          this.generadorProfundidad = 'robusta';
-          this.generadorNumPreguntas = 15;
-          this.generadorTipo = 'ambos';
-          this.modalGenerador = true;
+          this.abrirAsignatura(asig);
+          const temas = this.unidadesUnificadasAsignaturaActual?.temas || [];
+          const temaSinGuia = temas.find(t => !t.guia && t.pdf);
+          if (temaSinGuia) {
+            this.generarIaDirectaTema(temaSinGuia, 'solo_guia');
+          } else {
+            const temaSinTest = temas.find(t => !t.test && t.pdf);
+            if (temaSinTest) {
+              this.generarIaDirectaTema(temaSinTest, 'solo_test', { abrirTestDirecto: true });
+            }
+          }
         },
 
         _claveRecientesUsuario() {
@@ -9467,6 +11302,7 @@ def dashboard_html():
         },
 
         irASeccion(sec) {
+          if (sec === 'clases') sec = 'dashboard';
           if (window.innerWidth < 768) {
             this.sidebarVisible = false;
           }
@@ -9511,6 +11347,15 @@ def dashboard_html():
 
         cerrarModalVisor() {
           this.modalVisor = false;
+          this.visorVistaActiva = 'lectura';
+          this.modalSubResumen = false;
+          this.modalSubEsquema = false;
+          this.modalSubFlashcards = false;
+          this.modalTest = false;
+          this.testAbiertoDesdeVisor = false;
+          this.menuPracticaVisorAbierto = false;
+          this.panelAyudaVisor = false;
+          this.visorTemaActual = null;
           this.restaurarUrlBase();
         },
 
@@ -9521,6 +11366,17 @@ def dashboard_html():
 
         cerrarModalTest() {
           this.modalTest = false;
+          this.visorVistaActiva = 'lectura';
+          if (this.testAbiertoDesdeVisor && this.visorTemaActual) {
+            this.modalVisor = true;
+            this.testAbiertoDesdeVisor = false;
+            if (this.asigSeleccionada && window.history && window.history.replaceState) {
+              const url = `/?tema=${encodeURIComponent(this.visorTemaActual.numero || '1')}&asig=${encodeURIComponent(this.asigSeleccionada.nombre)}`;
+              window.history.replaceState(null, '', url);
+            }
+            return;
+          }
+          this.testAbiertoDesdeVisor = false;
           this.restaurarUrlBase();
         },
 
@@ -9721,6 +11577,7 @@ def dashboard_html():
           const params = new URLSearchParams(window.location.search);
           const tabParam = params.get('tab');
           const asigParam = params.get('asig');
+          const temaParam = params.get('tema');
           const guiaParam = params.get('guia');
           const testParam = params.get('test');
           const pdfParam = params.get('pdf');
@@ -9728,14 +11585,29 @@ def dashboard_html():
           if (asigParam) {
             const asigObj = this.catalogoTotal.find(a => a.nombre.toLowerCase() === asigParam.toLowerCase());
             if (asigObj) {
+              if (asigObj.programa_id) {
+                this.programaActivoId = asigObj.programa_id;
+              }
               this.asigSeleccionada = asigObj;
             }
           }
 
           if (testParam && asigParam) {
             await this.iniciarTestWeb(asigParam, testParam);
+          } else if (temaParam && asigParam) {
+            const temas = this.unidadesUnificadasAsignaturaActual?.temas || [];
+            const tm = temas.find(t => String(t.numero) === String(temaParam));
+            if (tm) {
+              await this.abrirVisorTema(tm);
+            }
           } else if (guiaParam) {
-            await this.verContenidoArchivo(guiaParam);
+            const temas = this.unidadesUnificadasAsignaturaActual?.temas || [];
+            const tm = temas.find(t => t.guia && (t.guia === guiaParam || guiaParam.endsWith(t.guia)));
+            if (tm) {
+              await this.abrirVisorTema(tm, true);
+            } else {
+              await this.verContenidoArchivo(guiaParam);
+            }
           } else if (pdfParam) {
             const nombre = pdfParam.split('/').pop() || 'Documento PDF';
             this.abrirPdf(pdfParam, nombre);
@@ -9935,11 +11807,14 @@ def dashboard_html():
         },
 
         async abrirResumenClase(clase) {
-          if (!clase.has_resumen && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
+          const asig = clase.asignatura || this.asigSeleccionada?.nombre;
+          const nomArchivo = clase.nombre_archivo || (clase.nombre ? (clase.nombre.endsWith('.md') ? clase.nombre : clase.nombre + '.md') : (clase.archivo ? clase.archivo.split('/').pop() : ''));
+          const cObj = { ...clase, asignatura: asig, nombre_archivo: nomArchivo };
+          if (!cObj.has_resumen && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey && this.usuarioActual?.rol !== 'admin') {
             this.abrirModalApiKey();
             return;
           }
-          this.resumenClaseActual = clase;
+          this.resumenClaseActual = cObj;
           this.modalResumenClase = true;
           this.cargandoResumenClase = true;
           this.resumenClaseTexto = '';
@@ -9952,8 +11827,8 @@ def dashboard_html():
                 ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
-                asignatura: clase.asignatura,
-                nombre_archivo: clase.nombre_archivo,
+                asignatura: asig,
+                nombre_archivo: nomArchivo,
                 api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
@@ -9962,6 +11837,7 @@ def dashboard_html():
               this.resumenClaseTexto = data.resumen;
               this.resumenClaseCached = !!data.cached;
               clase.has_resumen = true;
+              cObj.has_resumen = true;
             } else {
               this.resumenClaseTexto = 'No se pudo generar el informe para esta clase.';
             }
@@ -10017,13 +11893,91 @@ def dashboard_html():
           this.enviarMensajeChat();
         },
 
+        async generarIaDirectaTema(tm, tipo = 'solo_guia', options = {}) {
+          const asig = this.asigSeleccionada?.nombre || options.asignatura || '';
+          if (!asig) {
+            alert('Por favor selecciona una asignatura antes de generar material.');
+            return;
+          }
+          let temaNombre = options.nombreTema || tm?.nombre_tema;
+          if (!temaNombre) {
+            const num = tm?.numero;
+            const tit = tm?.titulo || '';
+            if (num && tit && !tit.toLowerCase().startsWith('tema')) {
+              temaNombre = `Tema ${num}. ${tit}`;
+            } else if (tit) {
+              temaNombre = tit;
+            } else if (tm?.pdf) {
+              temaNombre = tm.pdf.replace('.pdf', '').replaceAll('_', ' ');
+            } else {
+              temaNombre = 'Tema ' + (num || '');
+            }
+          }
+          const pdfArchivo = tm?.pdf || options.archivoPdf || (temaNombre + '.pdf');
+          const key = tm?.numero ?? (tm?.titulo || pdfArchivo || 'temp');
+          this.temasGenerando[key] = tipo;
+          try {
+            const res = await fetch('/api/generar-guia', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
+              body: JSON.stringify({
+                asignatura: asig,
+                nombre_tema: temaNombre,
+                archivo_pdf: pdfArchivo,
+                profundidad: 'robusta',
+                num_preguntas: 20,
+                tipo_generacion: tipo,
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              alert(data.detail || 'Error al generar material con IA');
+              return;
+            }
+            if (data.tiene_guia && data.resultado?.guia) {
+              const gNom = data.resultado.guia.split('/').pop();
+              if (tm) tm.guia = gNom;
+            }
+            if (data.tiene_test && data.resultado?.test_json) {
+              const tNom = data.resultado.test_json.split('/').pop().replace(/\\.json$/i, '');
+              if (tm) tm.test = tNom;
+            }
+            await this.cargarCatalogo();
+            await this.cargarProgreso();
+            this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig) || this.asigSeleccionada;
+
+            if (tipo === 'solo_test' && (options.abrirTestDirecto || data.tiene_test)) {
+              const nuevoTest = data.resultado?.test_json ? data.resultado.test_json.split('/').pop() : null;
+              if (nuevoTest && options.abrirTestDirecto) {
+                this.iniciarTestWeb(asig, nuevoTest);
+              }
+            } else if (tipo === 'solo_guia' && options.abrirResumenDirecto) {
+              const nuevaGuia = data.resultado?.guia ? data.resultado.guia.split('/').pop() : null;
+              if (nuevaGuia) {
+                const rutaGuia = `data/procesado/guias/${asig}/${nuevaGuia}`;
+                this.verContenidoArchivo(rutaGuia, tm);
+              }
+            }
+          } catch(e) {
+            console.error('Error en generación directa IA:', e);
+            alert('Error de conexión al generar con IA.');
+          } finally {
+            delete this.temasGenerando[key];
+            this.temasGenerando = { ...this.temasGenerando };
+          }
+        },
+
         generarGuiaDesdePdf(pdfNombre, tipo = 'ambos') {
-          this.generadorPdfSeleccionado = pdfNombre;
-          this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
-          this.generadorProfundidad = 'robusta';
-          this.generadorNumPreguntas = 15;
-          this.generadorTipo = tipo;
-          this.modalGenerador = true;
+          const tema = this.unidadesUnificadasAsignaturaActual?.temas?.find(t => t.pdf === pdfNombre || (t.titulo && pdfNombre.includes(t.titulo)));
+          if (tema) {
+            this.generarIaDirectaTema(tema, tipo === 'ambos' ? 'solo_guia' : tipo, { abrirTestDirecto: tipo === 'solo_test' });
+          } else {
+            this.generarIaDirectaTema({ pdf: pdfNombre, titulo: pdfNombre.replace('.pdf', '').replaceAll('_', ' ') }, tipo === 'ambos' ? 'solo_guia' : tipo, { abrirTestDirecto: tipo === 'solo_test' });
+          }
         },
 
         opcionesValidas(ops) {
@@ -10038,15 +11992,15 @@ def dashboard_html():
         },
 
         rehacerGuiaTema(tm) {
-          this.generarGuiaDesdePdf(tm.pdf || (tm.titulo + '.pdf'), 'solo_guia');
+          this.generarIaDirectaTema(tm, 'solo_guia');
         },
 
         rehacerTestTema(tm) {
-          this.generarGuiaDesdePdf(tm.pdf || (tm.titulo + '.pdf'), 'solo_test');
+          this.generarIaDirectaTema(tm, 'solo_test', { abrirTestDirecto: true });
         },
 
         async eliminarGuiaTema(tm) {
-          if (!confirm(`¿Eliminar la Guía de estudio de "${tm.titulo}" para volver a crearla con IA?`)) return;
+          if (!confirm(`¿Eliminar el Resumen con IA de "${tm.titulo}" para volver a crearlo?`)) return;
           try {
             const res = await fetch(`/api/guia/${encodeURIComponent(this.asigSeleccionada.nombre)}/${encodeURIComponent(tm.guia)}`, { method: 'DELETE' });
             if (res.ok) {
@@ -10054,7 +12008,7 @@ def dashboard_html():
               this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
             } else {
               const err = await res.json();
-              alert(err.detail || 'Error al eliminar la guía');
+              alert(err.detail || 'Error al eliminar el resumen');
             }
           } catch(e) {
             alert('Error al conectar con el servidor');
@@ -10078,21 +12032,18 @@ def dashboard_html():
         },
 
         rehacerGuiaDesdeVisor() {
-          const nom = this.modalTitulo || '';
-          const asig = this.asigSeleccionada?.nombre || '';
-          this.cerrarModalVisor();
-          if (this.asigSeleccionada) {
-            const tm = this.unidadesUnificadasAsignaturaActual.temas?.find(t => (t.guia && this.modalRutaActiva?.includes(t.guia)) || nom.includes(t.titulo));
-            if (tm) {
-              this.rehacerGuiaTema(tm);
-              return;
-            }
+          const tm = this.visorTemaActual;
+          if (tm) {
+            this.resumenTextoTema = '';
+            this.generarResumenDesdeVisor();
+          } else {
+            const nom = this.modalTitulo || '';
+            this.generarIaDirectaTema({ titulo: nom, pdf: nom + '.pdf' }, 'solo_guia');
           }
-          this.generarGuiaDesdePdf(nom + '.pdf', 'solo_guia');
         },
 
         async eliminarGuiaDesdeVisor() {
-          if (!confirm('¿Eliminar esta Guía de estudio? Podrás volver a generarla con IA cuando quieras.')) return;
+          if (!confirm('¿Eliminar este Resumen con IA? Podrás volver a generarlo cuando quieras.')) return;
           const ruta = this.modalRutaActiva || '';
           const asig = this.asigSeleccionada?.nombre || '';
           const guiaNombre = ruta.split('/').pop();
@@ -10106,7 +12057,7 @@ def dashboard_html():
               }
             } else {
               const err = await res.json();
-              alert(err.detail || 'Error al eliminar la guía');
+              alert(err.detail || 'Error al eliminar el resumen');
             }
           } catch(e) {
             alert('Error al conectar con el servidor');
@@ -10124,7 +12075,7 @@ def dashboard_html():
               return;
             }
           }
-          this.generarGuiaDesdePdf(testNom + '.pdf', 'solo_test');
+          this.generarIaDirectaTema({ pdf: testNom + '.pdf', titulo: testNom }, 'solo_test', { abrirTestDirecto: true });
         },
 
         async eliminarTestDesdeModal() {
@@ -10134,7 +12085,7 @@ def dashboard_html():
           try {
             const res = await fetch(`/api/test/${encodeURIComponent(asig)}/${encodeURIComponent(testNom)}`, { method: 'DELETE' });
             if (res.ok) {
-              this.modalTest = false;
+              this.cerrarModalTest();
               await this.cargarCatalogo();
               if (this.asigSeleccionada) {
                 this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
@@ -10190,9 +12141,9 @@ def dashboard_html():
             this.generadorPdfSeleccionado = '';
             
             if (data.tiene_guia && data.tiene_test) {
-              alert('¡Guía de estudio y test interactivo generados con éxito!');
+              alert('¡Resumen UNIR y test interactivo generados con éxito!');
             } else if (data.tiene_guia) {
-              alert('¡Guía de estudio oficial generada con éxito!');
+              alert('¡Resumen UNIR oficial generado con éxito!');
             } else if (data.tiene_test) {
               alert('¡Simulacro tipo test oficial generado con éxito!');
             }
@@ -10443,28 +12394,791 @@ def dashboard_html():
           }
         },
 
-        async verContenidoArchivo(ruta) {
+        async abrirVisorTema(tm, abrirResumenDirecto = false) {
+          if (!tm) return;
+          this.visorTemaActual = tm;
+          const asig = this.asigSeleccionada?.nombre || '';
+          this.modalTitulo = (tm.prefijo || 'Tema') + ' ' + tm.numero + '. ' + tm.titulo;
+
+          // 1. Cargar el TEMA COMPLETO (texto íntegro extraído del PDF oficial)
+          if (tm.pdf) {
+            try {
+              const res = await fetch('/api/tema/texto?asig=' + encodeURIComponent(asig) + '&pdf=' + encodeURIComponent(tm.pdf));
+              if (res.ok) {
+                const data = await res.json();
+                this.modalContenido = data.contenido;
+                this.modalRutaActiva = tm.pdf;
+                this.modalVisor = true;
+                this.visorVistaActiva = 'lectura';
+                this.modalTest = false;
+                this.modalVisorPdf = false;
+                this.modalSubResumen = !!abrirResumenDirecto;
+                this.modalSubEsquema = false;
+
+                this.registrarActividadReciente('tema', asig, (tm.prefijo || 'Tema') + ' ' + tm.numero + '. ' + tm.titulo, tm.pdf);
+                const url = '/?tema=' + encodeURIComponent(tm.numero) + '&asig=' + encodeURIComponent(asig);
+                if (window.history && window.history.pushState) {
+                  window.history.pushState({ tema: tm.numero, asig: asig }, '', url);
+                }
+
+                // Cargar la guía/resumen IA en segundo plano para cuando pulse "Resumen"
+                await this.cargarOPrepararResumenTema(tm);
+                if (abrirResumenDirecto && (!this.resumenTextoTema || this.resumenTextoTema.trim().length <= 50)) {
+                  this.generarResumenDesdeVisor();
+                }
+                return;
+              }
+            } catch(e) {
+              console.warn('Error al cargar texto completo de tema:', e);
+            }
+          }
+
+          // Fallback: si no hay PDF pero hay guía, abrir la guía
+          if (tm.guia) {
+            let rutaGuia = tm.guia;
+            if (rutaGuia && !rutaGuia.includes('/')) {
+              rutaGuia = 'data/procesado/guias/' + asig + '/' + rutaGuia;
+            }
+            await this.verContenidoArchivo(rutaGuia, tm);
+            if (abrirResumenDirecto) this.modalSubResumen = true;
+          } else {
+            alert('No hay material oficial disponible para este tema todavía.');
+          }
+        },
+
+        async cargarOPrepararResumenTema(tm) {
+          if (!tm) return;
+          const asig = this.asigSeleccionada?.nombre || '';
+          this.resumenTextoTema = '';
+
+          // 1. Obtener guía desde tm.guia o buscarla en las guías de la asignatura
+          let rutaGuia = tm.guia;
+          if (!rutaGuia) {
+            const guiasDisponibles = this.asigSeleccionada?.guias || [];
+            const num = tm.numero;
+            const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+            const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+            const encontrada = guiasDisponibles.find(g => {
+              const gL = g.toLowerCase();
+              const mNum = gL.match(/(?:tema|t)[\\s_-]*0*(\\d+)/i);
+              if (mNum && parseInt(mNum[1], 10) === num) return true;
+              const gSinExt = gL.replace(/_guia\\.md$/i, '').replace(/_robusta_guia\\.md$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+              if (titLimpio.length > 5 && (gSinExt.includes(titLimpio) || titLimpio.includes(gSinExt))) return true;
+              if (pdfLimpio.length > 5 && (gSinExt.includes(pdfLimpio) || pdfLimpio.includes(gSinExt))) return true;
+              return false;
+            });
+            if (encontrada) {
+              rutaGuia = encontrada;
+              tm.guia = encontrada;
+            } else if (num) {
+              rutaGuia = 'Tema_' + num + '_guia.md';
+            }
+          }
+
+          if (rutaGuia) {
+            try {
+              if (!rutaGuia.includes('/')) {
+                rutaGuia = 'data/procesado/guias/' + asig + '/' + rutaGuia;
+              }
+              const res = await fetch('/api/contenido?ruta=' + encodeURIComponent(rutaGuia));
+              if (res.ok) {
+                const data = await res.json();
+                if (data.contenido && data.contenido.trim().length > 50) {
+                  this.resumenTextoTema = data.contenido.trim();
+                  return;
+                }
+              }
+            } catch(e) {
+              console.warn('No se pudo precargar la guía de estudio:', e);
+            }
+          }
+
+          // Si no tiene guía aún, dejamos resumenTextoTema vacío para mostrar el botón de generarla con IA
+          this.resumenTextoTema = '';
+        },
+
+        async generarResumenDesdeVisor() {
+          if (!this.visorTemaActual) return;
+          const tm = this.visorTemaActual;
+          const asig = this.asigSeleccionada?.nombre || '';
+          if (!asig) return;
+
+          this.modalSubResumen = true;
+          this.modalSubEsquema = false;
+          this.generandoResumenVisor = true;
+
+          let temaNombre = tm.titulo || ('Tema ' + tm.numero);
+          if (tm.numero && !temaNombre.toLowerCase().startsWith('tema')) {
+            temaNombre = `Tema ${tm.numero}. ${tm.titulo}`;
+          }
+          const pdfArchivo = tm.pdf || (temaNombre + '.pdf');
+
+          try {
+            const res = await fetch('/api/generar-guia', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
+              body: JSON.stringify({
+                asignatura: asig,
+                nombre_tema: temaNombre,
+                archivo_pdf: pdfArchivo,
+                profundidad: 'robusta',
+                num_preguntas: 20,
+                tipo_generacion: 'solo_guia',
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.tiene_guia) {
+              if (data.resultado?.guia_contenido) {
+                this.resumenTextoTema = data.resultado.guia_contenido;
+              } else {
+                await this.cargarOPrepararResumenTema(tm);
+              }
+              tm.guia = data.resultado?.guia ? data.resultado.guia.split('/').pop() : (tm.guia || ('Tema_' + tm.numero + '_guia.md'));
+              await this.cargarCatalogo();
+              await this.cargarProgreso();
+              this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig) || this.asigSeleccionada;
+            } else {
+              alert(data.detail || 'Error al generar el resumen oficial con IA.');
+            }
+          } catch(e) {
+            console.error('Error generando resumen desde visor:', e);
+            alert('Error de conexión al generar el resumen.');
+          } finally {
+            this.generandoResumenVisor = false;
+          }
+        },
+
+        async verContenidoArchivo(ruta, tm = null) {
           try {
             const res = await fetch('/api/contenido?ruta=' + encodeURIComponent(ruta));
             const data = await res.json();
-            const tituloLimpio = data.nombre.replace(/_/g, ' ').replace(/\\.md$/i, '');
-            this.modalTitulo = tituloLimpio;
+            const tituloLimpio = data.nombre.replace(/_/g, ' ').replace(/\\.md$/i, '').replace(/\\s*guia$/i, '').trim();
+            this.modalTitulo = tm?.titulo ? ('Tema ' + (tm.numero ? tm.numero + '. ' : '') + tm.titulo) : (tituloLimpio.startsWith('Tema') ? tituloLimpio : ('Resumen: ' + tituloLimpio));
             this.modalContenido = data.contenido;
             this.modalRutaActiva = ruta;
+
+            // Asignar o vincular tema asociado
+            if (tm) {
+              this.visorTemaActual = tm;
+            } else {
+              const temas = this.unidadesUnificadasAsignaturaActual?.temas || [];
+              const encontrado = temas.find(t => (t.guia && (t.guia === ruta || ruta.endsWith(t.guia))) || (t.titulo && tituloLimpio.toLowerCase().includes(t.titulo.toLowerCase())));
+              this.visorTemaActual = encontrado || null;
+            }
+
+            // Procesar resumen y esquema conceptual para el visor interactivo estilo UNIR
+            this.procesarContenidoVisorUnir(data.contenido, this.visorTemaActual);
+
             this.modalVisor = true;
             this.modalTest = false;
             this.modalVisorPdf = false;
+            this.modalSubResumen = false;
+            this.modalSubEsquema = false;
+
             this.registrarActividadReciente('guia', this.asigSeleccionada?.nombre || 'Guía', tituloLimpio.replace(/ guia$/i, ''), ruta);
             const url = '/?guia=' + encodeURIComponent(ruta) + (this.asigSeleccionada ? '&asig=' + encodeURIComponent(this.asigSeleccionada.nombre) : '');
             if (window.history && window.history.pushState) {
               window.history.pushState({ guia: ruta }, '', url);
             }
-          } catch(e) { alert('No se pudo abrir el archivo'); }
+          } catch(e) {
+            console.error('Error al abrir contenido:', e);
+            alert('No se pudo abrir el archivo');
+          }
+        },
+
+        procesarContenidoVisorUnir(contenido, tm) {
+          if (!contenido) {
+            this.resumenTextoTema = '';
+            this.esquemaMermaidTema = '';
+            return;
+          }
+
+          // 1. EXTRAER RESUMEN EJECUTIVO (ESTILO CAPTURA 3 UNIR)
+          let resumenTxt = '';
+          const resMatch = contenido.match(/(?:###?\\s*(?:Resumen\\s*Ejecutivo|Resumen|Síntesis|Ideas\\s*Clave)[^\\n]*\\n)([\\s\\S]*?)(?=\\n###?\\s+[^\\n]+|\\n##\\s+[^\\n]+|\\n---|\\n```|$)/i);
+          if (resMatch && resMatch[1].trim().length > 60) {
+            resumenTxt = resMatch[1].trim();
+          } else {
+            const lineas = contenido.split('\\n');
+            const parrafos = [];
+            let cur = [];
+            for (let l of lineas) {
+              const trimmed = l.trim();
+              if (trimmed.startsWith('#') || trimmed.startsWith('>') || trimmed.startsWith('---') || trimmed.startsWith('```')) {
+                if (cur.length) { parrafos.push(cur.join(' ')); cur = []; }
+                continue;
+              }
+              if (!trimmed) {
+                if (cur.length) { parrafos.push(cur.join(' ')); cur = []; }
+              } else {
+                cur.push(trimmed);
+              }
+              if (parrafos.length >= 3) break;
+            }
+            if (cur.length && parrafos.length < 3) parrafos.push(cur.join(' '));
+            resumenTxt = parrafos.join('\\n\\n');
+          }
+
+          const subtituloTema = tm?.titulo ? `### ${tm.titulo}\\n\\n` : '';
+          this.resumenTextoTema = subtituloTema + (resumenTxt || 'Este tema no contiene una sección de resumen pregenerada.');
+
+          // 2. EXTRAER ESQUEMA JERÁRQUICO MERMAID (ESTILO CAPTURA 5 UNIR)
+          let mermaidCode = '';
+          const mermaidMatch = contenido.match(/```mermaid\\s*([\\s\\S]*?)```/i);
+          if (mermaidMatch && mermaidMatch[1].trim().length > 20) {
+            mermaidCode = mermaidMatch[1].trim();
+          } else {
+            try {
+              const parser = new DOMParser();
+              const rawHtml = marked.parse(contenido || '');
+              const doc = parser.parseFromString(`<div>${rawHtml}</div>`, 'text/html');
+              const headings = doc.querySelectorAll('h2, h3');
+              if (headings.length > 0) {
+                let lines = ['graph TD'];
+                const rootLabel = (tm?.titulo || this.modalTitulo || 'Tema').replace(/["\\(\\)\\[\\]\\{\\}]/g, '').substring(0, 40);
+                lines.push(`  Root["📌 ${rootLabel}"]`);
+                let h2Count = 0;
+                let lastH2Id = 'Root';
+                headings.forEach((h, i) => {
+                  const cleanText = h.textContent.replace(/["\\(\\)\\[\\]\\{\\}]/g, '').trim().substring(0, 40);
+                  if (!cleanText) return;
+                  if (h.tagName.toLowerCase() === 'h2') {
+                    h2Count++;
+                    const h2Id = 'N' + h2Count;
+                    lines.push(`  Root --> ${h2Id}["${cleanText}"]`);
+                    lastH2Id = h2Id;
+                  } else if (h.tagName.toLowerCase() === 'h3' && h2Count > 0 && i < 15) {
+                    const h3Id = 'Sub_' + i;
+                    lines.push(`  ${lastH2Id} --> ${h3Id}["${cleanText}"]`);
+                  }
+                });
+                mermaidCode = lines.join('\\n');
+              }
+            } catch(e) {}
+            if (!mermaidCode) {
+              const rootLabel = (tm?.titulo || this.modalTitulo || 'Tema').replace(/["\\(\\)\\[\\]\\{\\}]/g, '');
+              mermaidCode = `graph TD\\n  A["📌 ${rootLabel}"] --> B["1. Ideas clave"]\\n  A --> C["2. Práctica y Test"]\\n  A --> D["3. Recursos"]`;
+            }
+          }
+          this.esquemaMermaidTema = mermaidCode;
+        },
+
+        renderMarkdownConIndices(texto) {
+          if (!texto) {
+            this.indiceApartadosVisor = [];
+            this.seccionActivaVisor = '';
+            return '';
+          }
+          const rawHtml = marked.parse(texto);
+          const sanitized = window.DOMPurify ? window.DOMPurify.sanitize(rawHtml) : rawHtml;
+          try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(`<div>${sanitized}</div>`, 'text/html');
+            const headings = doc.querySelectorAll('h2, h3');
+            const indices = [];
+            headings.forEach((h, idx) => {
+              const txt = h.textContent.trim();
+              if (!txt || txt.length > 75) return;
+              const id = 'sec-visor-' + idx;
+              h.setAttribute('id', id);
+              const nivel = parseInt(h.tagName.substring(1), 10);
+              indices.push({ id, titulo: txt, nivel });
+            });
+            this.indiceApartadosVisor = indices;
+            if (indices.length > 0 && !this.seccionActivaVisor) {
+              this.seccionActivaVisor = indices[0].id;
+            }
+            return doc.body.firstElementChild.innerHTML;
+          } catch(e) {
+            return sanitized;
+          }
+        },
+
+        scrollHaciaApartado(id) {
+          this.seccionActivaVisor = id;
+          this.$nextTick(() => {
+            const el = document.getElementById(id);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          });
+        },
+
+        actualizarSeccionActivaVisor() {
+          if (!this.indiceApartadosVisor || this.indiceApartadosVisor.length === 0) return;
+          const container = document.getElementById('visor-contenido-scroll');
+          if (!container) return;
+          const containerTop = container.getBoundingClientRect().top;
+          
+          let activa = this.indiceApartadosVisor[0].id;
+          for (let i = 0; i < this.indiceApartadosVisor.length; i++) {
+            const el = document.getElementById(this.indiceApartadosVisor[i].id);
+            if (el) {
+              const rect = el.getBoundingClientRect();
+              if (rect.top - containerTop <= 180) {
+                activa = this.indiceApartadosVisor[i].id;
+              } else {
+                break;
+              }
+            }
+          }
+          this.seccionActivaVisor = activa;
+        },
+
+        toggleModoResaltador() {
+          this.modoResaltadorActivo = !this.modoResaltadorActivo;
+        },
+
+        cambiarModoVisor(modo) {
+          this.visorModoLectura = modo;
+          try {
+            localStorage.setItem('unir_visor_modo', modo);
+          } catch(e) {}
+        },
+
+        abrirModalResumenVisor() {
+          this.modalSubResumen = true;
+          this.modalSubEsquema = false;
+          if (!this.resumenTextoTema || this.resumenTextoTema.trim().length <= 50) {
+            this.generarResumenDesdeVisor();
+          }
+        },
+
+        abrirModalEsquemaVisor() {
+          this.modalSubEsquema = true;
+          this.$nextTick(() => {
+            this.renderizarMermaidEsquema();
+          });
+        },
+
+        async renderizarMermaidEsquema() {
+          const container = document.getElementById('visor-mermaid-render');
+          if (!container) return;
+          if (!this.esquemaMermaidTema) {
+            container.innerHTML = '<p class="text-xs text-gray-400 italic">No hay esquema conceptual para este tema.</p>';
+            return;
+          }
+          if (window.mermaid) {
+            const idSvg = 'mermaid-diag-' + Math.random().toString(36).substring(2, 9);
+            try {
+              const renderResult = await window.mermaid.render(idSvg, this.esquemaMermaidTema);
+              container.innerHTML = renderResult.svg || renderResult;
+            } catch(err) {
+              console.warn('Error renderizando Mermaid:', err);
+              container.innerHTML = `<pre class="text-xs text-indigo-300 font-mono bg-gray-900 p-4 rounded-xl border border-indigo-900/40 text-left overflow-x-auto max-w-full">${this.esquemaMermaidTema}</pre>`;
+            }
+          } else {
+            container.innerHTML = `<pre class="text-xs text-indigo-300 font-mono bg-gray-900 p-4 rounded-xl border border-indigo-900/40 text-left overflow-x-auto max-w-full">${this.esquemaMermaidTema}</pre>`;
+          }
+        },
+
+        async lanzarPracticaDesdeVisor() {
+          if (!this.asigSeleccionada) return;
+          const asig = this.asigSeleccionada;
+
+          // 1. Si visorTemaActual tiene test asociado
+          if (this.visorTemaActual?.test) {
+            this.testAbiertoDesdeVisor = true;
+            this.visorVistaActiva = 'test';
+            this.modalTest = false;
+            this.iniciarTestWeb(asig.nombre, this.visorTemaActual.test);
+            return;
+          }
+
+          // 2. Buscar en tests o examenes de la asignatura si coincide el número
+          const numTema = this.visorTemaActual?.numero;
+          const testsDisponibles = Array.isArray(asig.tests) ? asig.tests : (asig.examenes || []);
+          if (numTema && testsDisponibles.length > 0) {
+            const matchStr = `tema_${numTema}`;
+            const encontrado = testsDisponibles.find(t => t.toLowerCase().includes(matchStr) || t.toLowerCase().includes(`tema ${numTema}`));
+            if (encontrado) {
+              this.testAbiertoDesdeVisor = true;
+              this.visorVistaActiva = 'test';
+              this.modalTest = false;
+              this.iniciarTestWeb(asig.nombre, encontrado);
+              return;
+            }
+          }
+
+          // 3. Generar directamente con IA (Plan Robusto con 20 preguntas) sin modal ni salir del tema
+          this.generandoTestVisor = true;
+          const tm = this.visorTemaActual || { titulo: this.modalTitulo, pdf: this.modalTitulo + '.pdf' };
+          const temaNombre = tm.titulo || ('Tema ' + (tm.numero || ''));
+          const pdfArchivo = tm.pdf || (temaNombre + '.pdf');
+
+          try {
+            const res = await fetch('/api/generar-guia', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
+              body: JSON.stringify({
+                asignatura: asig.nombre,
+                nombre_tema: temaNombre,
+                archivo_pdf: pdfArchivo,
+                profundidad: 'robusta',
+                num_preguntas: 20,
+                tipo_generacion: 'solo_test',
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.tiene_test) {
+              await this.cargarCatalogo();
+              await this.cargarProgreso();
+              this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig.nombre) || this.asigSeleccionada;
+              const nuevoTest = data.resultado?.test_json ? data.resultado.test_json.split('/').pop() : null;
+              if (nuevoTest) {
+                this.testAbiertoDesdeVisor = true;
+                this.visorVistaActiva = 'test';
+                this.modalTest = false;
+                this.iniciarTestWeb(asig.nombre, nuevoTest);
+              }
+            } else {
+              alert(data.detail || 'Error al generar el test de 20 preguntas con IA.');
+            }
+          } catch(e) {
+            console.error('Error generando test desde visor:', e);
+            alert('Error de conexión al generar el test con IA.');
+          } finally {
+            this.generandoTestVisor = false;
+          }
+        },
+
+        lanzarPreguntasTestVisor() {
+          this.lanzarPracticaDesdeVisor();
+        },
+
+        async lanzarVerdaderoFalsoVisor() {
+          if (!this.asigSeleccionada) return;
+          const asig = this.asigSeleccionada;
+          const tm = this.visorTemaActual || { titulo: this.modalTitulo, pdf: this.modalTitulo + '.pdf' };
+          const temaNombre = tm.titulo || ('Tema ' + (tm.numero || '1'));
+          const pdfArchivo = tm.pdf || (temaNombre + '.pdf');
+          const slugTema = (temaNombre || '').replace(/[\\/*?:"<>|]/g, '').replaceAll(' ', '_');
+          const vfTestNombre = `${slugTema}_vf_test.json`;
+
+          // 1. Comprobar si ya existe el test de Verdadero o Falso
+          try {
+            const check = await fetch(`/api/test/${encodeURIComponent(asig.nombre)}/${encodeURIComponent(vfTestNombre)}`);
+            if (check.ok) {
+              this.testAbiertoDesdeVisor = true;
+              this.visorVistaActiva = 'test';
+              this.modalTest = false;
+              this.iniciarTestWeb(asig.nombre, vfTestNombre);
+              return;
+            }
+          } catch(e) {}
+
+          // 2. Si no existe, generarlo automáticamente con IA (10 preguntas V/F) sin modal
+          this.generandoVerdaderoFalsoVisor = true;
+          try {
+            const res = await fetch('/api/generar-guia', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
+              body: JSON.stringify({
+                asignatura: asig.nombre,
+                nombre_tema: temaNombre,
+                archivo_pdf: pdfArchivo,
+                profundidad: 'robusta',
+                num_preguntas: 10,
+                tipo_generacion: 'verdadero_falso',
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.tiene_test) {
+              await this.cargarCatalogo();
+              await this.cargarProgreso();
+              this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig.nombre) || this.asigSeleccionada;
+              const nuevoTest = data.resultado?.test_json ? data.resultado.test_json.split('/').pop() : vfTestNombre;
+              if (nuevoTest) {
+                this.testAbiertoDesdeVisor = true;
+                this.visorVistaActiva = 'test';
+                this.modalTest = false;
+                this.iniciarTestWeb(asig.nombre, nuevoTest);
+              }
+            } else {
+              alert(data.detail || 'Error al generar la actividad de Verdadero o Falso con IA.');
+            }
+          } catch(e) {
+            console.error('Error generando V/F desde visor:', e);
+            alert('Error de conexión al generar la actividad con IA.');
+          } finally {
+            this.generandoVerdaderoFalsoVisor = false;
+          }
+        },
+
+        async lanzarFlashcardsVisor() {
+          if (!this.asigSeleccionada) return;
+          if (this.visorTemaActual) {
+            this.modalTitulo = this.visorTemaActual.titulo || ('Tema ' + (this.visorTemaActual.numero || '1'));
+          }
+          this.flashcardFiltroAsig = this.asigSeleccionada.nombre;
+          this.flashcardIndice = 0;
+          this.flashcardVolteada = false;
+          this.flashcardSesionCompletada = false;
+          this.flashcardStatsSesion = { facil: 0, medio: 0, dificil: 0 };
+          await this.cargarFlashcards();
+          this.visorVistaActiva = 'flashcards';
+          this.modalSubFlashcards = false;
+          const scrollElem = document.getElementById('visor-contenido-scroll');
+          if (scrollElem) scrollElem.scrollTop = 0;
+        },
+
+        async abrirFlashcardsDesdeTarjeta(tm) {
+          if (!this.asigSeleccionada) return;
+          this.visorTemaActual = tm;
+          this.modalTitulo = tm.titulo || ('Tema ' + (tm.numero || '1'));
+          this.resumenTextoTema = '';
+          this.flashcardFiltroAsig = this.asigSeleccionada.nombre;
+          this.flashcardIndice = 0;
+          this.flashcardVolteada = false;
+          this.flashcardSesionCompletada = false;
+          this.flashcardStatsSesion = { facil: 0, medio: 0, dificil: 0 };
+          await this.cargarFlashcards();
+          this.modalSubFlashcards = true;
+        },
+
+        async generarFlashcardsTemaVisor() {
+          if (this.generandoFlashcardsVisor || !this.asigSeleccionada) return;
+          this.generandoFlashcardsVisor = true;
+          const asig = this.asigSeleccionada.nombre;
+          const tm = this.visorTemaActual || { titulo: this.modalTitulo };
+          const temaNombre = tm.titulo || ('Tema ' + (tm.numero || '1'));
+          let textoTema = (this.resumenTextoTema && this.resumenTextoTema.length > 50) 
+            ? this.resumenTextoTema 
+            : '';
+          
+          if (!textoTema && tm.guia) {
+            try {
+              const r = await fetch(`/api/guia/${encodeURIComponent(asig)}/${encodeURIComponent(tm.guia)}`);
+              if (r.ok) {
+                const d = await r.json();
+                textoTema = d.contenido || '';
+              }
+            } catch(e) {}
+          }
+          if (!textoTema) {
+            textoTema = `Tema "${temaNombre}" (archivo: ${tm.pdf || ''}) de la asignatura "${asig}"`;
+          }
+
+          try {
+            const res = await fetch('/api/flashcards/generar', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+              },
+              body: JSON.stringify({
+                asignatura: asig,
+                programa: this.programaActivoId || 'dam',
+                texto: textoTema,
+                cantidad: 6,
+                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+              })
+            });
+            const data = await res.json();
+            if (data.tarjetas && data.tarjetas.length > 0) {
+              await this.cargarFlashcards();
+              this.flashcardFiltroAsig = asig;
+              this.flashcardIndice = 0;
+              this.flashcardVolteada = false;
+              this.flashcardSesionCompletada = false;
+            } else {
+              alert('No se pudieron generar las flashcards con IA. Inténtalo de nuevo.');
+            }
+          } catch(e) {
+            console.error('Error generando flashcards desde visor:', e);
+            alert('Error de conexión al generar las flashcards.');
+          } finally {
+            this.generandoFlashcardsVisor = false;
+          }
+        },
+
+        consultarNovaDesdeVisor() {
+          this.toggleAyudaInteligenteVisor();
+        },
+
+        toggleAyudaInteligenteVisor() {
+          this.panelAyudaVisor = !this.panelAyudaVisor;
+          if (this.panelAyudaVisor) {
+            this.$nextTick(() => {
+              if (this.$refs.ayudaVisorInputRef) {
+                this.$refs.ayudaVisorInputRef.focus();
+              }
+              const sc = document.getElementById('ayuda-visor-scroll');
+              if (sc) sc.scrollTop = sc.scrollHeight;
+            });
+          }
+        },
+
+        async enviarMensajeAyudaVisor(textoManual = null) {
+          const texto = (textoManual !== null ? textoManual : this.ayudaVisorInput).trim();
+          if (!texto || this.ayudaVisorCargando) return;
+
+          this.ayudaVisorInput = '';
+          this.ayudaVisorMensajes.push({ rol: 'user', texto: texto });
+          this.ayudaVisorCargando = true;
+
+          const indexRespuesta = this.ayudaVisorMensajes.length;
+          this.ayudaVisorMensajes.push({ rol: 'assistant', texto: '' });
+
+          this.$nextTick(() => {
+            const sc = document.getElementById('ayuda-visor-scroll');
+            if (sc) sc.scrollTop = sc.scrollHeight;
+          });
+
+          const asig = this.asigSeleccionada?.nombre || '';
+          const tema = this.visorTemaActual?.titulo || this.modalTitulo || 'Tema actual';
+          const contextoTema = `[Contexto temario de estudio: Tema "${tema}" de "${asig}"]\n\n${texto}`;
+
+          const historialPrevio = this.ayudaVisorMensajes.slice(0, indexRespuesta - 1).map(m => ({
+            rol: m.rol,
+            texto: m.texto
+          }));
+
+          const payload = {
+            mensaje: contextoTema,
+            asignatura: asig,
+            programa: this.programaActivo || 'dam',
+            historial: historialPrevio,
+            modelo: this.chatModeloSeleccionado || 'auto',
+            api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
+          };
+
+          const headers = {
+            'Content-Type': 'application/json',
+            ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
+          };
+
+          if (this.ayudaVisorAbortController) {
+            this.ayudaVisorAbortController.abort();
+          }
+          this.ayudaVisorAbortController = new AbortController();
+
+          let acumulado = '';
+          try {
+            const res = await fetch('/api/chat-stream', {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify(payload),
+              signal: this.ayudaVisorAbortController.signal
+            });
+
+            if (!res.ok || !res.body) {
+              throw new Error('Streaming no disponible');
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const eventos = buffer.split('\\n\\n');
+              buffer = eventos.pop() || '';
+
+              for (const ev of eventos) {
+                const linea = ev.trim();
+                if (!linea.startsWith('data:')) continue;
+                const jsonStr = linea.slice(5).trim();
+                if (!jsonStr) continue;
+                try {
+                  const data = JSON.parse(jsonStr);
+                  if (data.chunk) {
+                    this.ayudaVisorCargando = false;
+                    acumulado += data.chunk;
+                    this.ayudaVisorMensajes[indexRespuesta].texto = acumulado;
+                    this.$nextTick(() => {
+                      const sc = document.getElementById('ayuda-visor-scroll');
+                      if (sc) sc.scrollTop = sc.scrollHeight;
+                    });
+                  }
+                } catch(e) {}
+              }
+            }
+
+            if (!acumulado.trim()) {
+              throw new Error('Stream vacío');
+            }
+          } catch(err) {
+            if (err.name !== 'AbortError') {
+              try {
+                const resFallback = await fetch('/api/chat', {
+                  method: 'POST',
+                  headers: headers,
+                  body: JSON.stringify(payload)
+                });
+                const dataFallback = await resFallback.json();
+                this.ayudaVisorMensajes[indexRespuesta].texto = dataFallback.respuesta || 'No se pudo generar respuesta.';
+              } catch(e2) {
+                this.ayudaVisorMensajes[indexRespuesta].texto = 'Error de conexión con el tutor de IA.';
+              }
+            }
+          } finally {
+            this.ayudaVisorCargando = false;
+            this.$nextTick(() => {
+              const sc = document.getElementById('ayuda-visor-scroll');
+              if (sc) sc.scrollTop = sc.scrollHeight;
+            });
+          }
+        },
+
+        limpiarChatAyudaVisor() {
+          this.ayudaVisorMensajes = [];
+        },
+
+        async toggleEstadoTemaVisor() {
+          if (!this.visorTemaActual || !this.asigSeleccionada) return;
+          const nuevo = (this.visorTemaActual.estado === 'Hecho') ? 'Por hacer' : 'Hecho';
+          await this.cambiarEstadoTema(this.visorTemaActual, nuevo);
+        },
+
+        rehacerGuiaDesdeVisor() {
+          if (!this.visorTemaActual) return;
+          if (confirm(`¿Deseas volver a generar el resumen con IA para "${this.modalTitulo}" con NOVA?`)) {
+            this.cerrarModalVisor();
+            this.rehacerGuiaTema(this.visorTemaActual);
+          }
+        },
+
+        async eliminarGuiaDesdeVisor() {
+          if (!this.visorTemaActual || !this.asigSeleccionada) return;
+          this.cerrarModalVisor();
+          await this.eliminarGuiaTema(this.visorTemaActual);
+        },
+
+        copiarTexto(txt) {
+          if (!txt) return;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(() => {
+              alert('Copiado al portapapeles.');
+            }).catch(() => {});
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = txt;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            alert('Copiado al portapapeles.');
+          }
         },
 
         async eliminarGuia(asignatura, guia) {
           const nombreLegible = guia.replace('_guia.md', '').replaceAll('_', ' ');
-          if (!confirm(`¿Estás seguro de que deseas eliminar la guía de estudio "${nombreLegible}"?`)) {
+          if (!confirm(`¿Estás seguro de que deseas eliminar el resumen "${nombreLegible}"?`)) {
             return;
           }
           try {
@@ -10479,11 +13193,11 @@ def dashboard_html():
               }
             } else {
               const err = await res.json();
-              alert(err.detail || 'Error al eliminar la guía');
+              alert(err.detail || 'Error al eliminar el resumen');
             }
           } catch(e) {
             console.error(e);
-            alert('Error de red al intentar eliminar la guía');
+            alert('Error de red al intentar eliminar el resumen');
           }
         },
 
@@ -10536,14 +13250,23 @@ def dashboard_html():
             this.testFinalizado = false;
             this.testMostrarPista = false;
             this.testModo = 'notebook';
-            this.modalTest = true;
-            this.modalVisor = false;
+            if (this.testAbiertoDesdeVisor || this.modalVisor) {
+              this.testAbiertoDesdeVisor = true;
+              this.modalVisor = true;
+              this.visorVistaActiva = 'test';
+              this.modalTest = false;
+              const scrollElem = document.getElementById('visor-contenido-scroll');
+              if (scrollElem) scrollElem.scrollTop = 0;
+            } else {
+              this.modalTest = true;
+              this.visorVistaActiva = 'lectura';
+              const url = '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura);
+              if (window.history && window.history.pushState) {
+                window.history.pushState({ test: testNombre, asig: asignatura }, '', url);
+              }
+            }
             this.modalVisorPdf = false;
             this.registrarActividadReciente('test', asignatura, testNombre.replace('_test', '').replaceAll('_', ' '), testNombre);
-            const url = '/?test=' + encodeURIComponent(testNombre) + '&asig=' + encodeURIComponent(asignatura);
-            if (window.history && window.history.pushState) {
-              window.history.pushState({ test: testNombre, asig: asignatura }, '', url);
-            }
           } catch(e) {
             console.error('Error al cargar test:', e);
             alert('Error de red al cargar el simulacro');
@@ -10607,7 +13330,11 @@ def dashboard_html():
 
         formatInlineCode(str) {
           if (!str) return '';
-          return str.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 mx-0.5 rounded bg-gray-900 border border-cyan-500/30 text-cyan-300 font-mono text-xs">$1</code>');
+          const esClaro = (this.modalVisor && this.visorModoLectura === 'claro');
+          const codeClass = esClaro 
+            ? 'px-1.5 py-0.5 mx-0.5 rounded bg-slate-100 border border-slate-300 text-slate-800 font-mono text-xs font-semibold' 
+            : 'px-1.5 py-0.5 mx-0.5 rounded bg-gray-900 border border-cyan-500/30 text-cyan-300 font-mono text-xs';
+          return str.replace(/`([^`]+)`/g, `<code class="${codeClass}">$1</code>`);
         },
 
         beautifyCode(code) {
@@ -10635,6 +13362,10 @@ def dashboard_html():
 
         renderEnunciadoTest(raw) {
           if (!raw) return '';
+          const esClaro = (this.modalVisor && this.visorModoLectura === 'claro');
+          const textClass = esClaro ? 'text-slate-900' : 'text-white';
+          const subTextClass = esClaro ? 'text-slate-700' : 'text-gray-200';
+
           // Detectar bloque de código ```lang ... ```
           const codeRegex = new RegExp("```([a-zA-Z0-9_-]*)\\\\s*([\\\\s\\\\S]*?)```");
           const match = raw.match(codeRegex);
@@ -10649,7 +13380,7 @@ def dashboard_html():
 
             let html = '';
             if (antes) {
-              html += `<p class="text-sm text-gray-200 font-medium leading-relaxed mb-3">${this.formatInlineCode(this.escapeHtml(antes))}</p>`;
+              html += `<p class="text-sm ${subTextClass} font-medium leading-relaxed mb-3">${this.formatInlineCode(this.escapeHtml(antes))}</p>`;
             }
 
             html += `
@@ -10668,13 +13399,13 @@ def dashboard_html():
             `;
 
             if (despues) {
-              html += `<div class="text-base font-bold text-white pt-2 leading-snug">${this.formatInlineCode(this.escapeHtml(despues))}</div>`;
+              html += `<div class="text-base font-bold ${textClass} pt-2 leading-snug">${this.formatInlineCode(this.escapeHtml(despues))}</div>`;
             }
 
             return html;
           }
 
-          return `<div class="text-base font-bold text-white leading-snug">${this.formatInlineCode(this.escapeHtml(raw))}</div>`;
+          return `<div class="text-base font-bold ${textClass} leading-snug">${this.formatInlineCode(this.escapeHtml(raw))}</div>`;
         },
 
         renderTextoOpcion(str) {
@@ -10901,12 +13632,14 @@ def dashboard_html():
         },
 
         async abrirMinutero(clase) {
-          this.minuteroClase = clase;
+          const asig = clase.asignatura || this.asigSeleccionada?.nombre;
+          const nomArchivo = clase.nombre_archivo || (clase.nombre ? (clase.nombre.endsWith('.md') ? clase.nombre : clase.nombre + '.md') : (clase.archivo ? clase.archivo.split('/').pop() : ''));
+          this.minuteroClase = { ...clase, asignatura: asig, nombre_archivo: nomArchivo };
           this.minuteroFiltro = '';
           this.minuteroCues = [];
           this.modalMinutero = true;
           try {
-            const res = await fetch(`/api/clase-cues?asig=${encodeURIComponent(clase.asignatura)}&nombre_archivo=${encodeURIComponent(clase.nombre_archivo)}`);
+            const res = await fetch(`/api/clase-cues?asig=${encodeURIComponent(asig)}&nombre_archivo=${encodeURIComponent(nomArchivo)}`);
             this.minuteroCues = await res.json();
           } catch(e) { console.error(e); }
         },
@@ -10960,7 +13693,7 @@ def dashboard_html():
         limpiarChat() {
           const asig = this.chatAsignatura;
           const etiqueta = asig ? `la asignatura "${asig}"` : 'el chat global de NOVA';
-          if (!confirm(`¿Deseas reiniciar la conversación de ${etiqueta}?\n\nEsta acción solo reiniciará el chat de esta materia. Las guías y chats de las demás asignaturas no se borrarán.`)) {
+          if (!confirm(`¿Deseas reiniciar la conversación de ${etiqueta}?\n\nEsta acción solo reiniciará el chat de esta materia. Los resúmenes y chats de las demás asignaturas no se borrarán.`)) {
             return;
           }
           const clave = this.obtenerClaveChat(asig);
@@ -11104,7 +13837,7 @@ def dashboard_html():
           if (!texto) return;
           const asig = this.chatAsignatura || (this.asigSeleccionada ? this.asigSeleccionada.nombre : '');
           if (!asig) {
-            alert('Selecciona primero una asignatura en el desplegable superior del chat para poder guardar esta guía en su biblioteca correspondiente.');
+            alert('Selecciona primero una asignatura en el desplegable superior del chat para poder guardar este resumen en su biblioteca correspondiente.');
             return;
           }
           let tituloSugerido = 'Guia_Clase_' + new Date().toISOString().slice(0, 10);
@@ -11112,7 +13845,7 @@ def dashboard_html():
           if (primerH1 && primerH1[1]) {
             tituloSugerido = primerH1[1].slice(0, 50).trim();
           }
-          const tituloFinal = prompt('Introduce el título para guardar esta Guía de Estudio:', tituloSugerido);
+          const tituloFinal = prompt('Introduce el título para guardar este Resumen:', tituloSugerido);
           if (!tituloFinal || !tituloFinal.trim()) return;
 
           try {
@@ -11132,13 +13865,13 @@ def dashboard_html():
               if (this.asigSeleccionada && this.asigSeleccionada.nombre === asig) {
                 this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig) || this.asigSeleccionada;
               }
-              alert(`¡Guía guardada con éxito en ${asig}!\nArchivo: ${data.nombre}`);
+              alert(`¡Resumen guardado con éxito en ${asig}!\nArchivo: ${data.nombre}`);
             } else {
-              alert(data.detail || 'Error al guardar la guía.');
+              alert(data.detail || 'Error al guardar el resumen.');
             }
           } catch(e) {
             console.error(e);
-            alert('Error de conexión al guardar la guía.');
+            alert('Error de conexión al guardar el resumen.');
           }
         },
 

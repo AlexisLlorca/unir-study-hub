@@ -6,6 +6,7 @@ Maneja la autenticación, generación de texto, streaming y análisis multimodal
 import json
 import os
 import sys
+import time
 import urllib.request
 from pathlib import Path
 from typing import Optional, Generator, List, Dict, Any
@@ -157,7 +158,26 @@ DIRECTRICES DE MÁXIMA ROBUSTEZ Y RIGOR TÉCNICO:
 class LLMClient:
     """Gestiona la comunicación multi-modelo con Google Gemini, Gemma, OpenRouter Free y Groq Free."""
 
-    _modelos_agotados: set = set()
+    _modelos_agotados: Dict[str, float] = {}
+
+    @classmethod
+    def es_modelo_agotado(cls, mod: str, ttl_segundos: float = 60.0) -> bool:
+        """Comprueba si un modelo está temporalmente marcado como saturado/agotado y si no ha expirado su TTL (60s)."""
+        ts = cls._modelos_agotados.get(mod)
+        if ts is None:
+            return False
+        if (time.time() - ts) > ttl_segundos:
+            cls._modelos_agotados.pop(mod, None)
+            return False
+        return True
+
+    @classmethod
+    def marcar_modelo_agotado(cls, mod: str) -> None:
+        cls._modelos_agotados[mod] = time.time()
+
+    @classmethod
+    def rehabilitar_modelo(cls, mod: str) -> None:
+        cls._modelos_agotados.pop(mod, None)
 
     def __init__(self, model_name: Optional[str] = None):
         self.model_name = model_name or DEFAULT_GEMINI_MODEL
@@ -193,7 +213,7 @@ class LLMClient:
             elif prov == "groq":
                 disponible = tiene_groq
 
-            agotado = m["id"] in self._modelos_agotados
+            agotado = self.es_modelo_agotado(m["id"])
             modelos_info.append({
                 **m,
                 "configurado": disponible,
@@ -217,8 +237,8 @@ class LLMClient:
             "gemini-3.5-flash",
             "gemini-3.5-flash-lite",
             "gemini-flash-lite-latest",
-            "gemini-3-flash-preview",
             "gemini-3.1-flash-lite",
+            "gemini-3-flash-preview",
             self.model_name,
         ]
         if get_groq_api_key():
@@ -241,7 +261,7 @@ class LLMClient:
         for m in candidatos_base:
             if not m or m in activos or m in agotados:
                 continue
-            if m in self._modelos_agotados:
+            if self.es_modelo_agotado(m):
                 agotados.append(m)
             else:
                 activos.append(m)
@@ -254,7 +274,7 @@ class LLMClient:
     def _registrar_error_modelo(self, mod: str, err: Exception) -> None:
         err_str = str(err)
         if any(k in err_str for k in ["429", "RESOURCE_EXHAUSTED", "404", "NOT_FOUND", "503", "UNAVAILABLE", "504", "DEADLINE_EXCEEDED", "401", "500"]):
-            self._modelos_agotados.add(mod)
+            self.marcar_modelo_agotado(mod)
 
     def _llamar_openai_compatible(
         self,
@@ -306,13 +326,13 @@ class LLMClient:
             texto = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             if texto:
                 self.ultimo_modelo_usado = mod
-                self._modelos_agotados.discard(mod)
+                self.rehabilitar_modelo(mod)
                 return texto
         return None
 
     def _obtener_cliente(self, api_key_override: Optional[str] = None) -> Optional[genai.Client]:
         """Inicializa de forma perezosa el cliente de Gemini. Si se pasa api_key_override, usa esa clave."""
-        http_opts = types.HttpOptions(timeout=15000)
+        http_opts = types.HttpOptions(timeout=120000)
         if api_key_override and api_key_override.strip():
             try:
                 return genai.Client(api_key=api_key_override.strip(), http_options=http_opts)
@@ -402,7 +422,7 @@ class LLMClient:
                 )
                 if response and response.text:
                     self.ultimo_modelo_usado = mod
-                    self._modelos_agotados.discard(mod)
+                    self.rehabilitar_modelo(mod)
                     return response.text
             except Exception as e:
                 self._registrar_error_modelo(mod, e)
@@ -485,7 +505,7 @@ class LLMClient:
                 )
                 if response and response.text:
                     self.ultimo_modelo_usado = mod
-                    self._modelos_agotados.discard(mod)
+                    self.rehabilitar_modelo(mod)
                     return response.text
             except Exception as e:
                 self._registrar_error_modelo(mod, e)
@@ -543,7 +563,7 @@ class LLMClient:
                         if not emitido:
                             emitido = True
                             self.ultimo_modelo_usado = mod
-                            self._modelos_agotados.discard(mod)
+                            self.rehabilitar_modelo(mod)
                         yield chunk.text
                 if emitido:
                     return
