@@ -819,6 +819,16 @@ def api_tema_texto(asig: str, pdf: str, request: Request):
             "origen": "cache"
         }
 
+    # Búsqueda tolerante en caché por coincidencia de slug o número
+    for cf in cache_asig_dir.glob("*.md"):
+        if slug_pdf.lower() in cf.stem.lower() or cf.stem.lower() in slug_pdf.lower():
+            if cf.stat().st_size > 200:
+                return {
+                    "contenido": cf.read_text(encoding="utf-8"),
+                    "nombre": cf.stem,
+                    "origen": "cache"
+                }
+
     rutas_u = _rutas_usuario_request(request)
     candidatos = [
         rutas_u["materiales"] / asig_limpia / pdf_limpio,
@@ -835,7 +845,30 @@ def api_tema_texto(asig: str, pdf: str, request: Request):
                     pdf_path = f
                     break
 
-    if not pdf_path or not pdf_path.exists():
+    # Asegurar descarga bajo demanda desde Hugging Face si el archivo está en 0 bytes o no existe
+    try:
+        from src.core.cloud_sync import asegurar_archivo_local
+        if pdf_path:
+            pdf_path = asegurar_archivo_local(pdf_path)
+        else:
+            cand_estandar = MATERIALES_DIR / asig_limpia / pdf_limpio
+            pdf_path = asegurar_archivo_local(cand_estandar)
+    except Exception as e:
+        logger.warning(f"No se pudo asegurar PDF desde Hugging Face para {pdf_limpio}: {e}")
+
+    # Fallback 1: Si hay una guía generada en markdown para este tema, servirla directamente
+    if not pdf_path or not pdf_path.exists() or pdf_path.stat().st_size == 0:
+        dir_guias = PROCESADO_DIR / "guias" / asig_limpia
+        if dir_guias.exists():
+            for g in dir_guias.glob("*.md"):
+                if slug_pdf.lower() in g.stem.lower() or g.stem.lower() in slug_pdf.lower():
+                    return {
+                        "contenido": g.read_text(encoding="utf-8"),
+                        "nombre": g.stem,
+                        "origen": "guia"
+                    }
+
+    if not pdf_path or not pdf_path.exists() or pdf_path.stat().st_size == 0:
         raise HTTPException(status_code=404, detail="No se encontró el PDF oficial del tema.")
 
     try:
@@ -850,6 +883,15 @@ def api_tema_texto(asig: str, pdf: str, request: Request):
         }
     except Exception as e:
         logger.error(f"Error procesando PDF del tema {pdf_path}: {e}")
+        dir_guias = PROCESADO_DIR / "guias" / asig_limpia
+        if dir_guias.exists():
+            for g in dir_guias.glob("*.md"):
+                if slug_pdf.lower() in g.stem.lower() or g.stem.lower() in slug_pdf.lower():
+                    return {
+                        "contenido": g.read_text(encoding="utf-8"),
+                        "nombre": g.stem,
+                        "origen": "guia_fallback"
+                    }
         raise HTTPException(status_code=500, detail=f"Error al extraer texto del PDF: {e}")
 
 
@@ -6598,7 +6640,7 @@ def dashboard_html(response: Response):
 
         <!-- VISTA 3: FLASHCARDS INTEGRADA DENTRO DEL CUERPO DEL VISOR -->
         <div x-show="visorVistaActiva === 'flashcards'"
-             class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-10 md:py-8 transition-all duration-200 flex flex-col justify-between min-h-[calc(100vh-130px)] space-y-6"
+             class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-10 md:py-8 transition-all duration-200 space-y-6 pb-20 shadow-sm"
              :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
           
           <!-- CABECERA FLASHCARDS DENTRO DEL VISOR -->
@@ -6684,7 +6726,7 @@ def dashboard_html(response: Response):
 
             <!-- 3. Modo Activo: Sesión de Flashcards 3D -->
             <template x-if="flashcardsFiltradas.length > 0 && !generandoFlashcardsVisor && !flashcardSesionCompletada">
-              <div class="max-w-2xl xl:max-w-3xl mx-auto space-y-5 flex-1 flex flex-col justify-center">
+              <div class="max-w-2xl xl:max-w-3xl mx-auto space-y-5 pt-2">
                 <!-- Barra de progreso -->
                 <div class="p-3.5 rounded-2xl border flex items-center justify-between gap-4 text-xs shadow-sm"
                      :class="visorModoLectura === 'claro' ? 'bg-slate-50 border-slate-200' : 'bg-surface-2 border-gray-800'">
@@ -8583,10 +8625,10 @@ def dashboard_html(response: Response):
        x-transition:leave="transition ease-in duration-150"
        x-transition:leave-start="opacity-100"
        x-transition:leave-end="opacity-0"
-       class="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-3 sm:p-4"
+       class="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-3 sm:p-4"
        style="display: none;">
     <div @click.away="modalInstalarPwa = false"
-         class="bg-surface-1 border border-cyan-500/30 rounded-3xl max-w-2xl xl:max-w-3xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
+         class="bg-surface-1 border border-cyan-500/40 rounded-3xl max-w-2xl xl:max-w-3xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
       
       <!-- CABECERA -->
       <div class="flex items-start justify-between pb-4 border-b border-gray-800 shrink-0">
@@ -12852,9 +12894,24 @@ def dashboard_html(response: Response):
             }
             await this.verContenidoArchivo(rutaGuia, tm);
             if (abrirResumenDirecto) this.visorVistaActiva = 'resumen';
-          } else {
-            alert('No hay material oficial disponible para este tema todavía.');
+            return;
           }
+
+          // Fallback amigable: abrir el visor directamente sin alert bloqueante
+          this.modalContenido = `# 📚 ${(tm.prefijo || 'Tema')} ${tm.numero}. ${tm.titulo}\n\n` +
+            `Este tema está registrado en el plan académico oficial de **${asig}**, pero el documento PDF aún no se encuentra sincronizado en el servidor local.\n\n` +
+            `### ¿Qué puedes hacer?\n\n` +
+            `* **Descargar el temario del Campus:** Haz clic en el botón superior de descarga o conecta tus credenciales de UNIR para sincronizar todos los PDFs.\n` +
+            `* **Generar Resumen y Test con IA:** Pulsa en el botón **Resumen IA** o **Practica** para que NOVA elabore automáticamente el material de estudio para este tema.\n` +
+            `* **Consultar al Asistente:** Puedes preguntar a NOVA cualquier duda teórica o práctica sobre este contenido.`;
+          this.modalRutaActiva = tm.pdf || '';
+          this.modalVisor = true;
+          this.visorVistaActiva = abrirResumenDirecto ? 'resumen' : 'lectura';
+          this.modalTest = false;
+          this.modalVisorPdf = false;
+          this.modalSubResumen = false;
+          this.modalSubEsquema = false;
+          await this.cargarOPrepararResumenTema(tm);
         },
 
         async cargarOPrepararResumenTema(tm) {
