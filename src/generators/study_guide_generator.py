@@ -342,6 +342,22 @@ class GeneradorGuiaEstudio:
                             continue
 
                 if preguntas_data:
+                    for p in preguntas_data:
+                        if isinstance(p, dict) and isinstance(p.get("opciones"), dict):
+                            ops = p["opciones"]
+                            for campo in ("correcta", "pista", "justificacion", "explicacion"):
+                                for k in list(ops.keys()):
+                                    if k.lower() == campo:
+                                        val = ops.pop(k)
+                                        if not p.get(campo):
+                                            p[campo] = val
+                            limpias = {}
+                            for k, v in ops.items():
+                                k_str = str(k).strip().upper()
+                                if len(k_str) == 1 and k_str in "ABCDE":
+                                    limpias[k_str] = v
+                            p["opciones"] = limpias
+
                     try:
                         preguntas_obj = [
                             PreguntaExamen(

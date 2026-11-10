@@ -611,7 +611,30 @@ def api_obtener_test(asignatura: str, test_name: str, request: Request):
         raise HTTPException(status_code=404, detail="Test no encontrado")
 
     with open(archivo, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    # Sanitizar opciones para garantizar que solo contengan letras reales (A, B, C, D, E)
+    # y extraer 'correcta', 'pista', 'justificacion' si la IA las metió erróneamente dentro de 'opciones'
+    if isinstance(data, list):
+        for q in data:
+            if not isinstance(q, dict):
+                continue
+            ops = q.get("opciones")
+            if isinstance(ops, dict):
+                for campo in ("correcta", "pista", "justificacion", "explicacion"):
+                    for k in list(ops.keys()):
+                        if k.lower() == campo:
+                            val = ops.pop(k)
+                            if not q.get(campo):
+                                q[campo] = val
+                limpias = {}
+                for k, v in ops.items():
+                    k_str = str(k).strip().upper()
+                    if len(k_str) == 1 and k_str in "ABCDE":
+                        limpias[k_str] = v
+                q["opciones"] = limpias
+
+    return data
 
 
 class TestSubmission(BaseModel):
@@ -645,17 +668,26 @@ def api_eliminar_guia(asignatura: str, guia_name: str, request: Request):
     rutas_u = _rutas_usuario_request(request)
     asig_limpia = nombre_seguro(asignatura, "asignatura")
     guia_limpia = nombre_seguro(guia_name, "guía")
+    
     guia_path = ruta_dentro_de(rutas_u["guias"], asig_limpia, guia_limpia)
-    if not guia_path.exists() or not guia_path.is_file():
-        raise HTTPException(status_code=404, detail="Guía no encontrada")
+    guia_global = ruta_dentro_de(PROCESADO_DIR / "guias", asig_limpia, guia_limpia)
 
+    eliminado = False
     try:
         from src.core.cloud_sync import eliminar_archivo_en_hf_async
-        eliminar_archivo_en_hf_async(guia_path)
-        guia_path.unlink()
-        return {"ok": True, "mensaje": f"Guía {guia_limpia} eliminada correctamente"}
+        for p in (guia_path, guia_global):
+            if p.exists() and p.is_file():
+                eliminar_archivo_en_hf_async(p)
+                p.unlink()
+                eliminado = True
+        _CACHE_CATALOGO.clear()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar la guía: {str(e)}")
+
+    if not eliminado:
+        raise HTTPException(status_code=404, detail="Guía no encontrada")
+
+    return {"ok": True, "mensaje": f"Guía {guia_limpia} eliminada correctamente"}
 
 
 @app.delete("/api/test/{asignatura}/{test_name}")
@@ -666,18 +698,23 @@ def api_eliminar_test(asignatura: str, test_name: str, request: Request):
     stem = nombre_seguro(test_name.replace(".json", "").replace(".md", ""), "test")
     f_json = ruta_dentro_de(rutas_u["examenes"], asig_limpia, f"{stem}.json")
     f_md = ruta_dentro_de(rutas_u["examenes"], asig_limpia, f"{stem}.md")
+    f_json_global = ruta_dentro_de(PROCESADO_DIR / "examenes", asig_limpia, f"{stem}.json")
+    f_md_global = ruta_dentro_de(PROCESADO_DIR / "examenes", asig_limpia, f"{stem}.md")
 
     eliminado = False
     try:
         from src.core.cloud_sync import eliminar_archivo_en_hf_async
-        if f_json.exists() and f_json.is_file():
-            eliminar_archivo_en_hf_async(f_json)
-            f_json.unlink()
-            eliminado = True
-        if f_md.exists() and f_md.is_file():
-            eliminar_archivo_en_hf_async(f_md)
-            f_md.unlink()
-            eliminado = True
+        for fj in (f_json, f_json_global):
+            if fj.exists() and fj.is_file():
+                eliminar_archivo_en_hf_async(fj)
+                fj.unlink()
+                eliminado = True
+        for fm in (f_md, f_md_global):
+            if fm.exists() and fm.is_file():
+                eliminar_archivo_en_hf_async(fm)
+                fm.unlink()
+                eliminado = True
+        _CACHE_CATALOGO.clear()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al eliminar el test: {str(e)}")
 
@@ -3993,14 +4030,27 @@ def dashboard_html():
 
                       <!-- 2. GUÍA DE ESTUDIO IA -->
                       <template x-if="tm.guia">
-                        <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + tm.guia)"
-                                class="px-2.5 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold transition flex items-center gap-1.5">
-                          <i class="fa-solid fa-book-open text-sky-400 text-xs"></i>
-                          <span>Guía IA</span>
-                        </button>
+                        <div class="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/15 overflow-hidden shadow-sm">
+                          <button @click="verContenidoArchivo('data/procesado/guias/' + asigSeleccionada.nombre + '/' + tm.guia)"
+                                  class="px-2.5 py-1.5 hover:bg-sky-500/25 text-sky-300 text-xs font-bold transition flex items-center gap-1.5"
+                                  title="Abrir y leer Guía de Estudio">
+                            <i class="fa-solid fa-book-open text-sky-400 text-xs"></i>
+                            <span>Guía IA</span>
+                          </button>
+                          <button @click.stop="rehacerGuiaTema(tm)"
+                                  class="px-2 py-1.5 hover:bg-sky-500/35 text-sky-300/80 hover:text-white text-[11px] border-l border-sky-500/30 transition"
+                                  title="Rehacer / Regenerar Guía con IA">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                          </button>
+                          <button @click.stop="eliminarGuiaTema(tm)"
+                                  class="px-2 py-1.5 hover:bg-rose-500/30 text-sky-300/80 hover:text-rose-300 text-[11px] border-l border-sky-500/30 transition"
+                                  title="Eliminar Guía de Estudio">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        </div>
                       </template>
                       <template x-if="!tm.guia && tm.pdf">
-                        <button @click="generarGuiaDesdePdf(tm.pdf)"
+                        <button @click="generarGuiaDesdePdf(tm.pdf, 'solo_guia')"
                                 class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-sky-500/20 text-gray-400 hover:text-sky-300 text-xs font-medium transition flex items-center gap-1.5"
                                 title="Crear guía resumen con Inteligencia Artificial">
                           <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
@@ -4038,14 +4088,27 @@ def dashboard_html():
 
                       <!-- 4. SIMULACRO DE EXAMEN (TEST) -->
                       <template x-if="tm.test">
-                        <button @click="iniciarTestWeb(asigSeleccionada.nombre, tm.test)"
-                                class="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm ml-auto">
-                          <i class="fa-solid fa-bullseye text-emerald-400 text-xs"></i>
-                          <span>Hacer Test</span>
-                        </button>
+                        <div class="inline-flex items-center rounded-xl border border-emerald-500/40 bg-emerald-500/20 overflow-hidden shadow-sm ml-auto">
+                          <button @click="iniciarTestWeb(asigSeleccionada.nombre, tm.test)"
+                                  class="px-3 py-1.5 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                                  title="Hacer este simulacro tipo test">
+                            <i class="fa-solid fa-bullseye text-emerald-400 text-xs"></i>
+                            <span>Hacer Test</span>
+                          </button>
+                          <button @click.stop="rehacerTestTema(tm)"
+                                  class="px-2 py-1.5 hover:bg-emerald-500/35 text-emerald-300/80 hover:text-white text-[11px] border-l border-emerald-500/35 transition"
+                                  title="Rehacer / Regenerar Test con IA (Nuevas preguntas)">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                          </button>
+                          <button @click.stop="eliminarTestTema(tm)"
+                                  class="px-2 py-1.5 hover:bg-rose-500/30 text-emerald-300/80 hover:text-rose-300 text-[11px] border-l border-emerald-500/35 transition"
+                                  title="Eliminar este Test">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        </div>
                       </template>
                       <template x-if="!tm.test && tm.pdf">
-                        <button @click="generarGuiaDesdePdf(tm.pdf)"
+                        <button @click="generarGuiaDesdePdf(tm.pdf, 'solo_test')"
                                 class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-emerald-500/20 text-gray-400 hover:text-emerald-300 text-xs font-medium transition flex items-center gap-1.5 ml-auto"
                                 title="Crear test tipo examen con Inteligencia Artificial">
                           <i class="fa-solid fa-plus text-[10px]"></i>
@@ -5588,6 +5651,12 @@ def dashboard_html():
       <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between gap-4">
         <h4 class="font-bold text-white text-sm break-words pr-2 line-clamp-2" x-text="modalTitulo"></h4>
         <div class="flex items-center space-x-1.5 shrink-0">
+          <button @click="rehacerGuiaDesdeVisor()" title="Rehacer esta guía con IA" class="p-2 text-gray-400 hover:text-sky-400 rounded-lg hover:bg-gray-800 transition">
+            <i class="fa-solid fa-arrows-rotate text-sm"></i>
+          </button>
+          <button @click="eliminarGuiaDesdeVisor()" title="Eliminar esta guía de estudio" class="p-2 text-gray-400 hover:text-rose-400 rounded-lg hover:bg-gray-800 transition">
+            <i class="fa-solid fa-trash-can text-sm"></i>
+          </button>
           <a :href="'/?guia=' + encodeURIComponent(modalRutaActiva || '') + '&asig=' + encodeURIComponent(asigSeleccionada?.nombre || '')" 
              target="_blank" title="Abrir en pestaña nueva del navegador" class="p-2 text-gray-400 hover:text-cyan-400 rounded-lg hover:bg-gray-800 transition">
             <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
@@ -5640,6 +5709,12 @@ def dashboard_html():
             </button>
           </div>
 
+          <button @click="rehacerTestDesdeModal()" title="Rehacer este simulacro con nuevas preguntas de IA" class="text-gray-400 hover:text-emerald-400 p-2 rounded-xl hover:bg-gray-800 transition">
+            <i class="fa-solid fa-arrows-rotate text-sm"></i>
+          </button>
+          <button @click="eliminarTestDesdeModal()" title="Eliminar este simulacro tipo test" class="text-gray-400 hover:text-rose-400 p-2 rounded-xl hover:bg-gray-800 transition">
+            <i class="fa-solid fa-trash-can text-sm"></i>
+          </button>
           <a :href="'/?test=' + encodeURIComponent(testActivoNombre) + '&asig=' + encodeURIComponent(testActivoAsig)" target="_blank"
              title="Abrir este simulacro en pestaña nueva del navegador" class="text-gray-400 hover:text-emerald-400 p-2 rounded-xl hover:bg-gray-800 transition">
             <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
@@ -5688,7 +5763,7 @@ def dashboard_html():
 
         <!-- OPCIONES -->
         <div class="space-y-3 pt-1">
-          <template x-for="(texto, letra) in testPreguntas[testIndice]?.opciones" :key="letra">
+          <template x-for="(texto, letra) in opcionesValidas(testPreguntas[testIndice]?.opciones)" :key="letra">
             <button @click="seleccionarOpcion(letra)"
                     :disabled="testModo === 'notebook' && !!testRespuestasUsuario[testIndice]"
                     :class="{
@@ -9942,13 +10017,135 @@ def dashboard_html():
           this.enviarMensajeChat();
         },
 
-        generarGuiaDesdePdf(pdfNombre) {
+        generarGuiaDesdePdf(pdfNombre, tipo = 'ambos') {
           this.generadorPdfSeleccionado = pdfNombre;
           this.generadorTemaNombre = pdfNombre.replace('.pdf', '').replaceAll('_', ' ');
           this.generadorProfundidad = 'robusta';
           this.generadorNumPreguntas = 15;
-          this.generadorTipo = 'ambos';
+          this.generadorTipo = tipo;
           this.modalGenerador = true;
+        },
+
+        opcionesValidas(ops) {
+          if (!ops || typeof ops !== 'object') return {};
+          const validas = {};
+          ['A', 'B', 'C', 'D', 'E'].forEach(l => {
+            if (ops[l] !== undefined && ops[l] !== null) {
+              validas[l] = ops[l];
+            }
+          });
+          return Object.keys(validas).length > 0 ? validas : ops;
+        },
+
+        rehacerGuiaTema(tm) {
+          this.generarGuiaDesdePdf(tm.pdf || (tm.titulo + '.pdf'), 'solo_guia');
+        },
+
+        rehacerTestTema(tm) {
+          this.generarGuiaDesdePdf(tm.pdf || (tm.titulo + '.pdf'), 'solo_test');
+        },
+
+        async eliminarGuiaTema(tm) {
+          if (!confirm(`¿Eliminar la Guía de estudio de "${tm.titulo}" para volver a crearla con IA?`)) return;
+          try {
+            const res = await fetch(`/api/guia/${encodeURIComponent(this.asigSeleccionada.nombre)}/${encodeURIComponent(tm.guia)}`, { method: 'DELETE' });
+            if (res.ok) {
+              await this.cargarCatalogo();
+              this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Error al eliminar la guía');
+            }
+          } catch(e) {
+            alert('Error al conectar con el servidor');
+          }
+        },
+
+        async eliminarTestTema(tm) {
+          if (!confirm(`¿Eliminar el Test interactivo de "${tm.titulo}" para volver a crearlo con IA?`)) return;
+          try {
+            const res = await fetch(`/api/test/${encodeURIComponent(this.asigSeleccionada.nombre)}/${encodeURIComponent(tm.test)}`, { method: 'DELETE' });
+            if (res.ok) {
+              await this.cargarCatalogo();
+              this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Error al eliminar el test');
+            }
+          } catch(e) {
+            alert('Error al conectar con el servidor');
+          }
+        },
+
+        rehacerGuiaDesdeVisor() {
+          const nom = this.modalTitulo || '';
+          const asig = this.asigSeleccionada?.nombre || '';
+          this.cerrarModalVisor();
+          if (this.asigSeleccionada) {
+            const tm = this.unidadesUnificadasAsignaturaActual.temas?.find(t => (t.guia && this.modalRutaActiva?.includes(t.guia)) || nom.includes(t.titulo));
+            if (tm) {
+              this.rehacerGuiaTema(tm);
+              return;
+            }
+          }
+          this.generarGuiaDesdePdf(nom + '.pdf', 'solo_guia');
+        },
+
+        async eliminarGuiaDesdeVisor() {
+          if (!confirm('¿Eliminar esta Guía de estudio? Podrás volver a generarla con IA cuando quieras.')) return;
+          const ruta = this.modalRutaActiva || '';
+          const asig = this.asigSeleccionada?.nombre || '';
+          const guiaNombre = ruta.split('/').pop();
+          try {
+            const res = await fetch(`/api/guia/${encodeURIComponent(asig)}/${encodeURIComponent(guiaNombre)}`, { method: 'DELETE' });
+            if (res.ok) {
+              this.cerrarModalVisor();
+              await this.cargarCatalogo();
+              if (this.asigSeleccionada) {
+                this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
+              }
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Error al eliminar la guía');
+            }
+          } catch(e) {
+            alert('Error al conectar con el servidor');
+          }
+        },
+
+        rehacerTestDesdeModal() {
+          const asig = this.testActivoAsig || this.asigSeleccionada?.nombre;
+          const testNom = this.testActivoNombre;
+          this.modalTest = false;
+          if (this.asigSeleccionada) {
+            const tm = this.unidadesUnificadasAsignaturaActual.temas?.find(t => t.test === testNom || (t.pdf && testNom.includes(t.pdf.replace('.pdf', ''))));
+            if (tm) {
+              this.rehacerTestTema(tm);
+              return;
+            }
+          }
+          this.generarGuiaDesdePdf(testNom + '.pdf', 'solo_test');
+        },
+
+        async eliminarTestDesdeModal() {
+          if (!confirm('¿Eliminar este Simulacro tipo test? Podrás volver a generarlo con IA cuando quieras.')) return;
+          const asig = this.testActivoAsig || this.asigSeleccionada?.nombre;
+          const testNom = this.testActivoNombre;
+          try {
+            const res = await fetch(`/api/test/${encodeURIComponent(asig)}/${encodeURIComponent(testNom)}`, { method: 'DELETE' });
+            if (res.ok) {
+              this.modalTest = false;
+              await this.cargarCatalogo();
+              if (this.asigSeleccionada) {
+                this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === this.asigSeleccionada.nombre) || this.asigSeleccionada;
+              }
+            } else {
+              const err = await res.json();
+              alert(err.detail || 'Error al eliminar el test');
+            }
+          } catch(e) {
+            alert('Error al conectar con el servidor');
+          }
         },
 
         async ejecutarGeneracionIa() {
