@@ -23,6 +23,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
@@ -98,6 +99,56 @@ HUB_ACCESS_TOKEN = get_hub_access_token()
 IP_LOCAL = obtener_ip_red_local()
 app.add_middleware(AccesoSeguroMiddleware, token=HUB_ACCESS_TOKEN, ip_local=IP_LOCAL)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/manifest.json")
+def get_manifest():
+    manifest_file = STATIC_DIR / "manifest.json"
+    if manifest_file.exists():
+        return FileResponse(manifest_file, media_type="application/manifest+json")
+    raise HTTPException(status_code=404, detail="Manifest no encontrado")
+
+@app.get("/service-worker.js")
+def get_service_worker():
+    sw_file = STATIC_DIR / "service-worker.js"
+    if sw_file.exists():
+        return FileResponse(
+            sw_file, 
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"}
+        )
+    raise HTTPException(status_code=404, detail="Service worker no encontrado")
+
+@app.get("/pwa-icon.svg")
+def get_pwa_icon_svg():
+    f = STATIC_DIR / "pwa-icon.svg"
+    if f.exists():
+        return FileResponse(f, media_type="image/svg+xml")
+    raise HTTPException(status_code=404)
+
+@app.get("/pwa-icon-192.png")
+def get_pwa_icon_192():
+    f = STATIC_DIR / "pwa-icon-192.png"
+    if f.exists():
+        return FileResponse(f, media_type="image/png")
+    raise HTTPException(status_code=404)
+
+@app.get("/pwa-icon-512.png")
+def get_pwa_icon_512():
+    f = STATIC_DIR / "pwa-icon-512.png"
+    if f.exists():
+        return FileResponse(f, media_type="image/png")
+    raise HTTPException(status_code=404)
+
+@app.get("/apple-touch-icon.png")
+def get_apple_touch_icon():
+    f = STATIC_DIR / "apple-touch-icon.png"
+    if f.exists():
+        return FileResponse(f, media_type="image/png")
+    raise HTTPException(status_code=404)
 
 inicializar_bd_usuarios()
 inicializar_bd_feedback()
@@ -2918,7 +2969,24 @@ def dashboard_html(response: Response):
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#060913">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NOVA Hub">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>NOVA Study Hub — Plataforma Inteligente Multi-Titulación</title>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(err => {
+          console.warn('PWA ServiceWorker error:', err);
+        });
+      });
+    }
+  </script>
   <script>
     /* ===== TEMAS DE COLOR DE NOVA (cada alumno elige el suyo; se guarda en su navegador) ===== */
     window.NOVA_PALETAS = {
@@ -3378,6 +3446,16 @@ def dashboard_html(response: Response):
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
+
+          <!-- ACCESO DIRECTO / INSTALACIÓN PWA -->
+          <div class="flex items-center group/item pt-1">
+            <button @click="instalarPwaDirecta()"
+                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border border-transparent text-gray-400 hover:text-cyan-300 hover:bg-gray-800/40 flex items-center space-x-2.5 cursor-pointer"
+                    title="Añadir NOVA a la pantalla de inicio de tu móvil o PC">
+              <i class="fa-solid fa-mobile-screen-button w-4 text-center text-cyan-400"></i>
+              <span>Instalar en el Móvil</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3485,6 +3563,14 @@ def dashboard_html(response: Response):
             <p class="text-[9px] text-gray-500 mt-2 px-1 leading-snug">Los colores de estado (rojo = entrega, verde = hecho, ámbar = pendiente) se mantienen en todos los temas.</p>
           </div>
         </div>
+
+        <!-- BOTÓN INSTALAR APP PWA -->
+        <button @click="instalarPwaDirecta()"
+                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold border transition flex items-center space-x-1.5 shrink-0 shadow-sm bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-cyan-300 border-cyan-500/30 cursor-pointer"
+                title="Añadir NOVA a la pantalla de inicio (Android, iOS, PC)">
+          <i class="fa-solid fa-mobile-screen-button text-[12px] text-cyan-400"></i>
+          <span class="hidden md:inline font-bold">Instalar App</span>
+        </button>
 
         <!-- USUARIO ACTIVO Y BOTÓN CERRAR SESIÓN -->
         <div x-show="usuarioActual && usuarioActual.autenticado" class="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-gray-800 shrink-0">
@@ -8441,6 +8527,234 @@ def dashboard_html(response: Response):
     </div>
   </div>
 
+  <!-- ==================== MODAL: GUÍA DE INSTALACIÓN PWA (PANTALLA DE INICIO) ==================== -->
+  <div x-show="modalInstalarPwa"
+       @keydown.escape.window="modalInstalarPwa = false"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 bg-black/85 backdrop-blur-md z-60 flex items-center justify-center p-3 sm:p-4"
+       style="display: none;">
+    <div @click.away="modalInstalarPwa = false"
+         class="bg-surface-1 border border-cyan-500/30 rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
+      
+      <!-- CABECERA -->
+      <div class="flex items-start justify-between pb-4 border-b border-gray-800 shrink-0">
+        <div class="flex items-center space-x-3.5">
+          <div class="h-11 w-11 rounded-2xl bg-gradient-to-tr from-cyan-500/20 via-sky-500/20 to-indigo-500/20 border border-cyan-500/40 text-cyan-300 flex items-center justify-center text-xl shrink-0 shadow-lg shadow-cyan-500/10">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-white text-base sm:text-lg tracking-tight">¿Cómo añadir el Campus a tu pantalla de inicio?</h3>
+            <p class="text-xs text-gray-400 mt-0.5 leading-snug">Accede a NOVA Study Hub desde la pantalla de inicio de tu dispositivo como una app nativa a pantalla completa.</p>
+          </div>
+        </div>
+        <button @click="modalInstalarPwa = false" class="p-2 text-gray-400 hover:text-white rounded-xl hover:bg-surface-3 transition shrink-0 cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- BOTÓN INSTALACIÓN DIRECTA EN 1 CLIC (SI EL NAVEGADOR LO PERMITE) -->
+      <div x-show="puedeInstalarPwa && pwaPromptEvento" class="pt-4 shrink-0">
+        <button @click="instalarPwaDirecta()"
+                class="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-gray-950 font-black text-xs sm:text-sm shadow-xl shadow-cyan-500/20 transition flex items-center justify-center space-x-2 active:scale-98 cursor-pointer">
+          <i class="fa-solid fa-download text-sm"></i>
+          <span>¡Instalar NOVA Study Hub en este dispositivo ahora!</span>
+        </button>
+      </div>
+
+      <!-- PESTAÑAS / TABS DE SISTEMAS OPERATIVOS -->
+      <div class="flex items-center space-x-2 pt-4 pb-2 shrink-0 border-b border-gray-800/80">
+        <button @click="pwaPestanaActiva = 'android'"
+                :class="pwaPestanaActiva === 'android' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm' : 'text-gray-400 hover:text-white hover:bg-surface-3 border-transparent'"
+                class="px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center space-x-2 cursor-pointer">
+          <i class="fa-brands fa-android text-sm text-emerald-400"></i>
+          <span>Android</span>
+        </button>
+        <button @click="pwaPestanaActiva = 'ios'"
+                :class="pwaPestanaActiva === 'ios' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm' : 'text-gray-400 hover:text-white hover:bg-surface-3 border-transparent'"
+                class="px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center space-x-2 cursor-pointer">
+          <i class="fa-brands fa-apple text-sm text-gray-200"></i>
+          <span>iPhone / iPad (iOS)</span>
+        </button>
+        <button @click="pwaPestanaActiva = 'pc'"
+                :class="pwaPestanaActiva === 'pc' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm' : 'text-gray-400 hover:text-white hover:bg-surface-3 border-transparent'"
+                class="px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center space-x-2 cursor-pointer">
+          <i class="fa-solid fa-laptop text-sm text-sky-400"></i>
+          <span>Ordenador (PC / Mac)</span>
+        </button>
+      </div>
+
+      <!-- CONTENIDO DE GUÍA POR SISTEMA OPERATIVO -->
+      <div class="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+        
+        <!-- ==================== PESTAÑA: ANDROID ==================== -->
+        <div x-show="pwaPestanaActiva === 'android'" class="space-y-4">
+          <!-- Google Chrome -->
+          <div class="p-4 rounded-2xl bg-surface-2/70 border border-gray-800 space-y-2.5">
+            <div class="flex items-center space-x-2">
+              <i class="fa-brands fa-chrome text-amber-400 text-sm"></i>
+              <h4 class="font-extrabold text-white text-xs sm:text-sm">Google Chrome</h4>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Toca el menú de los 3 puntos</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Situado arriba a la derecha de la pantalla (⋮).</p>
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Pulsa «Instalar aplicación»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">O bien «Añadir y crear acceso directo».</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Microsoft Edge -->
+          <div class="p-4 rounded-2xl bg-surface-2/70 border border-gray-800 space-y-2.5">
+            <div class="flex items-center space-x-2">
+              <i class="fa-brands fa-edge text-sky-400 text-sm"></i>
+              <h4 class="font-extrabold text-white text-xs sm:text-sm">Microsoft Edge</h4>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Toca las 3 rayas</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">En la barra inferior (☰ o ···).</p>
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <div>
+                  <p class="font-semibold text-gray-200">«Agregar al teléfono»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Desliza a la derecha en el menú.</p>
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Pulsa «Instalar»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Se creará el acceso directo nativo.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Samsung Internet / Opera -->
+          <div class="p-4 rounded-2xl bg-surface-2/70 border border-gray-800 space-y-2.5">
+            <div class="flex items-center space-x-2">
+              <i class="fa-brands fa-opera text-rose-400 text-sm"></i>
+              <h4 class="font-extrabold text-white text-xs sm:text-sm">Samsung Internet / Opera</h4>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Toca el menú de opciones</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Icono de 3 líneas o 3 puntos.</p>
+                </div>
+              </div>
+              <div class="p-3 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-2.5">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <div>
+                  <p class="font-semibold text-gray-200">«Añadir a Pantalla de inicio»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Pulsa para anclar la app a tu inicio.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== PESTAÑA: IPHONE / IPAD (IOS) ==================== -->
+        <div x-show="pwaPestanaActiva === 'ios'" class="space-y-4">
+          <div class="p-4 rounded-2xl bg-surface-2/70 border border-gray-800 space-y-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-brands fa-safari text-sky-400 text-base"></i>
+              <h4 class="font-extrabold text-white text-xs sm:text-sm">Safari (iPhone y iPad)</h4>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+              <div class="p-3.5 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-3">
+                <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Abre la web en Safari</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Apple requiere Safari para instalar apps en la pantalla de inicio.</p>
+                </div>
+              </div>
+              <div class="p-3.5 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-3">
+                <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Toca el botón «Compartir»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">El icono cuadrado con una flecha hacia arriba (<i class="fa-solid fa-arrow-up-from-bracket text-sky-400"></i>) en la barra inferior.</p>
+                </div>
+              </div>
+              <div class="p-3.5 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-3">
+                <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                <div>
+                  <p class="font-semibold text-gray-200">«Añadir a la pantalla de inicio»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Desliza el menú hacia abajo y toca la opción con el símbolo más (<i class="fa-solid fa-square-plus text-cyan-400"></i>).</p>
+                </div>
+              </div>
+              <div class="p-3.5 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-3">
+                <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">4</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Pulsa «Añadir» arriba a la derecha</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">¡Listo! Se abrirá a pantalla completa sin la barra de Safari.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== PESTAÑA: ORDENADOR (PC / MAC / LINUX) ==================== -->
+        <div x-show="pwaPestanaActiva === 'pc'" class="space-y-4">
+          <div class="p-4 rounded-2xl bg-surface-2/70 border border-gray-800 space-y-3">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-laptop text-cyan-400 text-sm"></i>
+              <h4 class="font-extrabold text-white text-xs sm:text-sm">Google Chrome / Microsoft Edge / Brave</h4>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+              <div class="p-3.5 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-3">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Icono en la barra de URL</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">En el extremo derecho de la barra de direcciones verás un icono de pantalla con flecha (<i class="fa-solid fa-download text-cyan-400"></i>).</p>
+                </div>
+              </div>
+              <div class="p-3.5 rounded-xl bg-gray-900/90 border border-gray-800/80 flex items-start space-x-3">
+                <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <div>
+                  <p class="font-semibold text-gray-200">Haz clic en «Instalar»</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">NOVA se abrirá como una aplicación de escritorio con su propio icono en la barra de tareas.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NOTA INFORMATIVA INFERIOR -->
+        <div class="p-3 rounded-2xl bg-cyan-500/5 border border-cyan-500/20 text-xs text-gray-300 flex items-center space-x-2.5">
+          <i class="fa-solid fa-bolt text-cyan-400 shrink-0"></i>
+          <span class="text-[11px]"><strong>Ventajas de la App:</strong> Se ejecuta a pantalla completa sin barras, con carga ultrarrápida y acceso directo con un solo toque desde tu escritorio o móvil.</span>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="pt-4 border-t border-gray-800 flex items-center justify-end shrink-0">
+        <button @click="modalInstalarPwa = false" class="px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold transition cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== MODAL RÁPIDO: ENTREGAS DEL MES ==================== -->
   <div x-show="modalEntregasMes"
        @keydown.escape.window="modalEntregasMes = false"
@@ -8877,6 +9191,13 @@ def dashboard_html(response: Response):
         testAbiertoDesdeVisor: false,
         visorVistaActiva: 'lectura', // 'lectura', 'test', 'flashcards'
         temasGenerando: {},
+
+        // Soporte PWA y Modal de Guía de Instalación
+        modalInstalarPwa: false,
+        pwaPestanaActiva: 'android',
+        puedeInstalarPwa: false,
+        pwaPromptEvento: null,
+        pwaInstalada: false,
         
         // Modal Visor Interactivo estilo UNIR
         modalVisor: false,
@@ -10864,6 +11185,22 @@ def dashboard_html(response: Response):
             } catch(e) { console.warn('Error inicializando Mermaid:', e); }
           }
           window.addEventListener('popstate', () => this.procesarUrlInicial());
+
+          // Detección y soporte nativo PWA (Instalación en inicio)
+          window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.pwaPromptEvento = e;
+            this.puedeInstalarPwa = true;
+          });
+          window.addEventListener('appinstalled', () => {
+            this.pwaInstalada = true;
+            this.puedeInstalarPwa = false;
+            this.modalInstalarPwa = false;
+          });
+          if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+            this.pwaInstalada = true;
+          }
+
           await this.cargarUsuarioActual();
           await this.sincronizarClavesIa();
           this.cargarActividadReciente();
@@ -10878,6 +11215,33 @@ def dashboard_html(response: Response):
           ]);
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
+        },
+
+        async instalarPwaDirecta() {
+          if (this.pwaPromptEvento) {
+            try {
+              this.pwaPromptEvento.prompt();
+              const { outcome } = await this.pwaPromptEvento.userChoice;
+              if (outcome === 'accepted') {
+                this.pwaInstalada = true;
+                this.modalInstalarPwa = false;
+              }
+              this.pwaPromptEvento = null;
+              this.puedeInstalarPwa = false;
+              return;
+            } catch(e) {
+              console.warn('Error al activar prompt nativo PWA:', e);
+            }
+          }
+          const ua = (navigator.userAgent || '').toLowerCase();
+          if (/iphone|ipad|ipod/.test(ua)) {
+            this.pwaPestanaActiva = 'ios';
+          } else if (/android/.test(ua)) {
+            this.pwaPestanaActiva = 'android';
+          } else {
+            this.pwaPestanaActiva = 'pc';
+          }
+          this.modalInstalarPwa = true;
         },
 
         abrirModalMiCampus() {
