@@ -6249,13 +6249,12 @@ def dashboard_html(response: Response):
     <div class="flex-1 flex overflow-hidden relative transition-colors duration-200"
          :class="visorModoLectura === 'claro' ? 'bg-[#f4f6f9]' : 'bg-surface-0'">
       <!-- ÁREA DE LECTURA (ANCHO COMPLETO SIN BARRA LATERAL) -->
-      <main class="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 py-6 scroll-smooth" 
+      <main class="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-5 md:py-6 scroll-smooth" 
             id="visor-contenido-scroll"
             @scroll.passive="actualizarSeccionActivaVisor()">
         <!-- VISTA 1: LECTURA DE IDEAS CLAVE (ESTILO OFICIAL UNIR) -->
         <div x-show="visorVistaActiva === 'lectura'"
-             class="w-full mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-10 transition-all duration-200 space-y-6 pb-32"
-             style="max-width: 946px;"
+             class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-10 transition-all duration-200 space-y-6 pb-24 min-h-[calc(100vh-130px)]"
              :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
           <!-- TÍTULO DE SECCIÓN "Ideas clave" -->
           <div class="border-b pb-4" :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
@@ -6284,12 +6283,11 @@ def dashboard_html(response: Response):
 
         <!-- VISTA 2: PREGUNTAS TEST INTEGRADO DENTRO DEL CUERPO DEL VISOR -->
         <div x-show="visorVistaActiva === 'test'"
-             class="w-full mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-8 transition-all duration-200 space-y-6 pb-32"
-             style="max-width: 946px;"
+             class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-10 md:py-8 transition-all duration-200 flex flex-col justify-between min-h-[calc(100vh-130px)] space-y-6"
              :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
           
           <!-- CABECERA DEL TEST DENTRO DEL VISOR -->
-          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4"
+          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4 shrink-0"
                :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
             <div class="flex items-center space-x-3 min-w-0">
               <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
@@ -6358,7 +6356,7 @@ def dashboard_html(response: Response):
           </div>
 
           <!-- CUERPO DE PREGUNTA Y OPCIONES -->
-          <div class="space-y-4" x-show="!testFinalizado && testPreguntas.length > 0">
+          <div class="space-y-4 flex-1 flex flex-col justify-center" x-show="!testFinalizado && testPreguntas.length > 0">
             <!-- ENUNCIADO DE LA PREGUNTA -->
             <div class="p-5 sm:p-6 rounded-2xl border transition-colors leading-relaxed text-base sm:text-lg font-semibold"
                  :class="visorModoLectura === 'claro' ? 'bg-slate-50/90 border-slate-200 text-slate-900' : 'bg-surface-2/60 border-gray-800 text-white'"
@@ -6555,7 +6553,7 @@ def dashboard_html(response: Response):
           </div>
 
           <!-- FOOTER NAVEGACIÓN PREGUNTA A PREGUNTA -->
-          <div class="pt-4 border-t flex items-center justify-between gap-3"
+          <div class="pt-4 border-t flex items-center justify-between gap-3 shrink-0"
                :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800'"
                x-show="!testFinalizado && testPreguntas.length > 0">
             <button @click="anteriorPregunta()" 
@@ -6590,12 +6588,11 @@ def dashboard_html(response: Response):
 
         <!-- VISTA 3: FLASHCARDS INTEGRADA DENTRO DEL CUERPO DEL VISOR -->
         <div x-show="visorVistaActiva === 'flashcards'"
-             class="w-full mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-8 transition-all duration-200 space-y-6 pb-32"
-             style="max-width: 946px;"
+             class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-10 md:py-8 transition-all duration-200 flex flex-col justify-between min-h-[calc(100vh-130px)] space-y-6"
              :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
           
           <!-- CABECERA FLASHCARDS DENTRO DEL VISOR -->
-          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4"
+          <div class="border-b pb-4 flex flex-wrap items-center justify-between gap-4 shrink-0"
                :class="visorModoLectura === 'claro' ? 'border-slate-200' : 'border-gray-800/80'">
             <div class="flex items-center space-x-3 min-w-0">
               <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
@@ -6677,7 +6674,7 @@ def dashboard_html(response: Response):
 
             <!-- 3. Modo Activo: Sesión de Flashcards 3D -->
             <template x-if="flashcardsFiltradas.length > 0 && !generandoFlashcardsVisor && !flashcardSesionCompletada">
-              <div class="max-w-xl mx-auto space-y-5">
+              <div class="max-w-2xl xl:max-w-3xl mx-auto space-y-5 flex-1 flex flex-col justify-center">
                 <!-- Barra de progreso -->
                 <div class="p-3.5 rounded-2xl border flex items-center justify-between gap-4 text-xs shadow-sm"
                      :class="visorModoLectura === 'claro' ? 'bg-slate-50 border-slate-200' : 'bg-surface-2 border-gray-800'">
@@ -7150,10 +7147,10 @@ def dashboard_html(response: Response):
     </div>
 
     <!-- ==================== SUB-MODAL 1: RESUMEN DEL TEMA (ESTILO OFICIAL UNIR) ==================== -->
-    <div x-show="modalSubResumen" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div class="glass w-full max-w-3xl md:max-w-4xl max-h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-sky-500/40 shadow-2xl bg-surface-1/95">
+    <div x-show="modalSubResumen" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+      <div class="glass w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-sky-500/40 shadow-2xl bg-surface-1/95">
         <!-- Header modal Resumen -->
-        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
+        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between shrink-0">
           <div class="flex items-center space-x-2.5">
             <div class="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center text-sm border border-sky-500/30">
               <i class="fa-solid fa-file-lines"></i>
@@ -7173,7 +7170,7 @@ def dashboard_html(response: Response):
           </div>
         </div>
         <!-- Contenido del Resumen -->
-        <div class="flex-1 p-6 md:p-8 overflow-y-auto space-y-4 text-sm leading-relaxed text-gray-200 markdown-content">
+        <div class="flex-1 p-6 md:p-10 overflow-y-auto space-y-4 text-sm leading-relaxed text-gray-200 markdown-content">
           <!-- 1. Estado: Generando resumen automáticamente con IA -->
           <div x-show="generandoResumenVisor" class="py-16 px-4 text-center space-y-4">
             <div class="w-16 h-16 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center text-3xl">
@@ -7207,10 +7204,10 @@ def dashboard_html(response: Response):
     </div>
 
     <!-- ==================== SUB-MODAL 2: ESQUEMA CONCEPTUAL VISUAL (CAPTURA 5 UNIR) ==================== -->
-    <div x-show="modalSubEsquema" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-      <div class="glass w-full max-w-4xl max-h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-indigo-500/40 shadow-2xl bg-surface-1/95">
+    <div x-show="modalSubEsquema" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+      <div class="glass w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-indigo-500/40 shadow-2xl bg-surface-1/95">
         <!-- Header modal Esquema -->
-        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
+        <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between shrink-0">
           <div class="flex items-center space-x-2.5">
             <div class="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-sm border border-indigo-500/30">
               <i class="fa-solid fa-diagram-project"></i>
@@ -7253,8 +7250,8 @@ def dashboard_html(response: Response):
            }
          }
        "
-       class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md">
-      <div class="glass w-full max-w-2xl max-h-[90vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/40 shadow-2xl bg-surface-1/95">
+       class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+      <div class="glass w-full max-w-3xl xl:max-w-4xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/40 shadow-2xl bg-surface-1/95">
         <!-- Header modal Flashcards -->
         <div class="p-4 bg-surface-2 border-b border-gray-800 flex items-center justify-between">
           <div class="flex items-center space-x-2.5">
@@ -7444,8 +7441,8 @@ def dashboard_html(response: Response):
     </div>
 
   <!-- ==================== MODAL: SIMULADOR DE EXAMEN WEB (MODO NOTEBOOK & EXAMEN) ==================== -->
-  <div x-show="modalTest" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
-    <div class="glass w-full max-w-3xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
+  <div x-show="modalTest" x-transition class="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-emerald-500/30 shadow-2xl">
       
       <!-- HEADER TEST -->
       <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
@@ -7680,8 +7677,8 @@ def dashboard_html(response: Response):
   </div>
 
   <!-- ==================== MODAL: ENTRENAMIENTOS DE CÓDIGO OFICIALES Y GENERADOS CON IA ==================== -->
-  <div x-show="modalEntrenamientos" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
-    <div class="glass w-full max-w-4xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/30 shadow-2xl bg-surface-1/95">
+  <div x-show="modalEntrenamientos" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/30 shadow-2xl bg-surface-1/95">
       <!-- HEADER -->
       <div class="p-4 sm:p-5 bg-gray-900/95 border-b border-gray-800 flex items-center justify-between gap-3">
         <div class="flex items-center space-x-3 min-w-0">
@@ -7959,8 +7956,8 @@ def dashboard_html(response: Response):
   </div>
 
   <!-- ==================== MODAL: VISOR DE CLASE CON MINUTERO INTERACTIVO ==================== -->
-  <div x-show="modalMinutero" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
-    <div class="glass w-full max-w-5xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-amber-500/30 shadow-2xl">
+  <div x-show="modalMinutero" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-amber-500/30 shadow-2xl">
       <!-- HEADER -->
       <div class="p-4 bg-gray-900/95 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center space-x-3">
@@ -8019,8 +8016,8 @@ def dashboard_html(response: Response):
   </div>
 
   <!-- ==================== MODAL: INFORME Y RESUMEN EJECUTIVO IA DE LA CLASE ==================== -->
-  <div x-show="modalResumenClase" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md">
-    <div class="glass w-full max-w-5xl max-h-[92vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/30 shadow-2xl">
+  <div x-show="modalResumenClase" x-transition class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
+    <div class="glass w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-purple-500/30 shadow-2xl">
       <!-- HEADER -->
       <div class="p-4 bg-gray-900/95 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center space-x-3">
@@ -8174,7 +8171,7 @@ def dashboard_html(response: Response):
        x-transition:leave-end="opacity-0"
        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
        style="display: none;">
-    <div @click.away="modalApiKey = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl relative flex flex-col max-h-[90vh]">
+    <div @click.away="modalApiKey = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-xl xl:max-w-2xl w-full p-5 sm:p-6 shadow-2xl relative flex flex-col max-h-[90vh]">
       <!-- CABECERA -->
       <div class="flex items-center justify-between pb-3.5 border-b border-gray-800 shrink-0">
         <div class="flex items-center space-x-3">
@@ -8362,7 +8359,7 @@ def dashboard_html(response: Response):
        x-transition:leave-end="opacity-0"
        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
        style="display: none;">
-    <div @click.away="modalMiCampus = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+    <div @click.away="modalMiCampus = false" class="bg-gray-900 border border-gray-800 rounded-3xl max-w-xl xl:max-w-2xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-4 border-b border-gray-800">
         <div class="flex items-center space-x-3">
           <div class="h-10 w-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
@@ -8539,7 +8536,7 @@ def dashboard_html(response: Response):
        class="fixed inset-0 bg-black/85 backdrop-blur-md z-60 flex items-center justify-center p-3 sm:p-4"
        style="display: none;">
     <div @click.away="modalInstalarPwa = false"
-         class="bg-surface-1 border border-cyan-500/30 rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
+         class="bg-surface-1 border border-cyan-500/30 rounded-3xl max-w-2xl xl:max-w-3xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden">
       
       <!-- CABECERA -->
       <div class="flex items-start justify-between pb-4 border-b border-gray-800 shrink-0">
@@ -8766,7 +8763,7 @@ def dashboard_html(response: Response):
        x-transition:leave-end="opacity-0"
        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
        style="display: none;">
-    <div @click.away="modalEntregasMes = false" class="bg-gray-900 border border-rose-500/30 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+    <div @click.away="modalEntregasMes = false" class="bg-gray-900 border border-rose-500/30 rounded-3xl max-w-xl xl:max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
       <div class="flex items-center justify-between pb-4 border-b border-gray-800 shrink-0">
         <div class="flex items-center space-x-3">
           <div class="h-10 w-10 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center text-lg shrink-0">
@@ -8836,7 +8833,7 @@ def dashboard_html(response: Response):
        x-transition:leave-end="opacity-0"
        :class="modalItemAgenda ? 'flex' : 'hidden'"
        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
-    <div @click.away="modalItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+    <div @click.away="modalItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-xl xl:max-w-2xl w-full p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
       <div class="flex items-start justify-between gap-3 pb-4 border-b border-gray-800">
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1.5">
@@ -8999,7 +8996,7 @@ def dashboard_html(response: Response):
        x-transition:enter-end="opacity-100"
        :class="modalNuevoItemAgenda ? 'flex' : 'hidden'"
        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
-    <div @click.away="modalNuevoItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div @click.away="modalNuevoItemAgenda = false" class="bg-surface-6 border border-gray-700/80 rounded-3xl max-w-md xl:max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3 border-b border-gray-800">
         <h3 class="text-base font-extrabold text-white">Añadir a Mi Calendario / To-do</h3>
         <button @click="modalNuevoItemAgenda = false" class="text-gray-400 hover:text-white p-1 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
