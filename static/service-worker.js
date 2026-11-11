@@ -1,16 +1,27 @@
 // Service Worker para soporte PWA e instalación en pantalla de inicio (Android, iOS, PC)
-const CACHE_NAME = 'nova-study-hub-pwa-v2';
+const CACHE_NAME = 'nova-study-hub-pwa-v3';
 const PRECACHE_URLS = [
   '/',
   '/manifest.json',
   '/static/pwa-icon-192.png',
   '/static/pwa-icon-512.png',
-  '/static/pwa-icon.svg'
+  '/static/pwa-icon.svg',
+  '/pwa-icon-192.png',
+  '/pwa-icon-512.png',
+  '/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)).catch(() => {})
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of PRECACHE_URLS) {
+        try {
+          await cache.add(url);
+        } catch (e) {
+          // Continuar con los demás recursos si uno no responde 200
+        }
+      }
+    })
   );
   self.skipWaiting();
 });

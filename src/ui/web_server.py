@@ -104,14 +104,14 @@ STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-@app.get("/manifest.json")
+@app.api_route("/manifest.json", methods=["GET", "HEAD"])
 def get_manifest():
     manifest_file = STATIC_DIR / "manifest.json"
     if manifest_file.exists():
         return FileResponse(manifest_file, media_type="application/manifest+json")
     raise HTTPException(status_code=404, detail="Manifest no encontrado")
 
-@app.get("/service-worker.js")
+@app.api_route("/service-worker.js", methods=["GET", "HEAD"])
 def get_service_worker():
     sw_file = STATIC_DIR / "service-worker.js"
     if sw_file.exists():
@@ -122,30 +122,37 @@ def get_service_worker():
         )
     raise HTTPException(status_code=404, detail="Service worker no encontrado")
 
-@app.get("/pwa-icon.svg")
+@app.api_route("/pwa-icon.svg", methods=["GET", "HEAD"])
 def get_pwa_icon_svg():
     f = STATIC_DIR / "pwa-icon.svg"
     if f.exists():
         return FileResponse(f, media_type="image/svg+xml")
     raise HTTPException(status_code=404)
 
-@app.get("/pwa-icon-192.png")
+@app.api_route("/pwa-icon-192.png", methods=["GET", "HEAD"])
 def get_pwa_icon_192():
     f = STATIC_DIR / "pwa-icon-192.png"
     if f.exists():
         return FileResponse(f, media_type="image/png")
     raise HTTPException(status_code=404)
 
-@app.get("/pwa-icon-512.png")
+@app.api_route("/pwa-icon-512.png", methods=["GET", "HEAD"])
 def get_pwa_icon_512():
     f = STATIC_DIR / "pwa-icon-512.png"
     if f.exists():
         return FileResponse(f, media_type="image/png")
     raise HTTPException(status_code=404)
 
-@app.get("/apple-touch-icon.png")
+@app.api_route("/apple-touch-icon.png", methods=["GET", "HEAD"])
 def get_apple_touch_icon():
     f = STATIC_DIR / "apple-touch-icon.png"
+    if f.exists():
+        return FileResponse(f, media_type="image/png")
+    raise HTTPException(status_code=404)
+
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
+def get_favicon():
+    f = STATIC_DIR / "pwa-icon-192.png"
     if f.exists():
         return FileResponse(f, media_type="image/png")
     raise HTTPException(status_code=404)
@@ -3049,9 +3056,16 @@ def dashboard_html(response: Response):
   <meta name="apple-mobile-web-app-title" content="NOVA Hub">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="/pwa-icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/pwa-icon-512.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>NOVA Study Hub — Plataforma Inteligente Multi-Titulación</title>
   <script>
+    window.__pwaPromptEvento = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      window.__pwaPromptEvento = e;
+    });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/service-worker.js').catch(err => {
@@ -3377,7 +3391,7 @@ def dashboard_html(response: Response):
        x-transition:leave="transition-opacity ease-in duration-200"
        x-transition:leave-start="opacity-100"
        x-transition:leave-end="opacity-0"
-       class="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 md:hidden"
+       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 md:hidden"
        style="display: none;"></div>
 
   <!-- ==================== SIDEBAR PRINCIPAL DE SECCIONES (DRAWER EN MÓVIL, STICKY EN DESKTOP) ==================== -->
@@ -3388,7 +3402,7 @@ def dashboard_html(response: Response):
          x-transition:leave="transition-all ease-in duration-200"
          x-transition:leave-start="translate-x-0 opacity-100"
          x-transition:leave-end="-translate-x-full opacity-0"
-         class="w-72 bg-surface-3/98 border-r border-gray-800 flex flex-col shrink-0 min-h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 select-none shadow-2xl md:shadow-xl">
+         class="w-72 sm:w-80 max-w-[85vw] bg-surface-3/98 border-r border-gray-800 flex flex-col shrink-0 h-full fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 select-none shadow-2xl md:shadow-xl">
     
     <!-- BRAND / LOGO -->
     <div class="p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between">
@@ -3408,7 +3422,7 @@ def dashboard_html(response: Response):
     </div>
 
     <!-- NAVEGACIÓN DE PROGRAMAS / TITULACIONES -->
-    <div class="flex-1 p-4 space-y-6 overflow-y-auto">
+    <div class="flex-1 p-4 space-y-6 overflow-y-auto pb-28 sm:pb-16">
       
       <div>
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold px-3 mb-2 flex items-center justify-between">
@@ -3521,12 +3535,15 @@ def dashboard_html(response: Response):
           </div>
 
           <!-- ACCESO DIRECTO / INSTALACIÓN PWA -->
-          <div class="flex items-center group/item pt-1">
+          <div class="pt-2">
             <button @click="instalarPwaDirecta()"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border border-transparent text-gray-400 hover:text-cyan-300 hover:bg-gray-800/40 flex items-center space-x-2.5 cursor-pointer"
+                    class="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold transition border flex items-center justify-between cursor-pointer bg-gradient-to-r from-cyan-500/15 via-sky-500/10 to-indigo-500/15 border-cyan-500/35 text-cyan-300 hover:border-cyan-400 hover:from-cyan-500/25 shadow-sm active:scale-95"
                     title="Añadir NOVA a la pantalla de inicio de tu móvil o PC">
-              <i class="fa-solid fa-mobile-screen-button w-4 text-center text-cyan-400"></i>
-              <span>Instalar en el Móvil</span>
+              <div class="flex items-center space-x-2.5">
+                <i class="fa-solid fa-mobile-screen-button w-4 text-center text-cyan-400 text-sm"></i>
+                <span>Instalar en el Móvil</span>
+              </div>
+              <span class="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">App</span>
             </button>
           </div>
         </div>
@@ -6126,17 +6143,17 @@ def dashboard_html(response: Response):
        class="fixed inset-0 z-50 flex flex-col overflow-hidden select-text transition-colors duration-200"
        :class="visorModoLectura === 'claro' ? 'bg-[#f4f6f9] text-gray-900' : 'bg-surface-0 text-gray-100'">
     <!-- BARRA ÚNICA CONSOLIDADA (BOTONES CONTRAÍDOS QUE SE EXPANDEN AL PASAR EL RATÓN) -->
-    <header class="h-14 px-4 md:px-6 flex items-center justify-between gap-3 shrink-0 shadow-sm z-20 backdrop-blur-md transition-colors duration-200"
+    <header class="h-14 px-2.5 sm:px-4 md:px-6 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0 shadow-sm z-20 backdrop-blur-md transition-colors duration-200"
             :class="visorModoLectura === 'claro' ? 'bg-white/95 border-b border-slate-200' : 'bg-surface-1/95 border-b border-gray-800'">
       <!-- Izquierda: Botón Volver + Badge Estado + Título del Tema -->
-      <div class="flex items-center space-x-3 min-w-0 pr-2">
+      <div class="flex items-center space-x-1.5 sm:space-x-3 min-w-0 flex-1">
         <!-- BOTÓN VOLVER (CONTRAÍDO CON HOVER) -->
         <button @click="cerrarModalVisor()" 
-                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shrink-0 shadow-sm"
+                class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shrink-0 shadow-sm"
                 :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border-slate-200' : 'bg-surface-3/90 hover:bg-surface-4 text-gray-300 hover:text-white border-gray-700/80'"
                 title="Volver al temario">
           <i class="fa-solid fa-arrow-left text-xs" :class="visorModoLectura === 'claro' ? 'text-[#0f5b9e]' : 'text-cyan-400'"></i>
-          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Volver</span>
+          <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Volver</span>
         </button>
 
         <!-- BADGE ESTADO DEL TEMA (COMPLETADO / POR HACER) -->
@@ -6144,20 +6161,20 @@ def dashboard_html(response: Response):
                 :class="visorTemaActual?.estado === 'Hecho' 
                   ? (visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10')
                   : (visorModoLectura === 'claro' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-surface-3/80 text-gray-300 border-gray-700')"
-                class="px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center space-x-1.5 border shadow-sm cursor-pointer hover:scale-105 active:scale-95 shrink-0"
+                class="px-2 sm:px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center space-x-1 sm:space-x-1.5 border shadow-sm cursor-pointer hover:scale-105 active:scale-95 shrink-0"
                 title="Clic para alternar estado: Hecho / Por hacer">
           <i class="fa-solid fa-circle-check text-xs" :class="visorTemaActual?.estado === 'Hecho' ? 'text-emerald-500' : (visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500')"></i>
-          <span class="text-xs" x-text="visorTemaActual?.estado === 'Hecho' ? 'Completado' : (visorTemaActual?.estado || 'Por hacer')"></span>
+          <span class="text-xs hidden sm:inline" x-text="visorTemaActual?.estado === 'Hecho' ? 'Completado' : (visorTemaActual?.estado || 'Por hacer')"></span>
         </button>
 
         <!-- TÍTULO DEL TEMA -->
-        <h2 class="text-xs sm:text-sm md:text-base font-extrabold tracking-tight truncate"
+        <h2 class="text-xs sm:text-sm md:text-base font-extrabold tracking-tight truncate min-w-0"
             :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
             x-text="modalTitulo"></h2>
 
-        <!-- INDICADOR / SELECTOR DE MODO EN HEADER -->
+        <!-- INDICADOR / SELECTOR DE MODO EN HEADER (SOLO DESKTOP PARA EVITAR SOLAPAMIENTOS EN MÓVIL) -->
         <template x-if="visorVistaActiva !== 'lectura'">
-          <div class="flex items-center space-x-1.5 shrink-0 ml-1">
+          <div class="hidden md:flex items-center space-x-1.5 shrink-0 ml-1">
             <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm"
                   :class="visorVistaActiva === 'test' 
                     ? (visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40')
@@ -6179,27 +6196,27 @@ def dashboard_html(response: Response):
       </div>
 
       <!-- Derecha: BOTONES DE ACCIÓN CONTRAÍDOS -->
-      <div class="flex items-center space-x-1.5 shrink-0">
+      <div class="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
         <!-- BOTÓN MODO LECTURA UNIR / NOCHE -->
         <button @click="cambiarModoVisor(visorModoLectura === 'claro' ? 'oscuro' : 'claro')"
-                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
+                class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
                 :class="visorModoLectura === 'claro' ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200' : 'bg-surface-3/90 hover:bg-surface-4 text-amber-400 border-gray-700/80'"
                 :title="visorModoLectura === 'claro' ? 'Cambiar a modo noche' : 'Cambiar a modo lectura UNIR (claro)'">
           <i :class="visorModoLectura === 'claro' ? 'fa-solid fa-moon text-xs text-indigo-600' : 'fa-solid fa-sun text-xs text-amber-400'"></i>
-          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
+          <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
                 x-text="visorModoLectura === 'claro' ? 'Modo Noche' : 'Modo UNIR'"></span>
         </button>
 
         <!-- BOTÓN PRÁCTICA CON DESPLEGABLE OFICIAL UNIR (TEST, VERDADERO O FALSO, FLASHCARDS) -->
         <div class="relative">
           <button @click="menuPracticaVisorAbierto = !menuPracticaVisorAbierto"
-                  class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
+                  class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
                   :class="menuPracticaVisorAbierto 
                     ? (visorModoLectura === 'claro' ? 'bg-slate-200 text-slate-900 border-slate-300 ring-2 ring-slate-200' : 'bg-surface-4 text-white border-gray-600 ring-2 ring-gray-600/30')
                     : (visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-surface-3/90 hover:bg-surface-4 text-gray-200 border-gray-700/80')"
                   title="Practica el tema: Test, Verdadero o Falso, Flashcards">
             <i class="fa-solid fa-pen text-xs shrink-0" :class="visorModoLectura === 'claro' ? 'text-slate-600' : 'text-gray-300'"></i>
-            <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Practica</span>
+            <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Practica</span>
           </button>
 
           <!-- DESPLEGABLE / TARJETA POPOVER "Practica el tema" (ESTILO OFICIAL UNIR) -->
@@ -6278,23 +6295,23 @@ def dashboard_html(response: Response):
 
         <!-- BOTÓN AYUDA INTELIGENTE (NOVA TUTOR IA) -->
         <button @click="toggleAyudaInteligenteVisor()"
-                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
+                class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
                 :class="panelAyudaVisor 
                   ? (visorModoLectura === 'claro' ? 'bg-purple-100 text-purple-800 border-purple-300 ring-2 ring-purple-200' : 'bg-purple-500/25 text-purple-200 border-purple-500/50 ring-2 ring-purple-500/30')
                   : (visorModoLectura === 'claro' ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200' : 'bg-surface-3/90 hover:bg-purple-500/20 text-purple-400 hover:text-purple-300 border-gray-700/80 hover:border-purple-500/50')"
                 title="Ayuda Inteligente (NOVA Tutor IA)">
           <i class="fa-solid fa-wand-magic-sparkles text-xs shrink-0"></i>
-          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Ayuda Inteligente</span>
+          <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Ayuda Inteligente</span>
         </button>
 
         <!-- DESCARGAR PDF -->
         <button x-show="visorTemaActual?.pdf"
                 @click="abrirPdf('data/materiales/' + asigSeleccionada?.nombre + '/' + visorTemaActual?.pdf, visorTemaActual?.pdf)"
-                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
+                class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
                 :class="visorModoLectura === 'claro' ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200' : 'bg-surface-3/90 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border-gray-700/80 hover:border-rose-500/50'"
                 title="Descargar PDF original">
           <i class="fa-solid fa-download text-xs shrink-0"></i>
-          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Descargar PDF</span>
+          <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Descargar PDF</span>
         </button>
 
         <!-- RESUMEN IA -->
@@ -6303,10 +6320,10 @@ def dashboard_html(response: Response):
                 :class="visorVistaActiva === 'resumen' 
                   ? (visorModoLectura === 'claro' ? 'bg-sky-100 text-sky-800 border-sky-300 ring-2 ring-sky-200' : 'bg-sky-500/25 text-sky-200 border-sky-500/50 ring-2 ring-sky-500/30')
                   : (visorModoLectura === 'claro' ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200' : 'bg-surface-3/90 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border-gray-700/80 hover:border-sky-500/50')"
-                class="group flex items-center h-8 px-2.5 rounded-xl transition-all duration-200 border shadow-sm active:scale-95 disabled:opacity-75 cursor-pointer"
+                class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl transition-all duration-200 border shadow-sm active:scale-95 disabled:opacity-75 cursor-pointer"
                 title="Ver resumen sintetizado con IA">
           <i :class="generandoResumenVisor ? 'fa-solid fa-spinner fa-spin text-xs shrink-0 text-sky-400' : 'fa-solid fa-file-lines text-xs shrink-0'"></i>
-          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
+          <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
                 x-text="generandoResumenVisor ? 'Redactando resumen...' : (visorVistaActiva === 'resumen' ? 'Ver Ideas clave' : 'Resumen IA')"></span>
         </button>
 
@@ -9219,7 +9236,9 @@ def dashboard_html(response: Response):
 
 
   <!-- ==================== BARRA DE NAVEGACIÓN INFERIOR PARA MÓVILES (ESTILO APP NATIVA) ==================== -->
-  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-3/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
+  <nav x-show="!sidebarVisible && !modalVisor"
+       x-transition.opacity.duration.200ms
+       class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface-3/95 border-t border-gray-800/90 backdrop-blur-lg flex items-center justify-around px-2 py-1.5 shadow-2xl safe-area-pb select-none">
     <button @click="irASeccion('dashboard')" 
             :class="tab === 'dashboard' ? 'text-cyan-400 font-bold' : 'text-gray-400 hover:text-gray-200'"
             class="flex flex-col items-center justify-center p-1.5 transition flex-1 text-center">
@@ -11317,8 +11336,13 @@ def dashboard_html(response: Response):
           window.addEventListener('popstate', () => this.procesarUrlInicial());
 
           // Detección y soporte nativo PWA (Instalación en inicio)
+          if (window.__pwaPromptEvento) {
+            this.pwaPromptEvento = window.__pwaPromptEvento;
+            this.puedeInstalarPwa = true;
+          }
           window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
+            window.__pwaPromptEvento = e;
             this.pwaPromptEvento = e;
             this.puedeInstalarPwa = true;
           });

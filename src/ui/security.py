@@ -552,12 +552,23 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
         es_nube_o_proxy = bool(request.headers.get("x-forwarded-for")) or any(
             host_sin_puerto.endswith(suf) for suf in _SUFIJOS_NUBE_PERMITIDOS
         )
-        if request.url.path in ("/ping", "/health"):
-            return _aplicar_cabeceras_seguridad(
-                JSONResponse({"status": "ok", "app": "unir-study-hub", "uptime": "active"}, status_code=200)
-            )
-
-        if request.url.path in ("/logout", "/api/validar-gemini-key") or request.url.path.startswith("/api/auth/"):
+        rutas_publicas_pwa = (
+            "/ping",
+            "/health",
+            "/manifest.json",
+            "/service-worker.js",
+            "/pwa-icon.svg",
+            "/pwa-icon-192.png",
+            "/pwa-icon-512.png",
+            "/apple-touch-icon.png",
+            "/favicon.ico",
+        )
+        if (
+            request.url.path in rutas_publicas_pwa
+            or request.url.path.startswith("/static/")
+            or request.url.path in ("/logout", "/api/validar-gemini-key")
+            or request.url.path.startswith("/api/auth/")
+        ):
             resp = await call_next(request)
             return _aplicar_cabeceras_seguridad(resp)
 
