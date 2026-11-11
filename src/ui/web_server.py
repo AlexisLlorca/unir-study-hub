@@ -3157,7 +3157,7 @@ def dashboard_html(response: Response):
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    html, body { overflow-x: hidden; max-width: 100vw; width: 100%; }
+    html, body { overflow-x: clip; max-width: 100vw; width: 100%; }
     body { font-family: 'Inter', sans-serif; background-color: rgb(var(--surface-0)); color: rgb(var(--c-gray-100)); transition: background-color .25s ease; }
     code, pre { font-family: 'JetBrains Mono', monospace; }
     .glass { background: rgb(var(--c-gray-900) / 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
@@ -3380,7 +3380,7 @@ def dashboard_html(response: Response):
     }
   </style>
 </head>
-<body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-surface-0 text-gray-100 overflow-x-hidden">
+<body x-data="studyHubApp()" x-init="init()" class="min-h-screen flex bg-surface-0 text-gray-100">
 
   <!-- BACKDROP OVERLAY PARA MÓVIL CUANDO EL MENÚ ESTÁ ABIERTO -->
   <div x-show="sidebarVisible" 
@@ -3402,10 +3402,10 @@ def dashboard_html(response: Response):
          x-transition:leave="transition-all ease-in duration-200"
          x-transition:leave-start="translate-x-0 opacity-100"
          x-transition:leave-end="-translate-x-full opacity-0"
-         class="w-72 sm:w-80 max-w-[85vw] bg-surface-3/98 border-r border-gray-800 flex flex-col shrink-0 h-full fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 select-none shadow-2xl md:shadow-xl">
+         class="w-72 sm:w-80 max-w-[85vw] bg-surface-3/98 border-r border-gray-800 flex flex-col shrink-0 h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-40 md:h-screen select-none shadow-2xl md:shadow-xl">
     
     <!-- BRAND / LOGO -->
-    <div class="p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between">
+    <div class="p-4 sm:p-5 border-b border-gray-800 flex items-center justify-between shrink-0">
       <div class="flex items-center space-x-3">
         <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20 shrink-0">
           <i class="fa-solid fa-graduation-cap text-lg"></i>
@@ -3422,7 +3422,7 @@ def dashboard_html(response: Response):
     </div>
 
     <!-- NAVEGACIÓN DE PROGRAMAS / TITULACIONES -->
-    <div class="flex-1 p-4 space-y-6 overflow-y-auto pb-28 sm:pb-16">
+    <div class="flex-1 min-h-0 p-4 space-y-6 overflow-y-auto pb-6">
       
       <div>
         <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold px-3 mb-2 flex items-center justify-between">
@@ -3552,7 +3552,7 @@ def dashboard_html(response: Response):
     </div>
 
     <!-- FOOTER SIDEBAR -->
-    <div class="p-4 border-t border-gray-800 bg-gray-900/40 flex items-center justify-between text-xs">
+    <div class="p-4 border-t border-gray-800 bg-gray-900/60 flex items-center justify-between text-xs shrink-0 mt-auto">
       <div class="flex items-center space-x-2">
         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
         <span class="text-gray-400 text-[11px]">Sistema Operativo</span>
