@@ -242,11 +242,11 @@ def _obtener_user_key_o_exigir(request: Request, key_override: Optional[str] = N
 
 # --- API ENDPOINTS ---
 
-@app.get("/ping")
-@app.get("/health")
+@app.api_route("/ping", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD"])
 def api_health_check():
     """Endpoint público y ultraligero para monitorización y pinger keep-alive 24/7."""
-    return {"status": "ok", "app": "unir-study-hub", "uptime": "active"}
+    return {"status": "ok", "app": "nova-study-hub", "uptime": "active"}
 
 
 @app.post("/api/auth/login")
