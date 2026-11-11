@@ -114,9 +114,9 @@ PROGRAMAS: Dict[str, Dict[str, Any]] = {
     "python": {
         "id": "python",
         "nombre": "Curso de Programación en Python",
-        "titulo_corto": "Python ESIT",
+        "titulo_corto": "Python",
         "icono": "fa-brands fa-python",
-        "badge": "UNIR ESIT",
+        "badge": "Especialización Python",
         "color": "emerald",
         "descripcion": "Especialización técnica en desarrollo con Python: sintaxis, POO, scripts y estructuras de datos (PER 13236).",
         "cursos": {
@@ -793,7 +793,7 @@ def obtener_info_asignatura(asig: str) -> Dict[str, Any]:
         curso_nombre = "Bootcamp Ágil"
     elif asig in ASIGNATURAS_PYTHON:
         prog_id = "python"
-        curso_nombre = "Python ESIT"
+        curso_nombre = "Python"
     elif asig in ASIGNATURAS_AWS:
         prog_id = "aws"
         curso_nombre = "AWS Cloud"

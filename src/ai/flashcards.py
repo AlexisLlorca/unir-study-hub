@@ -162,10 +162,10 @@ class GestorFlashcards:
         tutor = TutorIA()
         cuerpo = f"Tema o concepto clave a reforzar: '{texto_tema}' de la asignatura '{asignatura}'." if len(texto_tema.strip()) < 150 else f"A partir del siguiente contenido académico de '{asignatura}':\n\n{texto_tema[:20000]}"
         prompt = (
-            f"Eres NOVA, mentora académica de élite en '{asignatura}' para FP DAM y UNIR.\n"
+            f"Eres NOVA, mentora académica de élite en '{asignatura}' para FP DAM y titulaciones superiores.\n"
             f"{cuerpo}\n\n"
             f"REGLA DE ORO DE VERACIDAD: Basa todas las preguntas y respuestas ESTRICTAMENTE en el contenido oficial indicado arriba. PROHIBIDO inventar conceptos o terminología ajena al temario.\n\n"
-            f"Genera exactamente {cantidad} Flashcards de alta calidad pedagógica orientadas a preparar exámenes oficiales de UNIR.\n"
+            f"Genera exactamente {cantidad} Flashcards de alta calidad pedagógica orientadas a preparar exámenes oficiales.\n"
             "Cada tarjeta debe tener:\n"
             "- 'anverso': Una pregunta clara, caso práctico o concepto que suele caer en examen.\n"
             "- 'reverso': Respuesta concisa y técnicamente rigurosa con los términos clave destacados en **negrita**.\n"

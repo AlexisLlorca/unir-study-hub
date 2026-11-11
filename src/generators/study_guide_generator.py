@@ -147,7 +147,7 @@ class GeneradorGuiaEstudio:
             console.print(f"\n[cyan]3/4. Redactando Guía de Estudio de Alto Rendimiento ({profundidad.upper()})...[/cyan]")
 
             directivas_veracidad = (
-                "\n\nDIRECTRICES OBLIGATORIAS DE ESTILO Y FORMATO IDÉNTICO AL SISTEMA OFICIAL DE UNIR:\n"
+                "\n\nDIRECTRICES OBLIGATORIAS DE ESTILO Y FORMATO IDÉNTICO AL SISTEMA ACADÉMICO OFICIAL:\n"
                 "- CERO EMOJIS: Prohibido estrictamente utilizar emoticonos o iconos (nada de ⚡, 🚀, 📌, 💡, 💻, etc.) en títulos ni texto.\n"
                 "- TÍTULO PRINCIPAL (H1): Encabezado conceptual, limpio y académico (ejemplo: '# Naturaleza del software y sus retos'). Sin 'Tema X', sin 'Guía' ni adornos.\n"
                 "- ESTRUCTURA TEMÁTICA (H2 y H3): Divide el tema en 4 a 6 secciones conceptuales sólidas ('## ...') y subsecciones ('### ...') cuando se detallen modelos, variantes o fases específicas.\n"
@@ -160,11 +160,11 @@ class GeneradorGuiaEstudio:
             )
 
             prompt_guia = (
-                f"Eres el sistema oficial de síntesis académica universitaria de UNIR.\n"
+                f"Eres el sistema oficial de síntesis académica universitaria.\n"
                 f"A partir del siguiente material oficial de '{asignatura}' (Tema: {nombre_tema}):\n\n"
                 f"{contexto_combinado}\n\n"
                 f"{directivas_veracidad}\n\n"
-                "Redacta el RESUMEN OFICIAL COMPLETO CON INTELIGENCIA ARTIFICIAL del tema, siguiendo exactamente la estructura, tono formal y elegancia de los resúmenes oficiales de UNIR en Markdown."
+                "Redacta el RESUMEN OFICIAL COMPLETO CON INTELIGENCIA ARTIFICIAL del tema, siguiendo exactamente la estructura, tono formal y elegancia de los resúmenes académicos oficiales en Markdown."
             )
 
             guia_md = self.tutor.client.generar_contenido(
@@ -176,7 +176,7 @@ class GeneradorGuiaEstudio:
             if not guia_md:
                 console.print("[yellow]⚠ Reintentando redacción de guía con versión concisa...[/yellow]")
                 prompt_guia_conciso = (
-                    f"Eres el sistema oficial de síntesis académica universitaria de UNIR.\n"
+                    f"Eres el sistema oficial de síntesis académica universitaria.\n"
                     f"A partir del siguiente material oficial de '{asignatura}' ({nombre_tema}):\n\n"
                     f"{contexto_combinado[:40000]}\n\n"
                     f"{directivas_veracidad}\n\n"
@@ -234,14 +234,14 @@ class GeneradorGuiaEstudio:
                     "]\n"
                 )
             else:
-                console.print(f"\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial de UNIR ({num_preguntas} preguntas, nivel {profundidad.upper()})...[/cyan]")
+                console.print(f"\n[cyan]4/4. Diseñando Simulacro Tipo Test Oficial ({num_preguntas} preguntas, nivel {profundidad.upper()})...[/cyan]")
                 prompt_test = (
                     f"Genera un examen tipo test oficial de {num_preguntas} preguntas con rigor pedagógico y técnico, "
                     f"basado en el tema '{nombre_tema}' de '{asignatura}'. Nivel de profundidad: {profundidad.upper()}.\n\n"
                     f"{contexto_combinado[:35000]}\n\n"
                     f"REGLAS OBLIGATORIAS:\n"
                     f"1. Genera exactamente {num_preguntas} preguntas.\n"
-                    "2. Incluye preguntas conceptuales rigurosas, análisis de fragmentos de código y trampas de examen de UNIR.\n"
+                    "2. Incluye preguntas conceptuales rigurosas, análisis de fragmentos de código y trampas de examen oficiales.\n"
                     "3. Cada pregunta debe tener 4 opciones (A, B, C, D) con distractores verosímiles y técnicos.\n"
                     "4. 'pista': Pista socrática y orientativa que guíe al alumno sin desvelar la letra de la respuesta.\n"
                     "5. 'justificacion': Justificación exhaustiva: por qué la opción correcta lo es Y por qué cada uno de los 3 distractores es incorrecto.\n"
@@ -347,7 +347,7 @@ class GeneradorGuiaEstudio:
                         resultados["test_json"] = ruta_test_json
 
                         # Guardar Markdown con respuestas ocultas
-                        titulo_examen = f"Autoevaluación Verdadero o Falso — {nombre_tema}" if es_vf else f"Test Oficial UNIR — {nombre_tema}"
+                        titulo_examen = f"Autoevaluación Verdadero o Falso — {nombre_tema}" if es_vf else f"Test Oficial — {nombre_tema}"
                         md_examen = generar_markdown_examen(
                             asignatura=asignatura,
                             tema=nombre_tema,

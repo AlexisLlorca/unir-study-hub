@@ -2730,7 +2730,7 @@ def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudian
         )
     elif msg.programa in ["pfu", "grado"]:
         contexto_rol = (
-            "ROL: Eres NOVA, profesora de Grado en Ingeniería del Software y PFU en UNIR. "
+            "ROL: Eres NOVA, profesora de Grado en Ingeniería del Software y PFU. "
             "Enfócate en metodología de software, estructuras de datos formales, complejidad O(n) y arquitectura limpia. "
         )
     elif msg.programa == "bootcamp":
@@ -2739,7 +2739,7 @@ def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudian
         )
     elif msg.programa == "python":
         contexto_rol = (
-            "ROL: Eres NOVA, mentora de programación experta en Python (ESIT UNIR). "
+            "ROL: Eres NOVA, mentora de programación experta en Python. "
             "Explicas con ejemplos de código limpios, PEP8, buenas prácticas y casos de uso prácticos. "
         )
     elif msg.programa == "aws":
@@ -2754,7 +2754,7 @@ def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudian
         )
     else:
         contexto_rol = (
-            "ROL: Eres NOVA, mentora de élite y tutora senior de FP DAM (Desarrollo de Aplicaciones Multiplataforma) en UNIR. "
+            "ROL: Eres NOVA, mentora de élite y tutora senior de FP DAM (Desarrollo de Aplicaciones Multiplataforma). "
             "Dominas Java, Kotlin, Android, SQL, servicios REST, Spring Boot, JDBC, XML/DOM y patrones de arquitectura limpia. "
         )
 
@@ -2820,7 +2820,7 @@ def _preparar_contexto_chat(msg: ChatMessage, nombre_estudiante: str = "estudian
     if contexto_inyectado:
         # Si hay contexto RAG, acotarlo claramente para no canibalizar la pregunta
         mensaje_actual_con_contexto = (
-            f"[CONTEXTO DE REFERENCIA OFICIAL UNIR (Usa esto si es relevante para responder)]:\n"
+            f"[CONTEXTO DE REFERENCIA OFICIAL (Usa esto si es relevante para responder)]:\n"
             f"{contexto_inyectado}\n\n"
             f"---\n"
             f"Mensaje del alumno ({nombre_alumno_fmt}): {msg.mensaje}"
@@ -3593,11 +3593,11 @@ def dashboard_html(response: Response):
           <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">Consultar </span><span>NOVA</span>
         </button>
 
-        <!-- BOTÓN CONECTAR MI CAMPUS UNIR (CANVAS PERSONAL) -->
+        <!-- BOTÓN CONECTAR MI CAMPUS (CANVAS PERSONAL) -->
         <button @click="abrirModalMiCampus()"
                 :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : (miCampusConfig?.conectado ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-gray-800 border-gray-700 text-gray-300 hover:text-indigo-300 hover:border-indigo-500/30'))"
                 class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-medium border transition flex items-center space-x-1.5 shrink-0 shadow-sm relative"
-                :title="miCampusConfig?.token_estado?.estado === 'caducado' ? '¡Tu Token de Canvas ha caducado!' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? ('¡Atención! Tu Token de Canvas caduca en ' + (miCampusConfig?.token_estado?.dias_restantes ?? 0) + ' días') : (miCampusConfig?.conectado ? ('Campus UNIR: ' + (miCampusConfig?.alumno_nombre || 'Activo')) : 'Conectar mi cuenta personal del Campus UNIR (Canvas)'))">
+                :title="miCampusConfig?.token_estado?.estado === 'caducado' ? '¡Tu Token de Canvas ha caducado!' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? ('¡Atención! Tu Token de Canvas caduca en ' + (miCampusConfig?.token_estado?.dias_restantes ?? 0) + ' días') : (miCampusConfig?.conectado ? ('Campus: ' + (miCampusConfig?.alumno_nombre || 'Activo')) : 'Conectar mi cuenta personal del Campus (Canvas)'))">
           <span class="h-2 w-2 rounded-full" :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'bg-rose-500 animate-ping' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? 'bg-amber-400 animate-ping' : (miCampusConfig?.conectado ? 'bg-indigo-400 animate-pulse' : 'bg-gray-500'))"></span>
           <i class="fa-solid fa-building-columns text-[10px]" :class="miCampusConfig?.token_estado?.estado === 'caducado' ? 'text-rose-400' : (miCampusConfig?.token_estado?.estado === 'por_caducar' ? 'text-amber-400' : (miCampusConfig?.conectado ? 'text-indigo-400' : 'text-gray-400'))"></i>
           <span class="hidden sm:inline font-medium" x-text="miCampusConfig?.conectado ? 'Mi Campus' : 'Campus'"></span>
@@ -3728,7 +3728,7 @@ def dashboard_html(response: Response):
               </div>
               <div>
                 <h4 class="text-sm font-extrabold text-white flex items-center gap-2">
-                  <span x-text="miCampusConfig.token_estado.estado === 'caducado' ? '⛔ Tu Token de Canvas UNIR ha caducado' : ('⚠️ Tu Token de Canvas UNIR está por caducar (' + (miCampusConfig.token_estado.dias_restantes ?? 0) + ' días restantes)')"></span>
+                  <span x-text="miCampusConfig.token_estado.estado === 'caducado' ? '⛔ Tu Token de Canvas ha caducado' : ('⚠️ Tu Token de Canvas está por caducar (' + (miCampusConfig.token_estado.dias_restantes ?? 0) + ' días restantes)')"></span>
                 </h4>
                 <p class="text-xs text-gray-300 mt-1">
                   <span x-text="miCampusConfig.token_estado.estado === 'caducado' ? 'Tus PDFs descargados están seguros, pero necesitas renovar el token para seguir sincronizando notas, PACs y temas.' : 'Renuévalo ahora en 1 minuto para no perder la sincronización nocturna ni la descarga de nuevos materiales de estudio.'"></span>
@@ -4592,7 +4592,7 @@ def dashboard_html(response: Response):
                         <div class="inline-flex items-center rounded-xl border border-sky-500/30 bg-sky-500/15 overflow-hidden shadow-sm">
                           <button @click="abrirVisorTema(tm, true)"
                                   class="px-2.5 py-1.5 hover:bg-sky-500/25 text-sky-300 text-xs font-bold transition flex items-center gap-1.5"
-                                  title="Abrir Resumen con IA estilo UNIR">
+                                  title="Abrir Resumen Oficial con IA">
                             <i class="fa-solid fa-file-lines text-sky-400 text-xs"></i>
                             <span>Resumen IA</span>
                           </button>
@@ -4612,7 +4612,7 @@ def dashboard_html(response: Response):
                         <button @click="generarIaDirectaTema(tm, 'solo_guia')"
                                 :disabled="temasGenerando[tm.numero]"
                                 class="px-2.5 py-1.5 rounded-xl bg-gray-800/80 hover:bg-sky-500/20 text-gray-400 hover:text-sky-300 text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-60"
-                                title="Crear resumen oficial con Inteligencia Artificial estilo UNIR (Plan Robusto)">
+                                title="Crear resumen oficial con Inteligencia Artificial (Plan Robusto)">
                           <i :class="temasGenerando[tm.numero] === 'solo_guia' ? 'fa-solid fa-spinner fa-spin text-sky-400' : 'fa-solid fa-wand-magic-sparkles text-[10px]'"></i>
                           <span x-text="temasGenerando[tm.numero] === 'solo_guia' ? 'Generando...' : 'Crear Resumen'"></span>
                         </button>
@@ -4953,13 +4953,13 @@ def dashboard_html(response: Response):
             </div>
           </div>
 
-          <!-- CALIFICACIONES OFICIALES DEL CAMPUS UNIR (SI EL ALUMNO CONECTÓ SU CUENTA CANVAS) -->
+          <!-- CALIFICACIONES OFICIALES DEL CAMPUS (SI EL ALUMNO CONECTÓ SU CUENTA CANVAS) -->
           <div class="mt-8 pt-6 border-t border-gray-800">
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
               <div>
                 <h4 class="text-sm font-bold text-white flex items-center space-x-2">
                   <i class="fa-solid fa-building-columns text-indigo-400"></i>
-                  <span>Calificaciones Oficiales en Mi Campus UNIR (Canvas)</span>
+                  <span>Calificaciones Oficiales en Mi Campus (Canvas)</span>
                   <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold ml-1"
                         x-text="calificacionesFiltradas.length + ' notas'"></span>
                 </h4>
@@ -5074,7 +5074,7 @@ def dashboard_html(response: Response):
             </div>
 
             <div x-show="miCampusCalificaciones.length === 0" class="text-center py-6 text-gray-500 text-xs bg-gray-900/40 rounded-2xl border border-gray-800/60">
-              <p x-text="miCampusConfig?.conectado ? 'Todavía no hay actividades calificadas en tu cuenta de Canvas.' : 'Conecta tu cuenta de Canvas UNIR para consultar tus notas oficiales de PACs aquí.'"></p>
+              <p x-text="miCampusConfig?.conectado ? 'Todavía no hay actividades calificadas en tu cuenta de Canvas.' : 'Conecta tu cuenta de Canvas para consultar tus notas oficiales de PACs aquí.'"></p>
             </div>
           </div>
         </div>
@@ -5964,7 +5964,7 @@ def dashboard_html(response: Response):
         </button>
       </div>
 
-      <p class="text-xs text-gray-400">NOVA sintetiza el temario oficial en PDF y las lecciones del profesor para crear resúmenes de alto nivel estilo UNIR y simulacros tipo test con justificación detallada.</p>
+      <p class="text-xs text-gray-400">NOVA sintetiza el temario oficial en PDF y las lecciones del profesor para crear resúmenes de alto nivel y simulacros tipo test con justificación detallada.</p>
 
       <div>
         <label class="block text-xs font-bold text-gray-300 mb-1">Materia Seleccionada:</label>
@@ -6009,7 +6009,7 @@ def dashboard_html(response: Response):
                   class="p-2.5 rounded-2xl border text-center transition flex flex-col items-center justify-center space-y-1">
             <i class="fa-solid fa-book-bookmark text-sm" :class="generadorTipo === 'solo_guia' ? 'text-cyan-400' : 'text-gray-500'"></i>
             <span class="text-xs">Solo Resumen</span>
-            <span class="text-[10px] opacity-75">Resumen UNIR</span>
+            <span class="text-[10px] opacity-75">Resumen Oficial</span>
           </button>
 
           <!-- Opción Solo Test -->
@@ -6038,7 +6038,7 @@ def dashboard_html(response: Response):
               <i class="fa-solid fa-crown text-amber-400 text-xs"></i>
               <span class="text-xs font-bold text-purple-400">Robusto</span>
             </div>
-            <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Formato Oficial UNIR)</p>
+            <p class="text-[11px] text-gray-200 font-semibold">Alto Rendimiento (Formato Oficial)</p>
             <p class="text-[10px] text-gray-400 leading-tight">Síntesis académica rigurosa, conceptos técnicos en negrita, explicaciones fluidas y síntesis esencial de examen.</p>
           </div>
 
@@ -6091,7 +6091,7 @@ def dashboard_html(response: Response):
         <div class="flex items-center justify-between text-xs">
           <span class="font-bold text-emerald-300 flex items-center space-x-2">
             <i class="fa-solid fa-spinner fa-spin text-emerald-400"></i>
-            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Resumen UNIR con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando resumen oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas de examen)...'))"></span>
+            <span x-text="generandoIaPaso === 1 ? 'Paso 1/3: Extrayendo PDF oficial y lecciones magistrales...' : (generandoIaPaso === 2 ? (generadorTipo === 'solo_test' ? 'Paso 2/3: Preparando contexto de examen...' : 'Paso 2/3: Redactando Resumen con NOVA...') : (generadorTipo === 'solo_guia' ? 'Paso 3/3: Guardando resumen oficial...' : 'Paso 3/3: Diseñando Simulacro de Test (' + generadorNumPreguntas + ' preguntas de examen)...'))"></span>
           </span>
           <span class="text-[11px] font-mono text-emerald-400" x-text="generandoIaPaso + ' / 3'"></span>
         </div>
@@ -6116,13 +6116,13 @@ def dashboard_html(response: Response):
         <button @click="modalGenerador = false" class="px-4 py-2 bg-gray-800 text-gray-300 rounded-xl text-xs font-semibold">Cancelar</button>
         <button @click="ejecutarGeneracionIa()" :disabled="generandoIa || !generadorTemaNombre.trim()" class="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-gray-900 font-bold rounded-xl text-xs transition flex items-center space-x-2 disabled:opacity-50">
           <i :class="generandoIa ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-bolt'"></i>
-          <span x-text="generandoIa ? 'Generando con IA...' : (generadorTipo === 'solo_guia' ? 'Generar Resumen UNIR' : (generadorTipo === 'solo_test' ? 'Generar Examen Tipo Test' : 'Generar Resumen y Test'))"></span>
+          <span x-text="generandoIa ? 'Generando con IA...' : (generadorTipo === 'solo_guia' ? 'Generar Resumen Oficial' : (generadorTipo === 'solo_test' ? 'Generar Examen Tipo Test' : 'Generar Resumen y Test'))"></span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ==================== VISOR INTERACTIVO DE CONTENIDOS ESTILO UNIR ==================== -->
+  <!-- ==================== VISOR INTERACTIVO DE CONTENIDOS ==================== -->
   <div x-show="modalVisor" x-transition 
        @keydown.window="
          if (modalVisor && visorVistaActiva === 'flashcards' && !modalGenerarFlashcards) {
@@ -6197,17 +6197,17 @@ def dashboard_html(response: Response):
 
       <!-- Derecha: BOTONES DE ACCIÓN CONTRAÍDOS -->
       <div class="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-        <!-- BOTÓN MODO LECTURA UNIR / NOCHE -->
+        <!-- BOTÓN MODO LECTURA / NOCHE -->
         <button @click="cambiarModoVisor(visorModoLectura === 'claro' ? 'oscuro' : 'claro')"
                 class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95"
                 :class="visorModoLectura === 'claro' ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200' : 'bg-surface-3/90 hover:bg-surface-4 text-amber-400 border-gray-700/80'"
-                :title="visorModoLectura === 'claro' ? 'Cambiar a modo noche' : 'Cambiar a modo lectura UNIR (claro)'">
+                :title="visorModoLectura === 'claro' ? 'Cambiar a modo noche' : 'Cambiar a modo lectura (claro)'">
           <i :class="visorModoLectura === 'claro' ? 'fa-solid fa-moon text-xs text-indigo-600' : 'fa-solid fa-sun text-xs text-amber-400'"></i>
           <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold"
-                x-text="visorModoLectura === 'claro' ? 'Modo Noche' : 'Modo UNIR'"></span>
+                x-text="visorModoLectura === 'claro' ? 'Modo Noche' : 'Modo Lectura'"></span>
         </button>
 
-        <!-- BOTÓN PRÁCTICA CON DESPLEGABLE OFICIAL UNIR (TEST, VERDADERO O FALSO, FLASHCARDS) -->
+        <!-- BOTÓN PRÁCTICA CON DESPLEGABLE OFICIAL (TEST, VERDADERO O FALSO, FLASHCARDS) -->
         <div class="relative">
           <button @click="menuPracticaVisorAbierto = !menuPracticaVisorAbierto"
                   class="group flex items-center h-8 px-2 sm:px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer"
@@ -6219,7 +6219,7 @@ def dashboard_html(response: Response):
             <span class="hidden md:inline max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Practica</span>
           </button>
 
-          <!-- DESPLEGABLE / TARJETA POPOVER "Practica el tema" (ESTILO OFICIAL UNIR) -->
+          <!-- DESPLEGABLE / TARJETA POPOVER "Practica el tema" (ESTILO OFICIAL) -->
           <div x-show="menuPracticaVisorAbierto"
                @click.outside="menuPracticaVisorAbierto = false"
                x-transition:enter="transition ease-out duration-150"
@@ -6330,14 +6330,14 @@ def dashboard_html(response: Response):
       </div>
     </header>
 
-    <!-- CUERPO PRINCIPAL DE LECTURA (IDEAS CLAVE ESTILO UNIR) -->
+    <!-- CUERPO PRINCIPAL DE LECTURA (IDEAS CLAVE) -->
     <div class="flex-1 flex overflow-hidden relative transition-colors duration-200"
          :class="visorModoLectura === 'claro' ? 'bg-[#f4f6f9]' : 'bg-surface-0'">
       <!-- ÁREA DE LECTURA (ANCHO COMPLETO SIN BARRA LATERAL) -->
       <main class="flex-1 overflow-y-auto px-3 sm:px-6 md:px-8 py-5 md:py-6 scroll-smooth" 
             id="visor-contenido-scroll"
             @scroll.passive="actualizarSeccionActivaVisor()">
-        <!-- VISTA 1: LECTURA DE IDEAS CLAVE (ESTILO OFICIAL UNIR) -->
+        <!-- VISTA 1: LECTURA DE IDEAS CLAVE -->
         <div x-show="visorVistaActiva === 'lectura'"
              class="w-full max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto rounded-3xl p-6 sm:p-8 md:px-12 md:py-10 transition-all duration-200 space-y-6 pb-24 min-h-[calc(100vh-130px)]"
              :class="visorModoLectura === 'claro' ? 'bg-white shadow-xl shadow-slate-200/80 border border-slate-200/80 text-gray-900' : 'bg-surface-1/90 border border-gray-800/90 shadow-2xl shadow-black/50 text-gray-100'">
@@ -6391,7 +6391,7 @@ def dashboard_html(response: Response):
                 </div>
                 <p class="text-xs sm:text-sm mt-0.5"
                    :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'"
-                   x-text="(testActivoNombre && testActivoNombre.toLowerCase().includes('_vf')) ? 'Autoevaluación rápida de Verdadero o Falso con justificación pedagógica' : 'Simulacro oficial con justificación técnica y baremo UNIR (+1 / -0.33)'">
+                   x-text="(testActivoNombre && testActivoNombre.toLowerCase().includes('_vf')) ? 'Autoevaluación rápida de Verdadero o Falso con justificación pedagógica' : 'Simulacro oficial con justificación técnica y baremo (+1 / -0.33)'">
                 </p>
               </div>
             </div>
@@ -6605,7 +6605,7 @@ def dashboard_html(response: Response):
             <p class="text-sm" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Tu puntuación oficial en el simulacro:</p>
             <p class="text-5xl sm:text-6xl font-black" :class="testNota >= 5 ? 'text-emerald-500' : 'text-rose-500'" x-text="testNota.toFixed(2) + ' / 10'"></p>
             
-            <!-- DESGLOSE OFICIAL UNIR -->
+            <!-- DESGLOSE OFICIAL -->
             <div class="flex flex-wrap items-center justify-center gap-3 py-2.5 px-5 rounded-2xl border max-w-md mx-auto text-xs font-mono shadow-sm"
                  :class="visorModoLectura === 'claro' ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-gray-900/90 border-gray-800 text-gray-200'">
               <span class="text-emerald-600 dark:text-emerald-400 font-bold" x-text="'+' + testAciertos + ' Aciertos'"></span>
@@ -6614,7 +6614,7 @@ def dashboard_html(response: Response):
               <span>•</span>
               <span class="text-slate-500 dark:text-gray-400" x-text="testBlancos + ' Blanco'"></span>
             </div>
-            <p class="text-xs" :class="visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500'">Baremo oficial UNIR: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
+            <p class="text-xs" :class="visorModoLectura === 'claro' ? 'text-slate-400' : 'text-gray-500'">Baremo oficial: Acierto (+1.0) • Fallo (-0.33) • Blanco (0.0)</p>
             
             <div class="flex flex-wrap items-center justify-center gap-3 pt-3">
               <button x-show="(testFallos + testBlancos) > 0"
@@ -6927,7 +6927,7 @@ def dashboard_html(response: Response):
                   </h3>
                   <span class="text-xs font-bold px-2.5 py-0.5 rounded-full border shrink-0"
                         :class="visorModoLectura === 'claro' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'">
-                    Síntesis Robusta UNIR
+                    Síntesis Robusta
                   </span>
                 </div>
                 <p class="text-xs sm:text-sm mt-0.5 truncate"
@@ -6970,7 +6970,7 @@ def dashboard_html(response: Response):
               <i class="fa-solid fa-wand-magic-sparkles animate-pulse"></i>
             </div>
             <h4 class="font-bold text-white text-base">Redactando Resumen Oficial con IA (Plan Robusto)</h4>
-            <p class="text-xs text-gray-400 max-w-md mx-auto">Sintetizando temario oficial en formato académico UNIR. Se mostrará aquí automáticamente en unos segundos sin salir del tema...</p>
+            <p class="text-xs text-gray-400 max-w-md mx-auto">Sintetizando temario oficial en formato académico estructurado. Se mostrará aquí automáticamente en unos segundos sin salir del tema...</p>
             <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-300 text-xs font-medium">
               <i class="fa-solid fa-spinner fa-spin text-sky-400"></i>
               <span>Procesando sin salir del tema...</span>
@@ -6992,7 +6992,7 @@ def dashboard_html(response: Response):
               <i class="fa-solid fa-wand-magic-sparkles"></i>
             </div>
             <h4 class="font-bold text-base" :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'">Resumen con Inteligencia Artificial</h4>
-            <p class="text-xs max-w-md mx-auto" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Pulsa para redactar automáticamente el Resumen oficial de este tema en formato Robusto de UNIR.</p>
+            <p class="text-xs max-w-md mx-auto" :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">Pulsa para redactar automáticamente el Resumen oficial de este tema en formato Robusto.</p>
             <button @click="generarResumenDesdeVisor()"
                     class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-sky-500/20 transition flex items-center space-x-2 mx-auto active:scale-95 cursor-pointer">
               <i class="fa-solid fa-bolt"></i>
@@ -7002,7 +7002,7 @@ def dashboard_html(response: Response):
         </div>
       </main>
 
-      <!-- ==================== ÍNDICE FLOTANTE LATERAL ESTILO OFICIAL UNIR ==================== -->
+      <!-- ==================== ÍNDICE FLOTANTE LATERAL ==================== -->
       <aside x-show="visorVistaActiva === 'lectura' && indiceApartadosVisor && indiceApartadosVisor.length > 0"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-x-4"
@@ -7092,7 +7092,7 @@ def dashboard_html(response: Response):
                   </span>
                 </button>
 
-                <!-- TOOLTIP FLOTANTE A LA IZQUIERDA (EXACTAMENTE COMO LA CAPTURA DE UNIR) -->
+                <!-- TOOLTIP FLOTANTE A LA IZQUIERDA -->
                 <div class="absolute right-full mr-3.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 transform group-hover:translate-x-0 translate-x-1.5 z-40 whitespace-nowrap shadow-xl">
                   <div class="px-3.5 py-1.5 rounded-xl text-xs font-semibold tracking-wide flex items-center space-x-1.5 relative border shadow-2xl"
                        :class="visorModoLectura === 'claro' 
@@ -7133,7 +7133,7 @@ def dashboard_html(response: Response):
           </div>
         </div>
 
-        <!-- CÁPSULA INFERIOR DE HERRAMIENTAS (ROTULADOR DESTACADOR ESTILO UNIR) -->
+        <!-- CÁPSULA INFERIOR DE HERRAMIENTAS (ROTULADOR DESTACADOR) -->
         <div class="mt-2.5 rounded-full py-2 px-1.5 sm:px-2 flex flex-col items-center space-y-2 shadow-lg transition-all duration-200 border backdrop-blur-md"
              :class="visorModoLectura === 'claro' 
                ? 'bg-white/95 border-slate-200/90 shadow-slate-300/40 text-slate-700' 
@@ -7151,7 +7151,7 @@ def dashboard_html(response: Response):
         </div>
       </aside>
 
-      <!-- ==================== PANEL LATERAL: AYUDA INTELIGENTE (ESTILO OFICIAL UNIR) ==================== -->
+      <!-- ==================== PANEL LATERAL: AYUDA INTELIGENTE ==================== -->
       <aside x-show="panelAyudaVisor"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-x-full"
@@ -7180,7 +7180,7 @@ def dashboard_html(response: Response):
         <div class="h-14 px-4 flex items-center justify-between border-b shrink-0"
              :class="visorModoLectura === 'claro' ? 'bg-slate-50/70 border-slate-200' : 'bg-surface-2/60 border-gray-800'">
           <div class="flex items-center space-x-2.5 min-w-0">
-            <!-- Icono circular degradado púrpura estilo UNIR -->
+            <!-- Icono circular degradado púrpura -->
             <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-sky-400 p-0.5 shadow-sm shrink-0">
               <div class="w-full h-full rounded-full flex items-center justify-center"
                    :class="visorModoLectura === 'claro' ? 'bg-white' : 'bg-surface-1'">
@@ -7224,7 +7224,7 @@ def dashboard_html(response: Response):
 
         <!-- CUERPO DE MENSAJES DEL CHAT -->
         <div id="ayuda-visor-scroll" class="flex-1 overflow-y-auto p-4 space-y-4">
-          <!-- Mensaje de bienvenida oficial de UNIR -->
+          <!-- Mensaje de bienvenida oficial -->
           <div class="flex items-start gap-2.5">
             <div class="w-7 h-7 rounded-full bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-xs shrink-0 mt-0.5"
                  :class="visorModoLectura === 'claro' ? 'text-purple-600' : 'text-purple-400'">
@@ -7297,7 +7297,7 @@ def dashboard_html(response: Response):
           </template>
         </div>
 
-        <!-- PIE: ENTRADA DE MENSAJE TIPO PÍLDORA (ESTILO CAPTURA UNIR) -->
+        <!-- PIE: ENTRADA DE MENSAJE TIPO PÍLDORA -->
         <div class="p-3 sm:p-4 border-t shrink-0"
              :class="visorModoLectura === 'claro' ? 'bg-white border-slate-200' : 'bg-surface-1 border-gray-800'">
           <div class="relative flex items-center rounded-full border transition-all duration-200 shadow-sm"
@@ -7328,7 +7328,7 @@ def dashboard_html(response: Response):
 
 
 
-    <!-- ==================== SUB-MODAL 2: ESQUEMA CONCEPTUAL VISUAL (CAPTURA 5 UNIR) ==================== -->
+    <!-- ==================== SUB-MODAL 2: ESQUEMA CONCEPTUAL VISUAL ==================== -->
     <div x-show="modalSubEsquema" x-transition class="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-black/85 backdrop-blur-md">
       <div class="glass w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl max-h-[92vh] h-[88vh] rounded-3xl flex flex-col overflow-hidden border border-indigo-500/40 shadow-2xl bg-surface-1/95">
         <!-- Header modal Esquema -->
@@ -7813,7 +7813,7 @@ def dashboard_html(response: Response):
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" x-text="entrenamientosTemaInfo?.asignatura"></span>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40" x-text="(entrenamientosDatos?.total_oficiales || 5) + ' Retos Oficiales UNIR'"></span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40" x-text="(entrenamientosDatos?.total_oficiales || 5) + ' Retos Oficiales'"></span>
             </div>
             <h3 class="font-bold text-white text-sm sm:text-base truncate mt-0.5" x-text="'Tema ' + entrenamientosTemaInfo?.temaNum + ': ' + (entrenamientosTemaInfo?.temaTitulo || '')"></h3>
           </div>
@@ -7861,7 +7861,7 @@ def dashboard_html(response: Response):
               <select x-model="generadorIaDificultad" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none">
                 <option value="facil">Básica / Conceptos Clave</option>
                 <option value="medio">Intermedia / Desarrollo estándar</option>
-                <option value="examen" selected>Nivel Examen UNIR (Recomendado)</option>
+                <option value="examen" selected>Nivel Examen Oficial (Recomendado)</option>
                 <option value="avanzado">Avanzada / Caso Real de Empresa</option>
               </select>
             </div>
@@ -7967,7 +7967,7 @@ def dashboard_html(response: Response):
                       <div class="flex items-center gap-2">
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-full"
                               :class="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'"
-                              x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'Reto Inédito IA' : 'Oficial UNIR'"></span>
+                              x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'Reto Inédito IA' : 'Oficial'"></span>
                         <span class="text-[10px] font-semibold text-gray-400 font-mono" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].dificultad || 'Examen'"></span>
                       </div>
                       <h4 class="font-bold text-white text-sm sm:text-base mt-0.5 leading-snug" x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].titulo"></h4>
@@ -8027,7 +8027,7 @@ def dashboard_html(response: Response):
                 <div class="p-5 border-t border-gray-800 space-y-3">
                   <div class="flex items-center justify-between gap-2">
                     <span class="text-[11px] text-gray-400 font-semibold"
-                          x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'Solución diseñada por IA para este reto:' : 'Solución oficial extraída del temario UNIR:'"></span>
+                          x-text="entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].es_ia ? 'Solución diseñada por IA para este reto:' : 'Solución oficial extraída del temario:'"></span>
                     <button @click="copiarTextoReto(entrenamientosDatos.entrenamientos[entrenamientoActivoIndice].solucion)"
                             class="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[11px] font-medium transition flex items-center gap-1">
                       <i class="fa-regular fa-copy text-[10px]"></i>
@@ -8474,7 +8474,7 @@ def dashboard_html(response: Response):
     </div>
   </div>
 
-  <!-- ==================== MODAL CONECTAR MI CAMPUS UNIR (CANVAS LMS PERSONAL) ==================== -->
+  <!-- ==================== MODAL CONECTAR MI CAMPUS (CANVAS LMS PERSONAL) ==================== -->
   <div x-show="modalMiCampus"
        x-transition:enter="transition ease-out duration-200"
        x-transition:enter-start="opacity-0"
@@ -8491,7 +8491,7 @@ def dashboard_html(response: Response):
             <i class="fa-solid fa-building-columns text-base"></i>
           </div>
           <div>
-            <h3 class="font-bold text-gray-100 text-base">Conectar Mi Campus UNIR (Canvas)</h3>
+            <h3 class="font-bold text-gray-100 text-base">Conectar Mi Campus (Canvas)</h3>
             <p class="text-xs text-gray-400">Sincroniza tus propias entregas, PACs y calificaciones sin contraseñas</p>
           </div>
         </div>
@@ -8545,12 +8545,12 @@ def dashboard_html(response: Response):
           </div>
         </template>
 
-        <!-- TOKEN PERSONAL DE ACCESO DE CANVAS UNIR -->
+        <!-- TOKEN PERSONAL DE ACCESO DE CANVAS -->
         <div class="p-4 bg-gray-950/90 border border-gray-800 rounded-2xl text-xs text-gray-300 space-y-3">
           <div class="flex items-center justify-between">
             <p class="font-bold text-cyan-400 flex items-center gap-2">
               <i class="fa-solid fa-key text-cyan-400"></i>
-              <span>Token de Acceso de Canvas UNIR</span>
+              <span>Token de Acceso de Canvas</span>
             </p>
             <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-bold">Vigencia 30 días</span>
           </div>
@@ -8560,7 +8560,7 @@ def dashboard_html(response: Response):
           <div class="bg-gray-900/80 p-3 rounded-xl border border-gray-800/80 text-[11px] text-gray-300 space-y-1">
             <div class="font-semibold text-gray-200 flex items-center gap-1.5"><i class="fa-solid fa-circle-info text-cyan-400 text-[10px]"></i> ¿Cómo obtener tu token en 1 minuto?</div>
             <ol class="list-decimal list-inside space-y-0.5 text-gray-400 pl-1">
-              <li>Entra en tu <a href="https://campusfp.unir.net/profile/settings" target="_blank" class="text-cyan-400 hover:underline font-bold">Perfil UNIR → Integraciones aprobadas</a>.</li>
+              <li>Entra en tu <a href="https://campusfp.unir.net/profile/settings" target="_blank" class="text-cyan-400 hover:underline font-bold">Perfil del Campus → Integraciones aprobadas</a>.</li>
               <li>Pulsa el botón <strong>«+ Nuevo token de acceso»</strong>.</li>
               <li>En "Propósito" escribe <em>Study Hub</em> y genera el token.</li>
               <li>Copia el token generado y pégalo aquí abajo:</li>
@@ -8586,18 +8586,18 @@ def dashboard_html(response: Response):
           </div>
         </div>
 
-        <!-- SECCIÓN OAUTH2 INICIAR SESIÓN CON UNIR (PREPARADO) -->
+        <!-- SECCIÓN OAUTH2 INICIAR SESIÓN CON CAMPUS (PREPARADO) -->
         <template x-if="miCampusConfig?.oauth_disponible">
           <div class="p-3.5 bg-gradient-to-r from-indigo-950/40 to-cyan-950/40 border border-indigo-500/30 rounded-2xl text-xs flex items-center justify-between gap-3">
             <div>
               <p class="font-bold text-indigo-300 flex items-center gap-1.5">
                 <i class="fa-solid fa-key text-cyan-400"></i>
-                <span>Iniciar sesión oficial con UNIR (SSO)</span>
+                <span>Iniciar sesión con Campus (SSO)</span>
               </p>
               <p class="text-[11px] text-gray-400 mt-0.5">Inicio oficial sin tokens manuales (requiere Developer Key institucional).</p>
             </div>
             <a href="/api/canvas/oauth/iniciar" class="px-3 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs transition shadow-md shadow-indigo-500/20 shrink-0">
-              Conectar UNIR
+              Conectar Campus
             </a>
           </div>
         </template>
@@ -8642,7 +8642,7 @@ def dashboard_html(response: Response):
                   type="button"
                   class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-600 hover:from-indigo-400 hover:to-cyan-500 text-white font-bold text-xs shadow-lg shadow-indigo-500/20 transition flex items-center gap-2">
             <i x-show="sincronizandoMiCampus" class="fa-solid fa-spinner fa-spin text-xs"></i>
-            <span x-text="sincronizandoMiCampus ? 'Sincronizando con UNIR...' : 'Conectar y Sincronizar'"></span>
+            <span x-text="sincronizandoMiCampus ? 'Sincronizando con el Campus...' : 'Conectar y Sincronizar'"></span>
           </button>
         </div>
       </div>
@@ -9077,7 +9077,7 @@ def dashboard_html(response: Response):
           <span class="text-gray-400 flex items-center gap-2"><i class="fa-solid fa-link text-[10px]"></i><span>Enlace Campus</span></span>
           <div class="col-span-2">
             <a :href="itemAgendaActivo?.url || 'https://campusfp.unir.net'" target="_blank" class="text-cyan-400 hover:underline text-xs flex items-center gap-1.5">
-              <span>Abrir directamente en Canvas UNIR</span>
+              <span>Abrir directamente en Canvas</span>
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
@@ -9323,7 +9323,7 @@ def dashboard_html(response: Response):
         pwaPromptEvento: null,
         pwaInstalada: false,
         
-        // Modal Visor Interactivo estilo UNIR
+        // Modal Visor Interactivo
         modalVisor: false,
         modalTitulo: '',
         modalContenido: '',
@@ -9340,7 +9340,7 @@ def dashboard_html(response: Response):
         visorTamanoFuente: 15,
         visorModoLectura: localStorage.getItem('unir_visor_modo') || 'claro',
 
-        // Ayuda Inteligente en Visor (Estilo UNIR)
+        // Ayuda Inteligente en Visor
         panelAyudaVisor: false,
         ayudaVisorExpandida: false,
         ayudaVisorInput: '',
@@ -9374,7 +9374,7 @@ def dashboard_html(response: Response):
         apiKeyMensajeError: '',
         apiKeyMensajeExito: '',
 
-        // Conexión Personal al Campus UNIR (Canvas por Estudiante) y Dashboard Personal
+        // Conexión Personal al Campus (Canvas por Estudiante) y Dashboard Personal
         modalEntregasMes: false,
         modalMiCampus: false,
         verEntregasDelMes() {
@@ -11421,7 +11421,7 @@ def dashboard_html(response: Response):
           this.miCampusMensajeError = '';
           this.miCampusMensajeExito = '';
           if (!this.inputCanvasToken.trim() && !this.miCampusConfig?.conectado) {
-            this.miCampusMensajeError = 'Introduce tu Token de Acceso personal de Canvas UNIR.';
+            this.miCampusMensajeError = 'Introduce tu Token de Acceso personal de Canvas.';
             return;
           }
           this.sincronizandoMiCampus = true;
@@ -11436,11 +11436,11 @@ def dashboard_html(response: Response):
             });
             const data = await res.json();
             if (!res.ok) {
-              this.miCampusMensajeError = data.detail || 'No se pudo conectar con el Campus UNIR.';
+              this.miCampusMensajeError = data.detail || 'No se pudo conectar con el Campus.';
               return;
             }
             this.inputCanvasToken = '';
-            this.miCampusMensajeExito = data.mensaje || '¡Campus UNIR sincronizado con éxito!';
+            this.miCampusMensajeExito = data.mensaje || '¡Campus sincronizado con éxito!';
             await this.cargarMiCampus();
             await this.cargarAgenda();
           } catch(e) {
@@ -11451,7 +11451,7 @@ def dashboard_html(response: Response):
         },
 
         async desconectarMiCampus() {
-          if (!confirm('¿Desconectar tu cuenta personal de Canvas UNIR?')) return;
+          if (!confirm('¿Desconectar tu cuenta personal de Canvas?')) return;
           try {
             await fetch('/api/mi-campus/desconectar', { method: 'POST' });
             await this.cargarMiCampus();
@@ -12304,7 +12304,7 @@ def dashboard_html(response: Response):
             await this.cargarVideoclases();
             alert(data.mensaje || ('Sincronización de Canvas completada (' + (data.nuevos_archivos || 0) + ' recursos nuevos descargados).'));
           } catch(e) {
-            alert('Error al conectar con Canvas. Verifica tu sesión con: unir-hub --login');
+            alert('Error al conectar con Canvas. Verifica tu sesión en Mi Campus.');
           } finally {
             this.descargandoCanvas = false;
           }
@@ -12659,9 +12659,9 @@ def dashboard_html(response: Response):
             this.generadorPdfSeleccionado = '';
             
             if (data.tiene_guia && data.tiene_test) {
-              alert('¡Resumen UNIR y test interactivo generados con éxito!');
+              alert('¡Resumen oficial y test interactivo generados con éxito!');
             } else if (data.tiene_guia) {
-              alert('¡Resumen UNIR oficial generado con éxito!');
+              alert('¡Resumen oficial generado con éxito!');
             } else if (data.tiene_test) {
               alert('¡Simulacro tipo test oficial generado con éxito!');
             }
@@ -12751,7 +12751,7 @@ def dashboard_html(response: Response):
           } else if (p?.id === 'bootcamp') {
             return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu mentora en **Gestión Ágil y Habilidades Digitales**. ¿Repasamos Scrum, Kanban o transformación digital?`;
           } else if (p?.id === 'python') {
-            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio de ESIT ponemos a prueba hoy?`;
+            return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu profesora de **Programación en Python**. ¿Qué script, estructura de datos o ejercicio práctico ponemos a prueba hoy?`;
           } else if (p?.id === 'aws') {
             return `¡Hola ${nombreUsuario}! Soy **NOVA**, tu instructora para la certificación **AWS Cloud Practitioner (CLF-C02)**. ¿Hacemos un test rápido o repasamos servicios de AWS?`;
           } else if (p?.id === 'azure') {
@@ -12966,7 +12966,7 @@ def dashboard_html(response: Response):
           this.modalContenido = `# 📚 ${(tm.prefijo || 'Tema')} ${tm.numero}. ${tm.titulo}\n\n` +
             `Este tema está registrado en el plan académico oficial de **${asig}**, pero el documento PDF aún no se encuentra sincronizado en el servidor local.\n\n` +
             `### ¿Qué puedes hacer?\n\n` +
-            `* **Descargar el temario del Campus:** Haz clic en el botón superior de descarga o conecta tus credenciales de UNIR para sincronizar todos los PDFs.\n` +
+            `* **Descargar el temario del Campus:** Haz clic en el botón superior de descarga o conecta tus credenciales para sincronizar todos los PDFs.\n` +
             `* **Generar Resumen y Test con IA:** Pulsa en el botón **Resumen IA** o **Practica** para que NOVA elabore automáticamente el material de estudio para este tema.\n` +
             `* **Consultar al Asistente:** Puedes preguntar a NOVA cualquier duda teórica o práctica sobre este contenido.`;
           this.modalRutaActiva = tm.pdf || '';
@@ -13104,8 +13104,8 @@ def dashboard_html(response: Response):
               this.visorTemaActual = encontrado || null;
             }
 
-            // Procesar resumen y esquema conceptual para el visor interactivo estilo UNIR
-            this.procesarContenidoVisorUnir(data.contenido, this.visorTemaActual);
+            // Procesar resumen y esquema conceptual para el visor interactivo
+            this.procesarContenidoVisor(data.contenido, this.visorTemaActual);
 
             this.modalVisor = true;
             this.modalTest = false;
@@ -13124,14 +13124,14 @@ def dashboard_html(response: Response):
           }
         },
 
-        procesarContenidoVisorUnir(contenido, tm) {
+        procesarContenidoVisor(contenido, tm) {
           if (!contenido) {
             this.resumenTextoTema = '';
             this.esquemaMermaidTema = '';
             return;
           }
 
-          // 1. EXTRAER RESUMEN EJECUTIVO (ESTILO CAPTURA 3 UNIR)
+          // 1. EXTRAER RESUMEN EJECUTIVO
           let resumenTxt = '';
           const resMatch = contenido.match(/(?:###?\\s*(?:Resumen\\s*Ejecutivo|Resumen|Síntesis|Ideas\\s*Clave)[^\\n]*\\n)([\\s\\S]*?)(?=\\n###?\\s+[^\\n]+|\\n##\\s+[^\\n]+|\\n---|\\n```|$)/i);
           if (resMatch && resMatch[1].trim().length > 60) {
@@ -13160,7 +13160,7 @@ def dashboard_html(response: Response):
           const subtituloTema = tm?.titulo ? `### ${tm.titulo}\\n\\n` : '';
           this.resumenTextoTema = subtituloTema + (resumenTxt || 'Este tema no contiene una sección de resumen pregenerada.');
 
-          // 2. EXTRAER ESQUEMA JERÁRQUICO MERMAID (ESTILO CAPTURA 5 UNIR)
+          // 2. EXTRAER ESQUEMA JERÁRQUICO MERMAID
           let mermaidCode = '';
           const mermaidMatch = contenido.match(/```mermaid\\s*([\\s\\S]*?)```/i);
           if (mermaidMatch && mermaidMatch[1].trim().length > 20) {
@@ -13900,7 +13900,7 @@ def dashboard_html(response: Response):
               return oraciones[0].trim() + '. Recuerda relacionar los términos técnicos con la arquitectura de la materia.';
             }
           }
-          return 'Recuerda los conceptos y definiciones clave tratados en el temario oficial de UNIR.';
+          return 'Recuerda los conceptos y definiciones clave tratados en el temario oficial.';
         },
 
         escapeHtml(str) {

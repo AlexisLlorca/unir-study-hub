@@ -90,7 +90,7 @@ def extraer_entrenamientos_de_pdf(ruta_pdf: Path) -> List[Dict[str, Any]]:
             "enunciado": enunciado,
             "solucion": solucion,
             "es_ia": False,
-            "origen": "Oficial UNIR",
+            "origen": "Oficial",
             "dificultad": "Oficial"
         })
 
@@ -184,7 +184,7 @@ def obtener_entrenamientos_tema(asignatura: str, tema_num: int, username: Option
         if "es_ia" not in ofi:
             ofi["es_ia"] = False
         if "origen" not in ofi:
-            ofi["origen"] = "Oficial UNIR"
+            ofi["origen"] = "Oficial"
 
     # Cargar retos IA del usuario si existe sesión
     retos_ia = obtener_entrenamientos_ia_usuario(username or "", asignatura, tema_num) if username else []
@@ -242,13 +242,13 @@ def generar_entrenamiento_con_ia(
     dif_nombre = {
         "facil": "Práctica Básica / Afianzamiento",
         "medio": "Nivel Intermedio",
-        "examen": "Nivel Examen UNIR (Práctico)",
+        "examen": "Nivel Examen Oficial (Práctico)",
         "avanzado": "Nivel Avanzado / Caso Real de Empresa"
-    }.get((dificultad or "").lower(), "Nivel Examen UNIR (Práctico)")
+    }.get((dificultad or "").lower(), "Nivel Examen Oficial (Práctico)")
 
     enfoque_texto = f"Enfoque o requerimiento específico del alumno: {enfoque}\n" if enfoque.strip() else ""
 
-    prompt = f"""Eres el Diseñador Pedagógico y Profesor Titular de UNIR (FP Grado Superior DAM - Desarrollo de Aplicaciones Multiplataforma) para la materia "{asignatura}".
+    prompt = f"""Eres el Diseñador Pedagógico y Profesor Titular de FP Grado Superior DAM - Desarrollo de Aplicaciones Multiplataforma para la materia "{asignatura}".
 Unidad de estudio: Tema {tema_num} - {tema_titulo}
 {contexto_guia}
 Ejercicios y retos que el alumno ya tiene disponibles en este tema (NO repitas exactamente ninguno de ellos):

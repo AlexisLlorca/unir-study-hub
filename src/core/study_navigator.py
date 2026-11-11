@@ -49,7 +49,7 @@ class NavegadorAcademico:
     def mostrar_menu_asignaturas(self):
         """Muestra el selector de programas académicos."""
         while True:
-            lineas = ["[bold cyan]📚 BIBLIOTECA Y NAVEGADOR ACADÉMICO MULTI-PROGRAMA (UNIR)[/bold cyan]",
+            lineas = ["[bold cyan]📚 BIBLIOTECA Y NAVEGADOR ACADÉMICO MULTI-PROGRAMA[/bold cyan]",
                       "[dim]Selecciona el programa académico que deseas explorar:[/dim]\n"]
             lista_keys = list(PROGRAMAS.keys())
             for idx, pid in enumerate(lista_keys, 1):

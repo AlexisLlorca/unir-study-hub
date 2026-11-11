@@ -52,7 +52,7 @@ def generar_markdown_examen(
     md = []
     md.append(f"# SIMULACRO DE EXAMEN — {asignatura.upper()} ({tema.upper()})")
     md.append(f"### {titulo}")
-    md.append(f"> **Total preguntas:** {len(preguntas)} | **Formato:** Tipo Test UNIR (4 opciones)\n")
+    md.append(f"> **Total preguntas:** {len(preguntas)} | **Formato:** Tipo Test Oficial (4 opciones)\n")
     md.append("---\n")
 
     for i, p in enumerate(preguntas, start=1):

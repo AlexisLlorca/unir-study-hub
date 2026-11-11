@@ -174,7 +174,7 @@ class GestorProgreso:
 
         console.print(
             Panel.fit(
-                "[bold cyan]📊 EXPEDIENTE Y SEMÁFORO DE EXAMEN — 2º DAM (UNIR)[/bold cyan]\n"
+                "[bold cyan]📊 EXPEDIENTE Y SEMÁFORO DE EXAMEN — 2º DAM[/bold cyan]\n"
                 "[dim]Seguimiento de preparación continua para los exámenes oficiales.[/dim]",
                 border_style="cyan",
             )

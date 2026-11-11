@@ -110,7 +110,7 @@ class TutorIA:
     def generar_resumen_avanzado(self, texto_tema: str, asignatura: str, tema: str, api_key_override: Optional[str] = None) -> Optional[str]:
         """Solicita a la IA un resumen estructurado de alto rendimiento."""
         prompt = (
-            f"Analiza el siguiente texto extraído del temario oficial de UNIR "
+            f"Analiza el siguiente texto extraído del temario oficial "
             f"para la asignatura '{asignatura}' ({tema}):\n\n"
             f"--- COMIENZO TEMARIO ---\n{texto_tema[:30000]}\n--- FIN TEMARIO ---\n\n"
             "REGLA DE ORO DE VERACIDAD (PROHIBIDO INVENTAR):\n"
@@ -122,14 +122,14 @@ class TutorIA:
             "2. ## 📌 1. Resumen Ejecutivo (los 5 puntos más importantes del tema sin rodeos)\n"
             "3. ## 🧠 2. Conceptos Clave y Definiciones de Examen (tabla Markdown con Término, Definición Técnica y Relevancia en Examen)\n"
             "4. ## 💻 3. Código Vivo y Ejemplos de Implementación (código completo, compilable y con comentarios explicativos)\n"
-            "5. ## ⚠️ 4. Trampas y Errores Habituales de Examen (preguntas capciosas típicas que suele poner UNIR)\n"
+            "5. ## ⚠️ 4. Trampas y Errores Habituales de Examen (preguntas capciosas típicas que suelen poner en los exámenes oficiales)\n"
         )
         return self.client.generar_contenido(prompt, temperatura=0.3, api_key_override=api_key_override)
 
     def generar_ejercicios_practicos(self, texto_tema: str, asignatura: str, tema: str, api_key_override: Optional[str] = None) -> Optional[str]:
         """Genera un banco de ejercicios con soluciones paso a paso."""
         prompt = (
-            f"A partir del siguiente temario de '{asignatura}' ({tema}) de UNIR:\n\n"
+            f"A partir del siguiente temario oficial de '{asignatura}' ({tema}):\n\n"
             f"{texto_tema[:30000]}\n\n"
             "REGLAS OBLIGATORIAS:\n"
             "- Diseña 3 ejercicios prácticos de desarrollo de software adaptados ESTRICTAMENTE a los conceptos del temario oficial de 2º DAM (sin librerías no vistas).\n"
@@ -143,13 +143,13 @@ class TutorIA:
         return self.client.generar_contenido(prompt, temperatura=0.4, api_key_override=api_key_override)
 
     def generar_examen_unir(self, texto_tema: str, asignatura: str, tema: str, num_preguntas: int = 5, api_key_override: Optional[str] = None) -> Optional[str]:
-        """Genera un simulacro de examen tipo test UNIR con justificaciones ocultas."""
+        """Genera un simulacro de examen tipo test con justificaciones ocultas."""
         prompt = (
-            f"Basándote en el siguiente temario de '{asignatura}' ({tema}) de UNIR:\n\n"
+            f"Basándote en el siguiente temario oficial de '{asignatura}' ({tema}):\n\n"
             f"{texto_tema[:30000]}\n\n"
             "REGLA DE VERACIDAD (PROHIBIDO INVENTAR):\n"
             "- Formula las preguntas y códigos EXCLUSIVAMENTE a partir de los conceptos del temario aportado.\n\n"
-            f"Genera un examen tipo test oficial de {num_preguntas} preguntas con el formato de UNIR:\n"
+            f"Genera un examen tipo test oficial de {num_preguntas} preguntas:\n"
             "- 4 opciones por pregunta (A, B, C, D).\n"
             "- Solo 1 opción correcta.\n"
             "- Incluye la solución y la justificación técnica detallada dentro de una etiqueta HTML <details><summary>Ver respuesta</summary>...</details>.\n"
@@ -167,7 +167,7 @@ class TutorIA:
     ) -> Optional[str]:
         """Analiza la transcripción de una clase en directo y extrae avisos de examen, explicaciones de código y dudas de alumnos."""
         prompt = (
-            f"Eres NOVA, copiloto y mentora académica de élite para un alumno de FP DAM y PFU en UNIR.\n"
+            f"Eres NOVA, copiloto y mentora académica de élite para un alumno de FP DAM y titulaciones superiores.\n"
             f"A continuación tienes la transcripción oficial y literal de una clase en directo de la asignatura '{asignatura}' ({nombre_clase}):\n\n"
             f"--- TRANSCRIPCIÓN LITERAL DE LA CLASE ---\n{texto_transcripcion[:60000]}\n--- FIN TRANSCRIPCIÓN ---\n\n"
             "REGLA DE MÁXIMA VERACIDAD (PROHIBIDO INVENTAR):\n"
@@ -190,7 +190,7 @@ class TutorIA:
             "## 🙋‍♂️ 5. Preguntas Clave de los Alumnos y Respuestas del Docente\n"
             "- Resume las dudas reales planteadas por los estudiantes durante la clase y la aclaración que dio el profesor.\n\n"
             "## 🎯 6. 3 Preguntas de Examen sobre esta Sesión\n"
-            "- Formato tipo test oficial UNIR (A, B, C, D) con la respuesta correcta y la justificación técnica oculta dentro de una etiqueta HTML `<details><summary>Ver solución y justificación</summary>...</details>`.\n"
+            "- Formato tipo test oficial (A, B, C, D) con la respuesta correcta y la justificación técnica oculta dentro de una etiqueta HTML `<details><summary>Ver solución y justificación</summary>...</details>`.\n"
         )
         return self.client.generar_contenido(prompt, temperatura=0.3, api_key_override=api_key_override)
 
