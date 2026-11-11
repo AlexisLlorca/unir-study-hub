@@ -941,25 +941,56 @@ def api_obtener_test(asignatura: str, test_name: str, request: Request):
         def norm(s):
             return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().replace("_", " ").strip()
         
-        dir_asig = dir_examenes_u / asig_limpia
-        if dir_asig.exists():
-            stem_norm = norm(stem)
-            for f in dir_asig.glob("*.json"):
-                if norm(f.stem) == stem_norm:
-                    archivo = f
-                    break
+        es_vf_query = "_vf" in stem.lower()
 
-        if not archivo.exists() or not archivo.is_file() or archivo.stat().st_size == 0:
+        def buscar_mejor_coincidencia(directorio: Path) -> Optional[Path]:
+            if not directorio.exists():
+                return None
+            candidatos = list(directorio.glob("*.json"))
+            stem_norm = norm(stem)
+
+            # 1. Coincidencia exacta normalizada
+            for f in candidatos:
+                if norm(f.stem) == stem_norm:
+                    return f
+
+            # 2. Coincidencia tolerante respetando V/F vs Standard
+            stem_core = re.sub(r"^(?:tema|unit|modulo|unidad)[\s_\-.]*\d+[\s_\-.]*", "", stem_norm).replace("vf test", "").replace("test", "").strip()
+            num_match = re.search(r"(?:tema|unit|modulo|unidad)[\s_\-.]*(\d+)", stem_norm)
+            query_num = int(num_match.group(1)) if num_match else None
+
+            for f in candidatos:
+                f_es_vf = "_vf" in f.stem.lower()
+                if es_vf_query != f_es_vf:
+                    continue  # Nunca mezclar test estándar con test de Verdadero o Falso
+
+                f_norm = norm(f.stem)
+                f_num_match = re.search(r"(?:tema|unit|modulo|unidad)[\s_\-.]*(\d+)", f_norm)
+                f_num = int(f_num_match.group(1)) if f_num_match else None
+
+                # Coincidencia por número de tema
+                if query_num is not None and f_num is not None and query_num == f_num:
+                    return f
+
+                # Coincidencia por núcleo de título
+                f_core = re.sub(r"^(?:tema|unit|modulo|unidad)[\s_\-.]*\d+[\s_\-.]*", "", f_norm).replace("vf test", "").replace("test", "").strip()
+                if stem_core and len(stem_core) >= 4 and (stem_core in f_core or f_core in stem_core):
+                    return f
+            return None
+
+        dir_asig = dir_examenes_u / asig_limpia
+        candidato = buscar_mejor_coincidencia(dir_asig)
+        if candidato:
+            archivo = candidato
+        else:
             dir_global = EXAMENES_DIR / asig_limpia
             archivo_global = ruta_dentro_de(EXAMENES_DIR, asig_limpia, f"{stem}.json")
             if archivo_global.exists() and archivo_global.is_file() and archivo_global.stat().st_size > 0:
                 archivo = archivo_global
-            elif dir_global.exists():
-                stem_norm = norm(stem)
-                for f in dir_global.glob("*.json"):
-                    if norm(f.stem) == stem_norm:
-                        archivo = f
-                        break
+            else:
+                candidato_glob = buscar_mejor_coincidencia(dir_global)
+                if candidato_glob:
+                    archivo = candidato_glob
 
     if not archivo.exists() or not archivo.is_file() or archivo.stat().st_size == 0:
         raise HTTPException(status_code=404, detail="Test no encontrado")
@@ -3605,14 +3636,6 @@ def dashboard_html(response: Response):
             <p class="text-[9px] text-gray-500 mt-2 px-1 leading-snug">Los colores de estado (rojo = entrega, verde = hecho, ámbar = pendiente) se mantienen en todos los temas.</p>
           </div>
         </div>
-
-        <!-- BOTÓN INSTALAR APP PWA -->
-        <button @click="instalarPwaDirecta()"
-                class="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-semibold border transition flex items-center space-x-1.5 shrink-0 shadow-sm bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-cyan-300 border-cyan-500/30 cursor-pointer"
-                title="Añadir NOVA a la pantalla de inicio (Android, iOS, PC)">
-          <i class="fa-solid fa-mobile-screen-button text-[12px] text-cyan-400"></i>
-          <span class="hidden md:inline font-bold">Instalar App</span>
-        </button>
 
         <!-- USUARIO ACTIVO Y BOTÓN CERRAR SESIÓN -->
         <div x-show="usuarioActual && usuarioActual.autenticado" class="flex items-center space-x-2 pl-2 sm:pl-3 border-l border-gray-800 shrink-0">
@@ -6287,13 +6310,6 @@ def dashboard_html(response: Response):
                 x-text="generandoResumenVisor ? 'Redactando resumen...' : (visorVistaActiva === 'resumen' ? 'Ver Ideas clave' : 'Resumen IA')"></span>
         </button>
 
-        <!-- BOTÓN INSTALAR APP PWA DENTRO DEL VISOR -->
-        <button @click="instalarPwaDirecta()"
-                class="group flex items-center h-8 px-2.5 rounded-xl border transition-all duration-200 shadow-sm active:scale-95 cursor-pointer bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-cyan-300 border-cyan-500/30"
-                title="Añadir NOVA a la pantalla de inicio (Android, iOS, PC)">
-          <i class="fa-solid fa-mobile-screen-button text-xs shrink-0 text-cyan-400"></i>
-          <span class="max-w-0 overflow-hidden opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-hover:ml-1.5 transition-all duration-200 whitespace-nowrap text-xs font-semibold">Instalar App</span>
-        </button>
       </div>
     </header>
 
@@ -6344,21 +6360,21 @@ def dashboard_html(response: Response):
             <div class="flex items-center space-x-3 min-w-0">
               <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
                    :class="visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'">
-                <i class="fa-solid fa-spell-check"></i>
+                <i :class="(testActivoNombre && testActivoNombre.toLowerCase().includes('_vf')) ? 'fa-regular fa-circle-check text-emerald-400' : 'fa-solid fa-spell-check'"></i>
               </div>
               <div class="min-w-0">
                 <div class="flex items-center space-x-2">
                   <h3 class="text-xl sm:text-2xl font-extrabold tracking-tight truncate"
                       :class="visorModoLectura === 'claro' ? 'text-slate-900' : 'text-white'"
-                      x-text="'Práctica Test: ' + (modalTitulo || testActivoAsig)"></h3>
+                      x-text="(testActivoNombre && testActivoNombre.toLowerCase().includes('_vf')) ? ('Verdadero o Falso: ' + (modalTitulo || testActivoAsig)) : ('Práctica Test: ' + (modalTitulo || testActivoAsig))"></h3>
                   <span class="text-xs font-bold px-2.5 py-0.5 rounded-full font-mono border shrink-0"
                         :class="visorModoLectura === 'claro' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'"
                         x-show="testPreguntas.length > 0 && !testFinalizado"
                         x-text="'Pregunta ' + (testIndice + 1) + ' / ' + testPreguntas.length"></span>
                 </div>
                 <p class="text-xs sm:text-sm mt-0.5"
-                   :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'">
-                  Simulacro oficial con justificación técnica y baremo UNIR (+1 / -0.33)
+                   :class="visorModoLectura === 'claro' ? 'text-slate-500' : 'text-gray-400'"
+                   x-text="(testActivoNombre && testActivoNombre.toLowerCase().includes('_vf')) ? 'Autoevaluación rápida de Verdadero o Falso con justificación pedagógica' : 'Simulacro oficial con justificación técnica y baremo UNIR (+1 / -0.33)'">
                 </p>
               </div>
             </div>
@@ -6590,7 +6606,7 @@ def dashboard_html(response: Response):
                 <i class="fa-solid fa-fire-flame-curved"></i>
                 <span x-text="'Repasar mis ' + (testFallos + testBlancos) + ' Errores / Blancos'"></span>
               </button>
-              <button @click="lanzarPreguntasTestVisor()"
+              <button @click="testActivoNombre?.toLowerCase().includes('_vf') ? lanzarVerdaderoFalsoVisor() : lanzarPreguntasTestVisor()"
                       class="px-5 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer active:scale-95 flex items-center gap-2"
                       :class="visorModoLectura === 'claro' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300' : 'bg-surface-3 hover:bg-surface-4 text-white border-gray-700'">
                 <i class="fa-solid fa-arrows-rotate text-xs"></i>
@@ -11031,43 +11047,52 @@ def dashboard_html(response: Response):
             }
           });
 
-          // 3. Asociar Tests y Simulacros
+          // 3. Asociar Tests y Simulacros (Estándar y Verdadero/Falso)
           const testsDisponibles = asig.tests || [];
           testsDisponibles.forEach(t => {
             const tLower = t.toLowerCase();
+            const esVf = tLower.includes('_vf');
             const match = tLower.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
             if (match) {
               const num = parseInt(match[1], 10);
               if (!temasMap[num]) {
-                temasMap[num] = { numero: num, titulo: 'Tema ' + num, prefijo: 'Tema', pdf: null, guia: null, test: t };
+                temasMap[num] = { numero: num, titulo: 'Tema ' + num, prefijo: 'Tema', pdf: null, guia: null, test: esVf ? null : t, test_vf: esVf ? t : null };
               } else {
-                temasMap[num].test = t;
+                if (esVf) {
+                  temasMap[num].test_vf = t;
+                } else {
+                  temasMap[num].test = t;
+                }
               }
               return;
             }
 
-            const tLimpio = tLower.replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+            const tLimpio = tLower.replace(/_vf_test$/i, '').replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
             for (const num in temasMap) {
               const tm = temasMap[num];
               const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
               const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
               if (titLimpio.length > 5 && (tLimpio.includes(titLimpio) || titLimpio.includes(tLimpio))) {
-                temasMap[num].test = t;
+                if (esVf) temasMap[num].test_vf = t;
+                else temasMap[num].test = t;
                 return;
               }
               if (pdfLimpio.length > 5 && (tLimpio.includes(pdfLimpio) || pdfLimpio.includes(tLimpio))) {
-                temasMap[num].test = t;
+                if (esVf) temasMap[num].test_vf = t;
+                else temasMap[num].test = t;
                 return;
               }
             }
           });
 
           Object.values(temasMap).forEach(tm => {
+            const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+            const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+
             if (!tm.test) {
-              const titLimpio = (tm.titulo || '').toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
-              const pdfLimpio = (tm.pdf || '').toLowerCase().replace(/\\.pdf$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
               const encontrado = testsDisponibles.find(t => {
                 const tL = t.toLowerCase();
+                if (tL.includes('_vf')) return false;
                 const mNum = tL.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
                 if (mNum && parseInt(mNum[1], 10) === tm.numero) return true;
                 const tSinExt = tL.replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
@@ -11077,6 +11102,22 @@ def dashboard_html(response: Response):
               });
               if (encontrado) {
                 tm.test = encontrado;
+              }
+            }
+
+            if (!tm.test_vf) {
+              const encontradoVf = testsDisponibles.find(t => {
+                const tL = t.toLowerCase();
+                if (!tL.includes('_vf')) return false;
+                const mNum = tL.match(/(?:tema|t|m[óo]dulo|modulo|m|unit|unidad|u)[\\s_-]*0*(\\d+)/i);
+                if (mNum && parseInt(mNum[1], 10) === tm.numero) return true;
+                const tSinExt = tL.replace(/_vf_test$/i, '').replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+                if (titLimpio.length > 5 && (tSinExt.includes(titLimpio) || titLimpio.includes(tSinExt))) return true;
+                if (pdfLimpio.length > 5 && (tSinExt.includes(pdfLimpio) || pdfLimpio.includes(tSinExt))) return true;
+                return false;
+              });
+              if (encontradoVf) {
+                tm.test_vf = encontradoVf;
               }
             }
           });
@@ -13270,7 +13311,7 @@ def dashboard_html(response: Response):
           const testsDisponibles = Array.isArray(asig.tests) ? asig.tests : (asig.examenes || []);
           if (numTema && testsDisponibles.length > 0) {
             const matchStr = `tema_${numTema}`;
-            const encontrado = testsDisponibles.find(t => t.toLowerCase().includes(matchStr) || t.toLowerCase().includes(`tema ${numTema}`));
+            const encontrado = testsDisponibles.find(t => !t.toLowerCase().includes('_vf') && (t.toLowerCase().includes(matchStr) || t.toLowerCase().includes(`tema ${numTema}`)));
             if (encontrado) {
               this.testAbiertoDesdeVisor = true;
               this.visorVistaActiva = 'test';
@@ -13336,22 +13377,62 @@ def dashboard_html(response: Response):
           const tm = this.visorTemaActual || { titulo: this.modalTitulo, pdf: this.modalTitulo + '.pdf' };
           const temaNombre = tm.titulo || ('Tema ' + (tm.numero || '1'));
           const pdfArchivo = tm.pdf || (temaNombre + '.pdf');
+          const numTema = tm.numero;
           const slugTema = (temaNombre || '').replace(/[\\/*?:"<>|]/g, '').replaceAll(' ', '_');
-          const vfTestNombre = `${slugTema}_vf_test.json`;
 
-          // 1. Comprobar si ya existe el test de Verdadero o Falso
-          try {
-            const check = await fetch(`/api/test/${encodeURIComponent(asig.nombre)}/${encodeURIComponent(vfTestNombre)}`);
-            if (check.ok) {
-              this.testAbiertoDesdeVisor = true;
-              this.visorVistaActiva = 'test';
-              this.modalTest = false;
-              this.iniciarTestWeb(asig.nombre, vfTestNombre);
-              return;
-            }
-          } catch(e) {}
+          // 1. Si visorTemaActual ya tiene test_vf asociado directamente
+          if (tm.test_vf) {
+            this.testAbiertoDesdeVisor = true;
+            this.visorVistaActiva = 'test';
+            this.modalTest = false;
+            this.iniciarTestWeb(asig.nombre, tm.test_vf);
+            return;
+          }
 
-          // 2. Si no existe, generarlo automáticamente con IA (10 preguntas V/F) sin modal
+          // 2. Buscar en tests de la asignatura si ya existe uno de V/F para este tema
+          const testsDisponibles = Array.isArray(asig.tests) ? asig.tests : (asig.examenes || []);
+          const testExistenteVf = testsDisponibles.find(t => {
+            const tL = t.toLowerCase();
+            if (!tL.includes('_vf')) return false;
+            if (numTema && (tL.includes(`tema_${numTema}`) || tL.includes(`tema ${numTema}`) || tL.includes(`tema_${numTema}.`) || tL.includes(`tema_${numTema}_`))) return true;
+            const slugLimpio = slugTema.toLowerCase().replace(/[^a-záéíóúüñ0-9]/gi, '');
+            const tLimpio = tL.replace(/_vf_test$/i, '').replace(/_test$/i, '').replace(/[^a-záéíóúüñ0-9]/gi, '');
+            if (slugLimpio.length > 5 && (tLimpio.includes(slugLimpio) || slugLimpio.includes(tLimpio))) return true;
+            return false;
+          });
+
+          if (testExistenteVf) {
+            tm.test_vf = testExistenteVf;
+            this.testAbiertoDesdeVisor = true;
+            this.visorVistaActiva = 'test';
+            this.modalTest = false;
+            this.iniciarTestWeb(asig.nombre, testExistenteVf);
+            return;
+          }
+
+          // 3. Comprobar tolerante por API si ya existe el archivo en disco
+          const posiblesNombres = [
+            numTema ? `Tema_${numTema}._${slugTema}_vf_test.json` : null,
+            numTema ? `Tema_${numTema}_${slugTema}_vf_test.json` : null,
+            numTema ? `Tema_${numTema}_vf_test.json` : null,
+            `${slugTema}_vf_test.json`
+          ].filter(Boolean);
+
+          for (const nom of posiblesNombres) {
+            try {
+              const check = await fetch(`/api/test/${encodeURIComponent(asig.nombre)}/${encodeURIComponent(nom)}`);
+              if (check.ok) {
+                tm.test_vf = nom;
+                this.testAbiertoDesdeVisor = true;
+                this.visorVistaActiva = 'test';
+                this.modalTest = false;
+                this.iniciarTestWeb(asig.nombre, nom);
+                return;
+              }
+            } catch(e) {}
+          }
+
+          // 4. Si no existe, generarlo automáticamente con IA (10 preguntas V/F) sin modal
           this.generandoVerdaderoFalsoVisor = true;
           try {
             const res = await fetch('/api/generar-guia', {
@@ -13375,8 +13456,12 @@ def dashboard_html(response: Response):
               await this.cargarCatalogo();
               await this.cargarProgreso();
               this.asigSeleccionada = this.catalogoTotal.find(a => a.nombre === asig.nombre) || this.asigSeleccionada;
-              const nuevoTest = data.resultado?.test_json ? data.resultado.test_json.split('/').pop() : vfTestNombre;
+              const nuevoTest = data.resultado?.test_json ? data.resultado.test_json.split('/').pop() : `${slugTema}_vf_test.json`;
               if (nuevoTest) {
+                tm.test_vf = nuevoTest;
+                if (Array.isArray(asig.tests) && !asig.tests.includes(nuevoTest.replace('.json', ''))) {
+                  asig.tests.push(nuevoTest.replace('.json', ''));
+                }
                 this.testAbiertoDesdeVisor = true;
                 this.visorVistaActiva = 'test';
                 this.modalTest = false;
