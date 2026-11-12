@@ -161,13 +161,72 @@ def asegurar_archivo_local(ruta: Path) -> Path:
     return ruta
 
 
+def _fusionar_progreso_remoto(hf_token: str) -> None:
+    """Descarga y fusiona data/procesado/progreso.json desde HF sin perder ningún avance local ni remoto."""
+    p_local = DATA_DIR / "procesado" / "progreso.json"
+    p_tmp = p_local.with_suffix(".remote.json")
+    if not _descargar_archivo_hf_directo("data/procesado/progreso.json", p_tmp) or not p_tmp.exists():
+        return
+    try:
+        remoto = json.loads(p_tmp.read_text(encoding="utf-8"))
+        local = json.loads(p_local.read_text(encoding="utf-8")) if p_local.exists() else {}
+        if not isinstance(remoto, dict):
+            return
+        combinado = local.copy() if isinstance(local, dict) else {}
+        for k, v in remoto.items():
+            if isinstance(v, dict) and isinstance(combinado.get(k), dict):
+                for sk, sv in v.items():
+                    if isinstance(sv, list) and isinstance(combinado[k].get(sk), list):
+                        combinado[k][sk] = sorted(list(set(combinado[k][sk] + sv)))
+                    elif isinstance(sv, dict) and isinstance(combinado[k].get(sk), dict):
+                        combinado[k][sk].update(sv)
+                    else:
+                        combinado[k][sk] = sv
+            else:
+                combinado[k] = v
+        p_local.parent.mkdir(parents=True, exist_ok=True)
+        p_local.write_text(json.dumps(combinado, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    finally:
+        p_tmp.unlink(missing_ok=True)
+
+
+def _reconciliar_estado_ligero_hf(hf_token: str) -> None:
+    """Sincroniza únicamente archivos ligeros (.md/.json nuevos y estado vivo) entre PC Local y Render."""
+    try:
+        _fusionar_progreso_remoto(hf_token)
+        from huggingface_hub import HfApi
+        api = HfApi(token=hf_token)
+        repo_id = get_hf_dataset_repo()
+        remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
+        rutas_a_reconciliar = [
+            (DATA_DIR / "usuarios_espacios", "data/usuarios_espacios/"),
+            (DATA_DIR / "procesado" / "guias", "data/procesado/guias/"),
+            (DATA_DIR / "procesado" / "examenes", "data/procesado/examenes/"),
+            (DATA_DIR / "procesado" / "resumenes_clases", "data/procesado/resumenes_clases/"),
+            (DATA_DIR / "procesado" / "flashcards", "data/procesado/flashcards/"),
+        ]
+        for local_sub_dir, prefix in rutas_a_reconciliar:
+            remote_sub = {rf for rf in remote_files if rf.startswith(prefix)}
+            for rf in remote_sub:
+                if rf.endswith((".pdf", ".docx", ".bak")):
+                    continue
+                dest_loc = BASE_DIR / rf
+                es_estado_vivo = rf.endswith(("organizador_notion.json", "canvas_config.json", "canvas_sync.json", "mazos.json"))
+                if es_estado_vivo or not dest_loc.exists() or dest_loc.stat().st_size == 0:
+                    _descargar_archivo_hf_directo(rf, dest_loc)
+    except Exception as e:
+        console.print(f"[yellow]⚠ Aviso reconciliando estado ligero desde HF: {e}[/yellow]")
+
+
 def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
     """
     Se ejecuta de forma síncrona y ultrarrápida (~1 seg) al iniciar el servidor en la nube
     o al pulsar 'Sincronizar' desde la web cloud:
-    1. Descarga `procesado_bundle.tar.gz` (~5 MB) y lo extrae en `BASE_DIR`.
-    2. Crea archivos placeholder (0 bytes) para todos los PDFs/DOCX listados en `data/catalogo_materiales.json`
-       y elimina placeholders antiguos que hayan sido renombrados o deduplicados.
+    1. Si la biblioteca base ya existe (p. ej. en PC local), lanza en segundo plano la reconciliación ligera
+       para traer cualquier avance/test hecho en el móvil (Render) sin gastar ancho de banda.
+    2. Si está vacía (arranque en frío en Render), descarga `procesado_bundle.tar.gz` y crea placeholders.
     """
     hf_token = get_hf_token()
     if not hf_token:
@@ -176,6 +235,7 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
     trans_dir = DATA_DIR / "procesado" / "transcripciones"
     num_trans = len(list(trans_dir.rglob("*.md"))) if trans_dir.exists() else 0
     if not forzar and num_trans > 10 and not os.getenv("FORCE_HF_SYNC_ON_START"):
+        threading.Thread(target=_reconciliar_estado_ligero_hf, args=(hf_token,), daemon=True).start()
         return True
 
     console.print("[cyan]☁️ Sincronizando biblioteca desde Hugging Face Cloud (modo instantáneo)...[/cyan]")
@@ -196,38 +256,8 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
             console.print(f"[red]❌ Error extrayendo {BUNDLE_FILENAME}: {e}[/red]")
             return False
 
-    # Reconciliar espacios privados de usuarios y procesado con Hugging Face por si hubo creaciones/borrados recientes
-    try:
-        from huggingface_hub import HfApi
-        api = HfApi(token=hf_token)
-        repo_id = get_hf_dataset_repo()
-        remote_files = set(api.list_repo_files(repo_id=repo_id, repo_type="dataset"))
-        rutas_a_reconciliar = [
-            (DATA_DIR / "usuarios_espacios", "data/usuarios_espacios/"),
-            (DATA_DIR / "procesado" / "guias", "data/procesado/guias/"),
-            (DATA_DIR / "procesado" / "examenes", "data/procesado/examenes/"),
-            (DATA_DIR / "procesado" / "resumenes_clases", "data/procesado/resumenes_clases/"),
-        ]
-        for local_sub_dir, prefix in rutas_a_reconciliar:
-            remote_sub = {rf for rf in remote_files if rf.startswith(prefix)}
-            if remote_sub or local_sub_dir.exists():
-                # 1. Eliminar archivos locales que fueron borrados en Hugging Face
-                if local_sub_dir.exists():
-                    for f_loc in list(local_sub_dir.rglob("*")):
-                        if f_loc.is_file():
-                            rel_str = str(f_loc.relative_to(BASE_DIR)).replace("\\", "/")
-                            if rel_str not in remote_sub:
-                                f_loc.unlink(missing_ok=True)
-                # 2. Descargar archivos individuales nuevos o de estado que hayan cambiado en Hugging Face
-                for rf in remote_sub:
-                    if rf.endswith((".pdf", ".docx", ".bak")):
-                        continue
-                    dest_loc = BASE_DIR / rf
-                    es_estado_vivo = rf.endswith(("progreso.json", "organizador_notion.json", "canvas_config.json", "canvas_sync.json")) or "/flashcards/" in rf
-                    if es_estado_vivo or not dest_loc.exists() or dest_loc.stat().st_size == 0:
-                        _descargar_archivo_hf_directo(rf, dest_loc)
-    except Exception as e:
-        console.print(f"[yellow]⚠ Aviso reconciliando espacios de usuarios/guías desde HF: {e}[/yellow]")
+    # Reconciliar progreso, agenda, flashcards y guías/tests recientes con Hugging Face
+    _reconciliar_estado_ligero_hf(hf_token)
 
     manifest_file = DATA_DIR / "catalogo_materiales.json"
     if manifest_file.exists():

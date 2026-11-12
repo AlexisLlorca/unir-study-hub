@@ -85,22 +85,18 @@ def obtener_espacio_usuario(username: Optional[str] = None) -> Path:
 
 
 def obtener_rutas_usuario(username: Optional[str] = None) -> dict:
-    """Devuelve las rutas de materiales, guías, exámenes, resúmenes, progreso y flashcards exclusivas del usuario."""
+    """Devuelve las rutas unificadas de materiales, guías, exámenes, resúmenes, progreso y flashcards."""
     espacio = obtener_espacio_usuario(username)
-    materiales = espacio / "materiales"
-    guias = espacio / "guias"
-    examenes = espacio / "examenes"
-    resumenes = espacio / "resumenes_clases"
-    flashcards_dir = espacio / "flashcards"
-    for d in (materiales, guias, examenes, resumenes, flashcards_dir):
+    flashcards_dir = PROCESADO_DIR / "flashcards"
+    for d in (MATERIALES_DIR, GUIAS_DIR, EXAMENES_DIR, RESUMENES_CLASES_DIR, flashcards_dir):
         d.mkdir(parents=True, exist_ok=True)
     return {
         "espacio": espacio,
-        "materiales": materiales,
-        "guias": guias,
-        "examenes": examenes,
-        "resumenes_clases": resumenes,
-        "progreso_file": espacio / "progreso.json",
+        "materiales": MATERIALES_DIR,
+        "guias": GUIAS_DIR,
+        "examenes": EXAMENES_DIR,
+        "resumenes_clases": RESUMENES_CLASES_DIR,
+        "progreso_file": PROCESADO_DIR / "progreso.json",
         "flashcards_file": flashcards_dir / "mazos.json",
     }
 

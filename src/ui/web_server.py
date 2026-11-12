@@ -486,25 +486,13 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
         asigs_vistas.add(asig)
         dir_guias = rutas["guias"] / asig
         dir_examenes = rutas["examenes"] / asig
-        dir_mat_u = rutas["materiales"] / asig
 
-        guias_priv = [f.name for f in dir_guias.glob("*.md")] if dir_guias.exists() else []
-        dir_guias_glob = PROCESADO_DIR / "guias" / asig
-        guias_glob = [f.name for f in dir_guias_glob.glob("*.md")] if dir_guias_glob.exists() else []
-        guias = sorted(list(set(guias_priv + guias_glob)), key=_orden_natural_items)
-
-        tests_priv = [f.stem for f in dir_examenes.glob("*.json")] if dir_examenes.exists() else []
-        dir_examenes_glob = PROCESADO_DIR / "examenes" / asig
-        tests_glob = [f.stem for f in dir_examenes_glob.glob("*.json")] if dir_examenes_glob.exists() else []
-        tests = sorted(list(set(tests_priv + tests_glob)), key=_orden_natural_items)
-
-        mats_base = [f.name for f in info["materiales"]]
-        mats_privados = [f.name for f in dir_mat_u.glob("*.pdf")] if dir_mat_u.exists() else []
-        mats_combinados = sorted(list(set(mats_base + mats_privados)), key=_orden_natural_items)
+        guias = sorted([f.name for f in dir_guias.glob("*.md")], key=_orden_natural_items) if dir_guias.exists() else []
+        tests = sorted([f.stem for f in dir_examenes.glob("*.json")], key=_orden_natural_items) if dir_examenes.exists() else []
+        mats_combinados = sorted([f.name for f in info["materiales"]], key=_orden_natural_items)
 
         resumen_progreso = tracker_u.obtener_resumen_asignatura(asig)
-        dir_res_priv = rutas["resumenes_clases"] / asig
-        dir_res_global = PROCESADO_DIR / "resumenes_clases" / asig
+        dir_res_global = rutas["resumenes_clases"] / asig
 
         resultado.append({
             "nombre": asig,
@@ -521,7 +509,7 @@ def api_catalogo(request: Request, programa: Optional[str] = None, curso: Option
                     "fecha": t.stem[:10] if len(t.stem) >= 10 and t.stem[:4].isdigit() else "Reciente",
                     "titulo": t.stem[11:] if len(t.stem) >= 11 and t.stem[:4].isdigit() else t.stem,
                     "archivo": str(t.relative_to(BASE_DIR)),
-                    "has_resumen": (dir_res_priv / f"{t.stem}_resumen.md").exists() or (dir_res_global / f"{t.stem}_resumen.md").exists(),
+                    "has_resumen": (dir_res_global / f"{t.stem}_resumen.md").exists(),
                 }
                 for t in info["transcripciones"]
             ],
@@ -1335,11 +1323,13 @@ def api_guardar_guia_chat(req: GuardarGuiaChatRequest, request: Request):
 
 @app.post("/api/sincronizar")
 def api_sincronizar():
-    """Resincroniza carpetas externas de estudio o actualiza desde la nube si está en Render."""
-    from src.core.cloud_sync import descargar_datos_desde_hf_si_vacio
-    if os.getenv("RENDER"):
-        descargar_datos_desde_hf_si_vacio(forzar=True)
+    """Sincroniza de forma ligera progreso, tests y guías entre PC Local y Render Cloud."""
+    from src.core.cloud_sync import get_hf_token, _reconciliar_estado_ligero_hf
+    token = get_hf_token()
+    if token:
+        _reconciliar_estado_ligero_hf(token)
     reorganizar_biblioteca_completa()
+    _CACHE_CATALOGO.clear()
     return {"status": "ok"}
 
 
@@ -3498,38 +3488,6 @@ def dashboard_html(response: Response):
               <span>Expediente y Calificaciones</span>
             </button>
             <a href="/?tab=progreso" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
-
-          <!-- BUZÓN DE INCIDENCIAS Y MEJORAS -->
-          <div class="flex items-center group/item">
-            <button @click="irASeccion('feedback')"
-                    :class="tab === 'feedback' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
-              <div class="flex items-center space-x-2.5">
-                <i class="fa-solid fa-bullhorn w-4 text-center text-amber-400"></i>
-                <span>Buzón y Mejoras</span>
-              </div>
-              <span x-show="feedbackPendientesCount > 0" class="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-bold" x-text="feedbackPendientesCount"></span>
-            </button>
-            <a href="/?tab=feedback" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
-              <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-            </a>
-          </div>
-
-          <!-- ENLACE PANEL ADMIN (SOLO VISIBLE PARA ADMINISTRADORES) -->
-          <div x-show="usuarioActual && usuarioActual.es_admin" class="flex items-center group/item pt-1">
-            <button @click="irASeccion('admin')"
-                    :class="tab === 'admin' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'text-gray-400 hover:text-amber-300 hover:bg-gray-800/40 border-transparent'"
-                    class="flex-1 text-left px-3 py-2 rounded-xl text-xs transition border flex items-center justify-between">
-              <div class="flex items-center space-x-2.5">
-                <i class="fa-solid fa-shield-halved w-4 text-center text-amber-400"></i>
-                <span class="font-semibold text-amber-300/90">Panel Admin</span>
-              </div>
-              <span x-show="adminPendientesCount > 0" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-black" x-text="adminPendientesCount"></span>
-            </button>
-            <a href="/?tab=admin" target="_blank" title="Abrir en pestaña nueva del navegador" class="p-1.5 text-gray-500 hover:text-amber-400 opacity-0 group-hover/item:opacity-100 transition rounded-lg hover:bg-gray-800 ml-1">
               <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
             </a>
           </div>
@@ -11927,10 +11885,7 @@ def dashboard_html(response: Response):
               this.userGroqKey = this.usuarioActual.groq_api_key;
               try { localStorage.setItem('unir_groq_key', this.userGroqKey); } catch(e) {}
             }
-            if (this.usuarioActual && this.usuarioActual.es_admin) {
-              await this.cargarAdminUsuarios();
-            } else if (this.usuarioActual?.autenticado && !this.usuarioActual.es_admin && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey) {
-              // Estudiante sin ninguna API key configurada: abrir modal
+            if (this.usuarioActual?.autenticado && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey) {
               setTimeout(() => {
                 this.abrirModalApiKey();
               }, 700);
