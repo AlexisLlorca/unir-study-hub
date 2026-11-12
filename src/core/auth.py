@@ -259,8 +259,19 @@ def inicializar_bd_usuarios() -> None:
         conn.commit()
         cursor.execute("PRAGMA wal_checkpoint(FULL);")
 
-    # 4. Restaurar cualquier usuario registrado desde el JSON persistente (fusionado con la nube)
+    # 4. Restaurar usuario desde el JSON persistente
     importar_usuarios_desde_json()
+
+    # 5. En modo personal privado (por defecto), mantener exclusivamente la cuenta del propietario administrador
+    if os.getenv("HUB_ALLOW_MULTIUSER", "0") != "1":
+        admin_user = (os.getenv("HUB_ADMIN_USER", "").strip() or "alexking44").lower()
+        with _obtener_conexion() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM sesiones WHERE username != ?", (admin_user,))
+            cursor.execute("DELETE FROM usuarios WHERE username != ?", (admin_user,))
+            conn.commit()
+            cursor.execute("PRAGMA wal_checkpoint(FULL);")
+
     exportar_usuarios_a_json()
 
 
@@ -292,6 +303,9 @@ def registrar_usuario(
     Registra un nuevo usuario en la base de datos.
     Por defecto queda con activo=0 (pendiente de aprobación por el admin).
     """
+    if os.getenv("HUB_ALLOW_MULTIUSER", "0") != "1":
+        return False, "Esta instancia es de uso personal privado. Si deseas usar NOVA Study Hub, descarga el proyecto desde GitHub y ejecútalo en tu propio ordenador."
+
     username = (username or "").strip().lower()
     nombre = (nombre or "").strip()
     password = (password or "").strip()

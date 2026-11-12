@@ -25,8 +25,9 @@ from dotenv import load_dotenv
 from src.core.config import BASE_DIR, DATA_DIR, ENV_FILE, console
 
 DEFAULT_HF_DATASET = "AlexLlorca/unir-study-hub-data"
-DEFAULT_HF_TOKEN = "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"
+DEFAULT_HF_TOKEN = ""
 EXTENSIONES_SINCRONIZABLES = {".pdf", ".docx", ".md", ".json", ".txt"}
+EXTENSIONES_BUNDLE_LIGERO = {".md", ".json", ".txt"}
 BUNDLE_FILENAME = "procesado_bundle.tar.gz"
 
 
@@ -84,7 +85,7 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
                 sub_dir = DATA_DIR / sub
                 if sub_dir.exists():
                     for f in sub_dir.rglob("*"):
-                        if f.is_file() and f.suffix.lower() in EXTENSIONES_SINCRONIZABLES:
+                        if f.is_file() and f.suffix.lower() in EXTENSIONES_BUNDLE_LIGERO:
                             rel_arc = f.relative_to(BASE_DIR)
                             tar.add(str(f.resolve()), arcname=str(rel_arc).replace("\\", "/"))
 
@@ -217,10 +218,13 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
                             rel_str = str(f_loc.relative_to(BASE_DIR)).replace("\\", "/")
                             if rel_str not in remote_sub:
                                 f_loc.unlink(missing_ok=True)
-                # 2. Descargar archivos individuales nuevos que aún no estaban en el bundle
+                # 2. Descargar archivos individuales nuevos o de estado que hayan cambiado en Hugging Face
                 for rf in remote_sub:
+                    if rf.endswith((".pdf", ".docx", ".bak")):
+                        continue
                     dest_loc = BASE_DIR / rf
-                    if not dest_loc.exists() or dest_loc.stat().st_size == 0:
+                    es_estado_vivo = rf.endswith(("progreso.json", "organizador_notion.json", "canvas_config.json", "canvas_sync.json")) or "/flashcards/" in rf
+                    if es_estado_vivo or not dest_loc.exists() or dest_loc.stat().st_size == 0:
                         _descargar_archivo_hf_directo(rf, dest_loc)
     except Exception as e:
         console.print(f"[yellow]⚠ Aviso reconciliando espacios de usuarios/guías desde HF: {e}[/yellow]")
@@ -360,8 +364,8 @@ def _actualizar_bundle_seguro(token: str) -> None:
 
 def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
     """
-    Sube en segundo plano un archivo recién generado (guía, test JSON, progreso, usuarios o flashcards)
-    al Dataset privado de Hugging Face y actualiza el bundle si pertenece a procesado o clases_grabadas.
+    Sube en segundo plano únicamente el archivo individual recién modificado
+    al Dataset privado de Hugging Face (sin re-subir el bundle completo para no gastar ancho de banda).
     """
     hf_token = get_hf_token()
     if not hf_token:
@@ -385,8 +389,6 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
                 repo_type="dataset",
                 commit_message=f"auto-backup: {rel_to_base.name}",
             )
-            if rel_str.startswith(("data/procesado/", "data/clases_grabadas/", "data/usuarios_espacios/")):
-                _actualizar_bundle_seguro(hf_token)
         except Exception as e:
             console.print(f"[yellow]⚠ Error en respaldar_archivo_en_hf_async ({ruta_local.name}): {e}[/yellow]")
 
@@ -395,8 +397,8 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
 
 def eliminar_archivo_en_hf_async(ruta_local: Path) -> None:
     """
-    Elimina en segundo plano un archivo (guía o test) del Dataset privado de Hugging Face
-    y reconstruye procesado_bundle.tar.gz para que no vuelva a aparecer tras reiniciar o actualizar.
+    Elimina en segundo plano el archivo individual del Dataset privado de Hugging Face
+    (sin reconstruir ni re-subir procesado_bundle.tar.gz para evitar consumo de ancho de banda).
     """
     hf_token = get_hf_token()
     if not hf_token:
@@ -427,9 +429,6 @@ def eliminar_archivo_en_hf_async(ruta_local: Path) -> None:
                 console.print(f"[cyan]🗑️ Archivo {rel_to_base.name} eliminado de Hugging Face[/cyan]")
             except Exception as e:
                 console.print(f"[yellow]⚠ Aviso eliminando {path_in_repo} en HF: {e}[/yellow]")
-
-            # Reconstruir el bundle sin el archivo eliminado
-            _actualizar_bundle_seguro(hf_token)
         except Exception as e:
             console.print(f"[yellow]⚠ Error en eliminar_archivo_en_hf_async: {e}[/yellow]")
 

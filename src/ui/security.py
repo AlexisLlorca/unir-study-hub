@@ -239,15 +239,11 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
       <p class="text-xs text-gray-400 mt-1">Plataforma académica inteligente y tutor NOVA</p>
     </div>
 
-    <!-- Pestañas Login / Registro -->
+    <!-- Pestaña de Acceso Privado -->
     <div class="flex border-b border-gray-800 mb-6 text-sm font-semibold">
       <button id="btnTabLogin" onclick="mostrarTab('login')" class="flex-1 pb-3 text-cyan-400 border-b-2 border-cyan-400 transition flex items-center justify-center gap-2">
-        <i class="fa-solid fa-right-to-bracket text-xs"></i>
-        <span>Iniciar Sesión</span>
-      </button>
-      <button id="btnTabRegistro" onclick="mostrarTab('registro')" class="flex-1 pb-3 text-gray-400 hover:text-gray-200 border-b-2 border-transparent transition flex items-center justify-center gap-2">
-        <i class="fa-solid fa-user-plus text-xs"></i>
-        <span>Crear Cuenta</span>
+        <i class="fa-solid fa-shield-halved text-xs"></i>
+        <span>Acceso Privado Personal</span>
       </button>
     </div>
 

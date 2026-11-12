@@ -675,7 +675,7 @@ def iniciar_programador_sincronizacion(hora_inicio: int = 3, hora_fin: int = 6) 
     Desactivable con la variable de entorno NOVA_SYNC_AUTO=0.
     """
     global _programador_iniciado
-    if _programador_iniciado or os.environ.get("NOVA_SYNC_AUTO", "1") == "0":
+    if _programador_iniciado or os.environ.get("NOVA_SYNC_AUTO", "0") != "1":
         return
     _programador_iniciado = True
 
@@ -878,10 +878,10 @@ def sincronizar_materiales_canvas_estudiante(username: str) -> Tuple[bool, str, 
             if not download_url or (size_bytes and size_bytes > MAX_PDF_BYTES):
                 continue
 
-            # Deduplicación: ¿existe ya en la biblioteca base de la asignatura o en la carpeta privada del alumno?
+            # Deduplicación: ¿existe ya en la biblioteca base de la asignatura (incluso como placeholder en cloud) o en la carpeta privada?
             ruta_base = MATERIALES_DIR / asig_norm / nombre_pdf
             ruta_privada = dir_mat_usuario / asig_norm / nombre_pdf
-            if (ruta_base.exists() and ruta_base.stat().st_size > 0) or (ruta_privada.exists() and ruta_privada.stat().st_size > 0):
+            if ruta_base.exists() or (ruta_privada.exists() and ruta_privada.stat().st_size > 0):
                 omitidos_existentes += 1
                 continue
 
