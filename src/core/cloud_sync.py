@@ -162,38 +162,68 @@ def asegurar_archivo_local(ruta: Path) -> Path:
 
 
 def _fusionar_progreso_remoto(hf_token: str) -> None:
-    """Descarga y fusiona data/procesado/progreso.json desde HF sin perder ningún avance local ni remoto."""
-    p_local = DATA_DIR / "procesado" / "progreso.json"
-    p_tmp = p_local.with_suffix(".remote.json")
-    if not _descargar_archivo_hf_directo("data/procesado/progreso.json", p_tmp) or not p_tmp.exists():
-        return
-    try:
-        remoto = json.loads(p_tmp.read_text(encoding="utf-8"))
-        local = json.loads(p_local.read_text(encoding="utf-8")) if p_local.exists() else {}
-        if not isinstance(remoto, dict):
-            return
-        combinado = local.copy() if isinstance(local, dict) else {}
-        for k, v in remoto.items():
-            if isinstance(v, dict) and isinstance(combinado.get(k), dict):
-                for sk, sv in v.items():
-                    if isinstance(sv, list) and isinstance(combinado[k].get(sk), list):
-                        combinado[k][sk] = sorted(list(set(combinado[k][sk] + sv)))
-                    elif isinstance(sv, dict) and isinstance(combinado[k].get(sk), dict):
-                        combinado[k][sk].update(sv)
-                    else:
-                        combinado[k][sk] = sv
-            else:
-                combinado[k] = v
-        p_local.parent.mkdir(parents=True, exist_ok=True)
-        p_local.write_text(json.dumps(combinado, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
-    finally:
-        p_tmp.unlink(missing_ok=True)
+    """Descarga y fusiona progreso.json y organizador_notion.json desde HF sin perder ningún avance local ni remoto."""
+    for rel_p in ("data/procesado/progreso.json", "data/usuarios_espacios/alexking44/progreso.json"):
+        p_local = DATA_DIR / "procesado" / "progreso.json"
+        p_tmp = p_local.with_suffix(".remote.json")
+        if not _descargar_archivo_hf_directo(rel_p, p_tmp) or not p_tmp.exists():
+            continue
+        try:
+            remoto = json.loads(p_tmp.read_text(encoding="utf-8"))
+            local = json.loads(p_local.read_text(encoding="utf-8")) if p_local.exists() else {}
+            if not isinstance(remoto, dict):
+                continue
+            combinado = local.copy() if isinstance(local, dict) else {}
+            ht_map = {
+                (x.get("fecha"), x.get("asignatura"), x.get("tema")): x
+                for x in combinado.get("historial_tests", [])
+                if isinstance(x, dict)
+            }
+            for x in remoto.get("historial_tests", []):
+                if isinstance(x, dict):
+                    ht_map[(x.get("fecha"), x.get("asignatura"), x.get("tema"))] = x
+            if ht_map:
+                combinado["historial_tests"] = sorted(list(ht_map.values()), key=lambda x: str(x.get("fecha", "")))
+            for k in ("ultimas_calificaciones", "preguntas_falladas"):
+                if isinstance(remoto.get(k), dict):
+                    combinado.setdefault(k, {}).update(remoto[k])
+            if str(remoto.get("fecha_actualizacion", "")) > str(combinado.get("fecha_actualizacion", "")):
+                combinado["fecha_actualizacion"] = remoto["fecha_actualizacion"]
+            p_local.parent.mkdir(parents=True, exist_ok=True)
+            p_local.write_text(json.dumps(combinado, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        finally:
+            p_tmp.unlink(missing_ok=True)
+
+    # Fusionar también organizador_notion.json (tareas vistas, estado de temas y overrides)
+    org_local = DATA_DIR / "usuarios_espacios" / "alexking44" / "organizador_notion.json"
+    org_tmp = org_local.with_suffix(".remote.json")
+    if _descargar_archivo_hf_directo("data/usuarios_espacios/alexking44/organizador_notion.json", org_tmp) and org_tmp.exists():
+        try:
+            rem_org = json.loads(org_tmp.read_text(encoding="utf-8"))
+            loc_org = json.loads(org_local.read_text(encoding="utf-8")) if org_local.exists() else {}
+            if isinstance(rem_org, dict):
+                comb_org = loc_org.copy() if isinstance(loc_org, dict) else {}
+                for k in ("overrides", "temas_estado"):
+                    if isinstance(rem_org.get(k), dict):
+                        comb_org.setdefault(k, {}).update(rem_org[k])
+                if isinstance(rem_org.get("items_propios"), list):
+                    by_id = {x.get("id", str(x)): x for x in comb_org.get("items_propios", []) if isinstance(x, dict)}
+                    for x in rem_org["items_propios"]:
+                        if isinstance(x, dict):
+                            by_id[x.get("id", str(x))] = x
+                    comb_org["items_propios"] = list(by_id.values())
+                org_local.parent.mkdir(parents=True, exist_ok=True)
+                org_local.write_text(json.dumps(comb_org, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        finally:
+            org_tmp.unlink(missing_ok=True)
 
 
-def _reconciliar_estado_ligero_hf(hf_token: str) -> None:
-    """Sincroniza únicamente archivos ligeros (.md/.json nuevos y estado vivo) entre PC Local y Render."""
+def _reconciliar_estado_ligero_hf(hf_token: str, actualizar_existentes: bool = False) -> None:
+    """Sincroniza archivos ligeros (.md/.json y estado vivo) entre PC Local y Render."""
     try:
         _fusionar_progreso_remoto(hf_token)
         from huggingface_hub import HfApi
@@ -210,11 +240,11 @@ def _reconciliar_estado_ligero_hf(hf_token: str) -> None:
         for local_sub_dir, prefix in rutas_a_reconciliar:
             remote_sub = {rf for rf in remote_files if rf.startswith(prefix)}
             for rf in remote_sub:
-                if rf.endswith((".pdf", ".docx", ".bak")):
+                if rf.endswith((".pdf", ".docx", ".bak", "progreso.json", "organizador_notion.json")):
                     continue
                 dest_loc = BASE_DIR / rf
-                es_estado_vivo = rf.endswith(("organizador_notion.json", "canvas_config.json", "canvas_sync.json", "mazos.json"))
-                if es_estado_vivo or not dest_loc.exists() or dest_loc.stat().st_size == 0:
+                es_estado_vivo = rf.endswith(("canvas_config.json", "canvas_sync.json", "mazos.json"))
+                if actualizar_existentes or es_estado_vivo or not dest_loc.exists() or dest_loc.stat().st_size == 0:
                     _descargar_archivo_hf_directo(rf, dest_loc)
     except Exception as e:
         console.print(f"[yellow]⚠ Aviso reconciliando estado ligero desde HF: {e}[/yellow]")

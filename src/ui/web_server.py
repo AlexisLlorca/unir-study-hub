@@ -1305,7 +1305,7 @@ def api_sincronizar():
     from src.core.cloud_sync import get_hf_token, _reconciliar_estado_ligero_hf
     token = get_hf_token()
     if token:
-        _reconciliar_estado_ligero_hf(token)
+        _reconciliar_estado_ligero_hf(token, actualizar_existentes=True)
     reorganizar_biblioteca_completa()
     _CACHE_CATALOGO.clear()
     return {"status": "ok"}
