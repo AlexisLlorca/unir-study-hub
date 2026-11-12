@@ -195,6 +195,7 @@ class GeneradorGuiaEstudio:
                 ruta_guia_base = dir_asig_guia / f"{slug_tema}_guia.md"
                 with open(ruta_guia_base, "w", encoding="utf-8") as f:
                     f.write(guia_md)
+                self._purgar_duplicados_tema(dir_asig_guia, ruta_guia_base, es_vf=False)
                 resultados["guia"] = ruta_guia_base
                 console.print(f"[bold green]✔ Guía guardada en:[/bold green] {ruta_guia_base}")
             else:
@@ -357,6 +358,7 @@ class GeneradorGuiaEstudio:
                         ruta_test_md = dir_examenes / f"{slug_tema}{sufijo_test}.md"
                         with open(ruta_test_md, "w", encoding="utf-8") as f:
                             f.write(md_examen)
+                        self._purgar_duplicados_tema(dir_examenes, ruta_test_json, es_vf=es_vf)
                         resultados["test_md"] = ruta_test_md
 
                         console.print(f"[bold green]✔ Test interactivo y examen guardados en:[/bold green] {ruta_test_json}")
@@ -368,3 +370,27 @@ class GeneradorGuiaEstudio:
 
         console.print(f"\n[bold green]✨ ¡Guía de estudio y examen de '{nombre_tema}' completados con éxito![/bold green]\n")
         return resultados
+
+    @staticmethod
+    def _purgar_duplicados_tema(directorio: Path, archivo_nuevo: Path, es_vf: bool = False) -> None:
+        """Elimina variantes antiguas del mismo número de tema (p. ej. Tema_4_guia.md o *_robusta_guia.md) para evitar duplicados."""
+        try:
+            m_num = re.search(r"^(?:tema|m[oó]dulo|reto_entrenamiento)[\._\s-]*0*(\d+)\b", archivo_nuevo.stem, re.IGNORECASE)
+            if not m_num:
+                return
+            num_tema = int(m_num.group(1))
+            from src.core.cloud_sync import eliminar_archivo_en_hf_async
+            for f in list(directorio.iterdir()):
+                if not f.is_file() or f.resolve() == archivo_nuevo.resolve():
+                    continue
+                if f.stem == archivo_nuevo.stem:
+                    continue
+                es_f_vf = "_vf_test" in f.name
+                if es_f_vf != es_vf:
+                    continue
+                m_f = re.search(r"^(?:tema|m[oó]dulo|reto_entrenamiento)[\._\s-]*0*(\d+)\b", f.stem, re.IGNORECASE)
+                if m_f and int(m_f.group(1)) == num_tema:
+                    f.unlink(missing_ok=True)
+                    eliminar_archivo_en_hf_async(f)
+        except Exception:
+            pass

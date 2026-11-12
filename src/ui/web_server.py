@@ -1205,12 +1205,10 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
             detail="No se encontró un PDF ni videoclase que coincida con ese nombre de tema. Selecciona el documento PDF en el desplegable.",
         )
 
-    nombre_tema_proc = (req.nombre_tema or "").strip()
-    ref_pdf = str(ruta_pdf.name if ruta_pdf else (req.archivo_pdf or ""))
-    m_pdf = re.match(r"^(Tema\s*\d+[\._\s-]*)\s*(.*)", ref_pdf, re.IGNORECASE)
-    if m_pdf and not re.match(r"^Tema\s*\d+", nombre_tema_proc, re.IGNORECASE):
-        prefijo_limpio = m_pdf.group(1).rstrip("._ -")
-        nombre_tema_proc = f"{prefijo_limpio}. {nombre_tema_proc}"
+    if ruta_pdf:
+        nombre_tema_proc = ruta_pdf.stem
+    else:
+        nombre_tema_proc = (req.nombre_tema or "").strip()
 
     res = generador.generar_paquete_tema(
         asignatura=asig_limpia,
@@ -1229,26 +1227,6 @@ def api_generar_guia(req: GenerarGuiaRequest, request: Request):
 
     tiene_guia = bool(res.get("guia"))
     tiene_test = bool(res.get("test_json"))
-
-    if tiene_guia and res.get("guia") and Path(res["guia"]).exists():
-        try:
-            dest_glob = PROCESADO_DIR / "guias" / asig_limpia / Path(res["guia"]).name
-            dest_glob.parent.mkdir(parents=True, exist_ok=True)
-            import shutil
-            shutil.copy2(res["guia"], dest_glob)
-        except Exception:
-            pass
-
-    if tiene_test and res.get("test_json") and Path(res["test_json"]).exists():
-        try:
-            dest_glob_t = PROCESADO_DIR / "examenes" / asig_limpia / Path(res["test_json"]).name
-            dest_glob_t.parent.mkdir(parents=True, exist_ok=True)
-            import shutil
-            shutil.copy2(res["test_json"], dest_glob_t)
-            if res.get("test_md") and Path(res["test_md"]).exists():
-                shutil.copy2(res["test_md"], dest_glob_t.with_suffix(".md"))
-        except Exception:
-            pass
 
     if not tiene_guia and not tiene_test:
         raise HTTPException(
