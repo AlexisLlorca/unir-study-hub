@@ -17,6 +17,7 @@ import json
 import socket
 import asyncio
 import time
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -90,6 +91,10 @@ from src.ui.security import (
     ruta_dentro_de,
     ruta_segura_lectura,
 )
+
+# Logger propio del servidor web. Antes se usaba `logger` sin definirlo, lo que
+# provocaba un NameError justo cuando había que registrar un error de PDF.
+logger = logging.getLogger("nova.web")
 
 app = FastAPI(title="NOVA Study Hub — Plataforma Inteligente Multi-Titulación", version="3.3.0")
 
@@ -800,10 +805,13 @@ def api_tema_texto(asig: str, pdf: str, request: Request):
     Devuelve el texto completo y estructurado del tema oficial (Ideas clave)
     extraído del PDF oficial, con caché en disco para respuesta instantánea.
     """
-    asig_limpia = asig.strip()
-    pdf_limpio = pdf.strip()
+    # Saneamos los nombres que se usan como carpetas/archivos: nada de "..", "/" ni "\".
+    # Sin esto, asig=../../etc permitía escribir la caché fuera de su carpeta.
+    asig_limpia = nombre_seguro(asig, "asignatura")
+    pdf_limpio = nombre_seguro(pdf, "pdf")
     slug_pdf = Path(pdf_limpio).stem
-    cache_asig_dir = TEMAS_TEXTO_CACHE_DIR / asig_limpia
+    # ruta_dentro_de comprueba además que el resultado sigue dentro de la base.
+    cache_asig_dir = ruta_dentro_de(TEMAS_TEXTO_CACHE_DIR, asig_limpia)
     cache_asig_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_asig_dir / f"{slug_pdf}.md"
 
@@ -826,8 +834,8 @@ def api_tema_texto(asig: str, pdf: str, request: Request):
 
     rutas_u = _rutas_usuario_request(request)
     candidatos = [
-        rutas_u["materiales"] / asig_limpia / pdf_limpio,
-        MATERIALES_DIR / asig_limpia / pdf_limpio,
+        ruta_dentro_de(rutas_u["materiales"], asig_limpia, pdf_limpio),
+        ruta_dentro_de(MATERIALES_DIR, asig_limpia, pdf_limpio),
     ]
     pdf_path = next((p for p in candidatos if p.exists() and p.is_file()), None)
 
@@ -2539,6 +2547,70 @@ def api_calificar_flashcard(req: CalificarCardReq, request: Request):
     return gestor.calificar_tarjeta(req.programa, req.tarjeta_id, req.dificultad)
 
 
+@app.get("/api/flashcards/vencidas")
+def api_flashcards_vencidas(request: Request, programa: str = "dam", limite: int = 50):
+    """Devuelve solo las tarjetas que toca repasar hoy (repetición espaciada)."""
+    from src.ai.flashcards import GestorFlashcards
+
+    gestor = GestorFlashcards(username=_username_actual(request))
+    limite_seguro = max(1, min(int(limite or 50), 200))
+    return {
+        "tarjetas": gestor.tarjetas_vencidas(programa, limite=limite_seguro),
+        "estadisticas": gestor.estadisticas(programa),
+    }
+
+
+@app.get("/api/plan-hoy")
+def api_plan_hoy(request: Request, programa: str = "dam"):
+    """
+    'Entrenador personal': reúne en una sola respuesta lo que toca hoy.
+    - Tarjetas vencidas y estado del mazo.
+    - Temas flojos según notas y fallos.
+    - Una recomendación corta y accionable.
+    """
+    from src.ai.flashcards import GestorFlashcards
+
+    gestor = GestorFlashcards(username=_username_actual(request))
+    estadisticas = gestor.estadisticas(programa)
+
+    tracker = _tracker_usuario(request)
+    datos = tracker._cargar()
+    historial = datos.get("historial_tests", []) or []
+    notas = [r.get("nota", 0) for r in historial if isinstance(r, dict)]
+    media = round(sum(notas) / len(notas), 2) if notas else 0.0
+    temas_debiles = tracker.obtener_temas_debiles(limite=5)
+
+    vencidas = estadisticas.get("vencidas", 0)
+    if vencidas > 0:
+        recomendacion = (
+            f"Empieza con {vencidas} tarjeta(s) vencida(s). Son 10-15 minutos "
+            "y consolidan justo lo que estás a punto de olvidar."
+        )
+    elif temas_debiles:
+        primero = temas_debiles[0]
+        recomendacion = (
+            f"Haz un test corto de «{primero['tema']}» ({primero['asignatura']}): "
+            "es tu punto más flojo ahora mismo."
+        )
+    else:
+        recomendacion = (
+            "No tienes repasos pendientes. Genera un test de un tema nuevo "
+            "o adelanta el siguiente tema del temario."
+        )
+
+    return {
+        "fecha": time.strftime("%Y-%m-%d"),
+        "flashcards": estadisticas,
+        "temas_debiles": temas_debiles,
+        "progreso": {
+            "media_global": media,
+            "tests_realizados": len(historial),
+            "fallos_pendientes": len(datos.get("preguntas_falladas", []) or []),
+        },
+        "recomendacion": recomendacion,
+    }
+
+
 class GenerarCardsReq(BaseModel):
     asignatura: str
     programa: str
@@ -3681,6 +3753,93 @@ def dashboard_html(response: Response):
             </div>
           </div>
         </template>
+
+        <!-- ==================== ENTRENADOR PERSONAL: PLAN DE HOY ==================== -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          <!-- 1. REPASO ESPACIADO -->
+          <div class="glass-card p-4 rounded-2xl border border-purple-500/30 bg-surface-2/95 flex flex-col">
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-800">
+              <h3 class="text-xs sm:text-sm font-extrabold text-purple-300 flex items-center gap-2">
+                <i class="fa-solid fa-brain"></i> Repaso de hoy
+              </h3>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono font-bold"
+                    x-text="planHoy?.flashcards?.vencidas ?? '—'"></span>
+            </div>
+            <p class="text-3xl font-black text-white font-mono" x-text="planHoy?.flashcards?.vencidas ?? '—'"></p>
+            <p class="text-[11px] text-gray-400 -mt-1 mb-2">tarjetas vencidas</p>
+            <div class="flex flex-wrap gap-1.5 text-[10px] mb-3">
+              <span class="px-2 py-0.5 rounded-full bg-gray-800 text-gray-300" x-text="'Nuevas: ' + (planHoy?.flashcards?.nuevas ?? 0)"></span>
+              <span class="px-2 py-0.5 rounded-full bg-gray-800 text-gray-300" x-text="'Dominadas: ' + (planHoy?.flashcards?.dominadas ?? 0)"></span>
+              <span class="px-2 py-0.5 rounded-full bg-gray-800 text-gray-300" x-text="'Próx. 7 días: ' + (planHoy?.flashcards?.proximas_7_dias ?? 0)"></span>
+            </div>
+            <button @click="repasarVencidas()"
+                    :disabled="!planHoy || (planHoy?.flashcards?.vencidas ?? 0) === 0"
+                    class="mt-auto w-full py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20">
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Repasar ahora</span>
+            </button>
+          </div>
+
+          <!-- 2. TEMAS A REFORZAR -->
+          <div class="glass-card p-4 rounded-2xl border border-rose-500/30 bg-surface-2/95 flex flex-col">
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-800">
+              <h3 class="text-xs sm:text-sm font-extrabold text-rose-300 flex items-center gap-2">
+                <i class="fa-solid fa-crosshairs"></i> Temas a reforzar
+              </h3>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-mono font-bold"
+                    x-text="(planHoy?.temas_debiles || []).length"></span>
+            </div>
+            <div x-show="!(planHoy?.temas_debiles || []).length" class="py-6 text-center text-[11px] text-gray-500">
+              <i class="fa-solid fa-seedling text-emerald-400/70 text-lg mb-1 block"></i>
+              Sin puntos flojos detectados todavía. Haz algún test para que el entrenador aprenda de ti.
+            </div>
+            <div class="space-y-1.5 max-h-[190px] overflow-y-auto pr-1">
+              <template x-for="t in (planHoy?.temas_debiles || [])" :key="t.asignatura + '::' + t.tema">
+                <button @click="abrirAsignaturaPorNombre(t.asignatura)"
+                        class="w-full text-left p-2 rounded-xl border border-gray-800 bg-gray-900/50 hover:border-rose-500/40 hover:bg-rose-500/5 transition group">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-bold text-white truncate" x-text="t.tema"></span>
+                    <span class="text-[10px] font-mono font-black shrink-0"
+                          :class="(t.nota ?? 0) < 5 ? 'text-rose-400' : 'text-amber-400'"
+                          x-text="t.nota !== null && t.nota !== undefined ? t.nota.toFixed(1) : 'sin nota'"></span>
+                  </div>
+                  <div class="flex items-center justify-between gap-2 mt-0.5">
+                    <span class="text-[10px] text-gray-400 truncate" x-text="t.asignatura"></span>
+                    <span class="text-[9px] text-rose-300/80 shrink-0" x-text="t.fallos + ' fallo(s)'"></span>
+                  </div>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- 3. RECOMENDACIÓN DEL ENTRENADOR -->
+          <div class="glass-card p-4 rounded-2xl border border-cyan-500/30 bg-surface-2/95 flex flex-col">
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-800">
+              <h3 class="text-xs sm:text-sm font-extrabold text-cyan-300 flex items-center gap-2">
+                <i class="fa-solid fa-route"></i> Tu plan de hoy
+              </h3>
+              <button @click="cargarPlanHoy()" :disabled="planHoyCargando" title="Actualizar plan" class="p-1 text-gray-400 hover:text-cyan-300 transition">
+                <i :class="planHoyCargando ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-rotate'"></i>
+              </button>
+            </div>
+            <p class="text-xs text-gray-200 leading-relaxed flex-1" x-text="planHoy?.recomendacion || 'Calculando tu plan...'"></p>
+            <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-800 text-center">
+              <div>
+                <p class="text-base font-black text-white font-mono" x-text="planHoy?.progreso?.media_global ?? '—'"></p>
+                <p class="text-[9px] text-gray-400 uppercase tracking-wider">Media</p>
+              </div>
+              <div>
+                <p class="text-base font-black text-white font-mono" x-text="planHoy?.progreso?.tests_realizados ?? '—'"></p>
+                <p class="text-[9px] text-gray-400 uppercase tracking-wider">Tests</p>
+              </div>
+              <div>
+                <p class="text-base font-black text-white font-mono" x-text="planHoy?.progreso?.fallos_pendientes ?? '—'"></p>
+                <p class="text-[9px] text-gray-400 uppercase tracking-wider">Fallos</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- WORKSPACE ORGANIZADOR ESTILO NOTION (TO-DO HOY + TO-DO SEMANA + CALENDARIO CON TARJETAS DE ESTADO) -->
         <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
@@ -9633,6 +9792,11 @@ def dashboard_html(response: Response):
         nuevaCardCantidad: 4,
         generandoFlashcards: false,
 
+        // Entrenador personal: resumen de lo que toca hoy
+        planHoy: null,
+        planHoyCargando: false,
+        flashcardsVencidasActivas: false,
+
         // Buzón de Incidencias y Mejoras
         feedbackLista: [],
         feedbackCargando: false,
@@ -11301,7 +11465,8 @@ def dashboard_html(response: Response):
             this.cargarProgreso(),
             this.cargarAgenda(),
             this.cargarTemasEstado(),
-            this.cargarModelosIa()
+            this.cargarModelosIa(),
+            this.cargarPlanHoy()
           ]);
           this.actualizarMensajeBienvenidaChat();
           await this.procesarUrlInicial();
@@ -11768,8 +11933,14 @@ def dashboard_html(response: Response):
           if (sec === 'clases' && (!this.todasLasClases || !this.todasLasClases.length)) {
             this.cargarVideoclases();
           }
-          if (sec === 'flashcards' && (!this.flashcards || !this.flashcards.length)) {
-            this.cargarFlashcards();
+          if (sec === 'flashcards') {
+            if (this.flashcardsVencidasActivas) {
+              // Venimos del botón "Repasar ahora": ya hemos cargado solo las vencidas.
+              this.flashcardsVencidasActivas = false;
+            } else {
+              // Entrada normal: cargamos el mazo completo.
+              this.cargarFlashcards();
+            }
           }
           if (sec === 'admin') {
             this.cargarAdminUsuarios();
@@ -14000,6 +14171,7 @@ def dashboard_html(response: Response):
             });
             await this.cargarProgreso();
             await this.cargarCatalogo();
+            await this.cargarPlanHoy();
           } catch(e) {
             console.error(e);
             let aciertos = 0;
@@ -14038,6 +14210,43 @@ def dashboard_html(response: Response):
           }
         },
 
+        async cargarPlanHoy() {
+          // Pide al backend el resumen del entrenador: repasos, temas flojos y recomendación.
+          this.planHoyCargando = true;
+          try {
+            const res = await fetch('/api/plan-hoy?programa=' + encodeURIComponent(this.programaActivoId) + '&_t=' + Date.now());
+            if (res.ok) {
+              this.planHoy = await res.json();
+            }
+          } catch(e) {
+            console.error('No se pudo cargar el plan de hoy:', e);
+          } finally {
+            this.planHoyCargando = false;
+          }
+        },
+
+        async repasarVencidas() {
+          // Carga SOLO las tarjetas vencidas y abre la vista de flashcards en modo estudio.
+          try {
+            const res = await fetch('/api/flashcards/vencidas?programa=' + encodeURIComponent(this.programaActivoId));
+            if (!res.ok) return;
+            const data = await res.json();
+            this.flashcards = data.tarjetas || [];
+            if (!this.flashcards.length) {
+              alert('No tienes tarjetas vencidas ahora mismo. ¡Buen trabajo!');
+              return;
+            }
+            this.flashcardFiltroAsig = '';
+            this.flashcardBusqueda = '';
+            this.flashcardVistaModo = 'estudio';
+            this.reiniciarMazoFlashcards();
+            this.flashcardsVencidasActivas = true;
+            this.irASeccion('flashcards');
+          } catch(e) {
+            console.error('No se pudieron cargar las tarjetas vencidas:', e);
+          }
+        },
+
         async cargarFlashcards() {
           try {
             const res = await fetch('/api/flashcards?programa=' + encodeURIComponent(this.programaActivoId));
@@ -14067,6 +14276,8 @@ def dashboard_html(response: Response):
             this.flashcardVolteada = false;
           } else {
             this.flashcardSesionCompletada = true;
+            // Al terminar la sesión, refrescamos el plan para que las vencidas bajen.
+            this.cargarPlanHoy();
           }
         },
 

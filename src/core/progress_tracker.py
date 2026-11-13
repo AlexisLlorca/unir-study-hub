@@ -166,6 +166,77 @@ class GestorProgreso:
             "estado": "🟢 Dominado" if media >= 8.0 else ("🟡 Aprobado" if media >= 5.0 else "🔴 Repasar"),
         }
 
+    def obtener_temas_debiles(self, limite: int = 5) -> List[Dict[str, Any]]:
+        """
+        Devuelve los temas que más conviene reforzar, combinando dos señales:
+        - la última nota del test (por debajo de 6.5)
+        - el número de preguntas falladas pendientes en el banco de fallos
+
+        Así el entrenador no solo mira "qué suspendiste", sino también dónde repites errores.
+        """
+        datos = self._cargar()
+        calificaciones = datos.get("ultimas_calificaciones", {}) or {}
+        fallos = datos.get("preguntas_falladas", []) or []
+
+        # 1. Partimos de los temas que ya tienen una nota registrada.
+        mapa: Dict[tuple, Dict[str, Any]] = {}
+        for clave, info in calificaciones.items():
+            if not isinstance(info, dict) or "::" not in str(clave):
+                continue
+            asignatura, tema = str(clave).split("::", 1)
+            try:
+                nota = float(info.get("nota", 0) or 0)
+            except (TypeError, ValueError):
+                nota = 0.0
+            mapa[(asignatura, tema)] = {
+                "asignatura": asignatura,
+                "tema": tema,
+                "nota": round(nota, 2),
+                "fecha": info.get("fecha", ""),
+                "fallos": 0,
+            }
+
+        # 2. Sumamos las preguntas falladas que siguen pendientes.
+        for fallo in fallos:
+            if not isinstance(fallo, dict):
+                continue
+            asignatura = str(fallo.get("asignatura") or "").strip()
+            tema = str(fallo.get("tema") or "").strip()
+            if not asignatura or not tema:
+                continue
+            clave = (asignatura, tema)
+            if clave not in mapa:
+                mapa[clave] = {
+                    "asignatura": asignatura,
+                    "tema": tema,
+                    "nota": None,
+                    "fecha": "",
+                    "fallos": 0,
+                }
+            mapa[clave]["fallos"] += 1
+
+        # 3. Filtramos lo que realmente merece atención.
+        debiles: List[Dict[str, Any]] = []
+        for item in mapa.values():
+            nota = item["nota"]
+            if (nota is not None and nota < 6.5) or item["fallos"] >= 2:
+                if nota is None:
+                    item["estado"] = "Reforzar"
+                elif nota < 5:
+                    item["estado"] = "Repasar"
+                else:
+                    item["estado"] = "Reforzar"
+                debiles.append(item)
+
+        # 4. Primero las notas más bajas; a igualdad, más fallos acumulados.
+        debiles.sort(
+            key=lambda x: (
+                x["nota"] if x["nota"] is not None else 5.0,
+                -x["fallos"],
+            )
+        )
+        return debiles[:limite]
+
     def mostrar_dashboard_progreso(self):
         """Muestra en terminal una vista analítica del expediente académico."""
         datos = self._cargar()

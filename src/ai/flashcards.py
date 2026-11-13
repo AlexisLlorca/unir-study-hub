@@ -6,6 +6,7 @@ calificación de dificultad y generación automática mediante IA.
 
 import json
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -15,6 +16,36 @@ from src.ai.tutor import TutorIA
 FLASHCARDS_DIR = PROCESADO_DIR / "flashcards"
 FLASHCARDS_DATA_FILE = FLASHCARDS_DIR / "mazos.json"
 _FLASHCARDS_LOCK = threading.Lock()
+
+# --- Motor de repetición espaciada (SM-2 simplificado) ---------------------
+# Cada tarjeta guarda: facilidad, repeticiones, intervalo_dias y proximo_repaso.
+# La calidad se puntúa de 1 a 5: 1 = difícil, 3 = regular, 5 = fácil.
+_CALIDAD_POR_DIFICULTAD = {"dificil": 1, "medio": 3, "facil": 5}
+_INTERVALO_MAXIMO_DIAS = 180
+
+
+def _ahora_utc() -> datetime:
+    """Devuelve la hora actual en UTC (con zona horaria) para comparar fechas sin líos."""
+    return datetime.now(timezone.utc)
+
+
+def _iso_utc(momento: datetime) -> str:
+    """Convierte un datetime a texto ISO 8601, que es fácil de guardar en JSON."""
+    return momento.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _parsear_fecha(valor: Any) -> Optional[datetime]:
+    """Convierte el texto guardado en la tarjeta a datetime. Si no se puede, devuelve None."""
+    if not valor:
+        return None
+    try:
+        fecha = datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+        if fecha.tzinfo is None:
+            # Las fechas antiguas no tenían zona horaria: las tratamos como UTC.
+            fecha = fecha.replace(tzinfo=timezone.utc)
+        return fecha.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
 
 
 # Barajas iniciales con conceptos clave de alta frecuencia de examen
@@ -109,14 +140,46 @@ class GestorFlashcards:
         with _FLASHCARDS_LOCK:
             self.mazos = self._cargar_o_inicializar()
 
+    def _normalizar_tarjeta(self, tarjeta: Dict[str, Any]) -> bool:
+        """Añade los campos de repetición espaciada a tarjetas antiguas. Devuelve True si cambió algo."""
+        cambiada = False
+        valores_por_defecto = {
+            "facilidad": 2.5,
+            "repeticiones": 0,
+            "intervalo_dias": 0,
+            "proximo_repaso": _iso_utc(_ahora_utc()),
+            "ultima_revision": None,
+        }
+        for campo, valor in valores_por_defecto.items():
+            if campo not in tarjeta:
+                tarjeta[campo] = valor
+                cambiada = True
+        return cambiada
+
+    def _normalizar_mazos(self, mazos: Dict[str, List[Dict[str, Any]]]) -> bool:
+        """Normaliza todas las tarjetas de todos los mazos."""
+        cambiado = False
+        for tarjetas in mazos.values():
+            if not isinstance(tarjetas, list):
+                continue
+            for tarjeta in tarjetas:
+                if isinstance(tarjeta, dict) and self._normalizar_tarjeta(tarjeta):
+                    cambiado = True
+        return cambiado
+
     def _cargar_o_inicializar(self) -> Dict[str, List[Dict[str, Any]]]:
         import copy
         if self.archivo_datos.exists():
             try:
-                return json.loads(self.archivo_datos.read_text(encoding="utf-8"))
+                mazos = json.loads(self.archivo_datos.read_text(encoding="utf-8"))
+                # Migración transparente: las tarjetas antiguas pasan a tener SRS.
+                if self._normalizar_mazos(mazos):
+                    self._guardar(mazos)
+                return mazos
             except Exception:
                 pass
         inicial = copy.deepcopy(MAZOS_PREDETERMINADOS)
+        self._normalizar_mazos(inicial)
         self._guardar(inicial)
         return inicial
 
@@ -134,21 +197,111 @@ class GestorFlashcards:
             tarjetas = [t for t in tarjetas if t.get("asignatura") == asignatura]
         return tarjetas
 
-    def calificar_tarjeta(self, programa_id: str, tarjeta_id: str, dificultad: str) -> Dict[str, Any]:
+    def revisar_tarjeta(self, programa_id: str, tarjeta_id: str, dificultad: str) -> Dict[str, Any]:
         """
-        Registra la calificación del usuario:
-        - facil: aprendida (+10 puntos)
-        - medio: en repaso (+5 puntos)
-        - dificil: requiere refuerzo (0 puntos, repetir hoy)
+        Aplica el algoritmo SM-2 simplificado y calcula cuándo hay que volver a ver la tarjeta.
+
+        - dificil: la tarjeta vuelve en 10 minutos y se reinicia la racha.
+        - medio:   primer repaso al día siguiente, luego a los 6 días.
+        - facil:   los intervalos crecen multiplicando por la facilidad de la tarjeta.
         """
+        calidad = _CALIDAD_POR_DIFICULTAD.get((dificultad or "").strip().lower(), 3)
+        ahora = _ahora_utc()
+
         with _FLASHCARDS_LOCK:
             for t in self.mazos.get(programa_id, []):
-                if t["id"] == tarjeta_id:
-                    t["estado"] = dificultad
-                    t["repasos"] = t.get("repasos", 0) + 1
-                    self._guardar(self.mazos)
-                    return t
+                if t.get("id") != tarjeta_id:
+                    continue
+
+                self._normalizar_tarjeta(t)
+                facilidad = float(t.get("facilidad", 2.5))
+                repeticiones = int(t.get("repeticiones", 0))
+                intervalo = int(t.get("intervalo_dias", 0))
+
+                if calidad < 3:
+                    # Fallo: se reinicia la racha y se repite pronto (10 minutos).
+                    repeticiones = 0
+                    intervalo = 0
+                    proximo = ahora + timedelta(minutes=10)
+                    t["estado"] = "dificil"
+                else:
+                    repeticiones += 1
+                    if repeticiones == 1:
+                        intervalo = 1
+                    elif repeticiones == 2:
+                        intervalo = 6
+                    else:
+                        intervalo = max(1, round(intervalo * facilidad))
+                    intervalo = min(intervalo, _INTERVALO_MAXIMO_DIAS)
+                    proximo = ahora + timedelta(days=intervalo)
+                    t["estado"] = "facil" if intervalo >= 21 else "medio"
+
+                # Fórmula clásica de SM-2 para ajustar la facilidad de la tarjeta.
+                facilidad = max(
+                    1.3,
+                    facilidad + (0.1 - (5 - calidad) * (0.08 + (5 - calidad) * 0.02)),
+                )
+
+                t["facilidad"] = round(facilidad, 2)
+                t["repeticiones"] = repeticiones
+                t["intervalo_dias"] = intervalo
+                t["proximo_repaso"] = _iso_utc(proximo)
+                t["ultima_revision"] = _iso_utc(ahora)
+                t["ultima_dificultad"] = dificultad
+                t["repasos"] = int(t.get("repasos", 0)) + 1
+
+                self._guardar(self.mazos)
+                return dict(t)
         return {}
+
+    def calificar_tarjeta(self, programa_id: str, tarjeta_id: str, dificultad: str) -> Dict[str, Any]:
+        """Se mantiene el nombre antiguo para no romper el frontend; ahora delega en el motor SRS."""
+        return self.revisar_tarjeta(programa_id, tarjeta_id, dificultad)
+
+    def tarjetas_vencidas(self, programa_id: str = "dam", limite: int = 50) -> List[Dict[str, Any]]:
+        """Devuelve las tarjetas cuyo próximo repaso ya ha llegado (incluye las nuevas)."""
+        ahora = _ahora_utc()
+        vencidas = []
+        for t in self.mazos.get(programa_id, []):
+            if not isinstance(t, dict):
+                continue
+            proximo = _parsear_fecha(t.get("proximo_repaso")) or ahora
+            if proximo <= ahora:
+                vencidas.append(t)
+
+        vencidas.sort(key=lambda t: _parsear_fecha(t.get("proximo_repaso")) or ahora)
+        return vencidas[:limite]
+
+    def estadisticas(self, programa_id: str = "dam") -> Dict[str, int]:
+        """Resumen para el entrenador: vencidas, nuevas, dominadas y repasos de los próximos 7 días."""
+        tarjetas = [t for t in self.mazos.get(programa_id, []) if isinstance(t, dict)]
+        ahora = _ahora_utc()
+        dentro_de_7_dias = ahora + timedelta(days=7)
+
+        vencidas = 0
+        nuevas = 0
+        dominadas = 0
+        proximas_7_dias = 0
+
+        for t in tarjetas:
+            self._normalizar_tarjeta(t)
+            proximo = _parsear_fecha(t.get("proximo_repaso")) or ahora
+            if not t.get("ultima_revision"):
+                nuevas += 1
+            if proximo <= ahora:
+                vencidas += 1
+            elif proximo <= dentro_de_7_dias:
+                proximas_7_dias += 1
+            if int(t.get("intervalo_dias", 0)) >= 21:
+                dominadas += 1
+
+        return {
+            "total": len(tarjetas),
+            "vencidas": vencidas,
+            "nuevas": nuevas,
+            "dominadas": dominadas,
+            "proximas_7_dias": proximas_7_dias,
+        }
 
     def generar_flashcards_con_ia(
         self,
@@ -204,7 +357,13 @@ class GestorFlashcards:
                             "reverso": n.get("reverso", ""),
                             "nivel": n.get("nivel", "intermedio"),
                             "estado": "nuevo",
-                            "repasos": 0
+                            "repasos": 0,
+                            # Campos de repetición espaciada: una tarjeta nueva vence ahora mismo.
+                            "facilidad": 2.5,
+                            "repeticiones": 0,
+                            "intervalo_dias": 0,
+                            "proximo_repaso": _iso_utc(_ahora_utc()),
+                            "ultima_revision": None,
                         }
                         creadas.append(item)
                     with _FLASHCARDS_LOCK:

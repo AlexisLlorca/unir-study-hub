@@ -5,6 +5,7 @@ requests>=2.31.0
 
 # 2. Extracción y análisis de texto de PDFs de la UNIR
 pypdf>=5.0.0
+pymupdf>=1.24.0
 
 # 3. Descarga y extracción de audio/vídeo de clases grabadas (Kaltura, Panopto, etc.)
 yt-dlp>=2025.1.0
