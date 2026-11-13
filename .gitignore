@@ -11,6 +11,8 @@ auth/*.json
 *.env
 .env
 .env.*
+# La plantilla sin valores sí se comparte
+!.env.example
 secrets/
 *.db
 *.db-journal
