@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from src.core.config import DATA_DIR
+from src.core.config import DATA_DIR, console
 
 DB_PATH = DATA_DIR / "usuarios.db"
 USERS_JSON_PATH = DATA_DIR / "usuarios.json"
@@ -202,24 +202,30 @@ def inicializar_bd_usuarios() -> None:
             cursor.execute("ALTER TABLE usuarios ADD COLUMN groq_api_key TEXT DEFAULT '';")
             conn.commit()
 
-        # 1. Asegurar la cuenta de Administrador de Alex
+        # 1. Asegurar la cuenta de administrador.
+        # La contraseña NUNCA se escribe en el código: se toma de HUB_ADMIN_PASSWORD.
         admin_user = (os.getenv("HUB_ADMIN_USER", "").strip() or "alexking44").lower()
         admin_pass = os.getenv("HUB_ADMIN_PASSWORD", "").strip()
 
-        cursor.execute("SELECT id FROM usuarios WHERE username = ?", (admin_user,))
+        cursor.execute(
+            "SELECT id, salt, password_hash FROM usuarios WHERE username = ?",
+            (admin_user,),
+        )
         admin_row = cursor.fetchone()
-
-        if admin_pass:
-            salt = secrets.token_hex(16)
-            pwd_hash = _hash_password(admin_pass, salt)
-        else:
-            # Hash PBKDF2 (100k rondas) pre-calculado para la contraseña de Alex
-            salt = "e3d8add91ebc0010997072d78f9eebea"
-            pwd_hash = "675c9e3c83356d924d6325023d02622850acf971ba7b22e2f8b52452990df4e9"
-
         ahora = time.strftime("%Y-%m-%d %H:%M:%S")
 
         if not admin_row:
+            # Primera vez: si no hay contraseña configurada, generamos una aleatoria
+            # y la mostramos una sola vez en el log para poder entrar.
+            if not admin_pass:
+                admin_pass = secrets.token_urlsafe(18)
+                console.print(
+                    "\n[bold yellow]⚠ Contraseña de administrador generada:[/bold yellow] "
+                    f"[bold]{admin_pass}[/bold]\n"
+                    "Guárdala y define HUB_ADMIN_PASSWORD en .env para fijarla.\n"
+                )
+            salt = secrets.token_hex(16)
+            pwd_hash = _hash_password(admin_pass, salt)
             cursor.execute(
                 """
                 INSERT INTO usuarios (username, nombre, password_hash, salt, rol, activo, creado_en)
@@ -228,15 +234,21 @@ def inicializar_bd_usuarios() -> None:
                 (admin_user, "Alex (Administrador)", pwd_hash, salt, ahora),
             )
         else:
-            # Asegurar siempre permisos de admin y credenciales activas
+            # La cuenta ya existe: solo aseguramos rol y estado, sin pisar su contraseña.
             cursor.execute(
-                """
-                UPDATE usuarios 
-                SET rol = 'admin', activo = 1, password_hash = ?, salt = ? 
-                WHERE username = ?
-                """,
-                (pwd_hash, salt, admin_user),
+                "UPDATE usuarios SET rol = 'admin', activo = 1 WHERE username = ?",
+                (admin_user,),
             )
+            # Si hay contraseña configurada y no coincide con la guardada, la actualizamos.
+            if admin_pass and not verificar_password(
+                admin_pass, admin_row["salt"], admin_row["password_hash"]
+            ):
+                salt = secrets.token_hex(16)
+                pwd_hash = _hash_password(admin_pass, salt)
+                cursor.execute(
+                    "UPDATE usuarios SET password_hash = ?, salt = ? WHERE username = ?",
+                    (pwd_hash, salt, admin_user),
+                )
 
         # 2. Degradar cualquier otra cuenta que se haya puesto como admin por error
         cursor.execute(
@@ -386,20 +398,9 @@ def autenticar_usuario(username: str, password: str) -> Tuple[Optional[dict], st
     if not username or not password:
         return None, "Introduce usuario y contraseña."
 
-    # Soporte para token maestro directo como llave maestra
-    master_token = os.getenv("HUB_ACCESS_TOKEN", "").strip()
-    admin_user = os.getenv("HUB_ADMIN_USER", "").strip().lower()
-    if admin_user and username == admin_user and master_token and hmac.compare_digest(password, master_token):
-        return {
-            "id": 1,
-            "username": admin_user,
-            "nombre": "Administrador",
-            "rol": "admin",
-            "activo": 1,
-            "gemini_api_key": "",
-            "openrouter_api_key": "",
-            "groq_api_key": "",
-        }, "ok"
+    # El token de acceso a la red (HUB_ACCESS_TOKEN) NO sirve como contraseña.
+    # Son dos cosas distintas: el token abre la puerta de la red, la contraseña
+    # identifica al usuario. Mezclarlas convertía el token en una llave maestra.
 
     with _obtener_conexion() as conn:
         cursor = conn.cursor()

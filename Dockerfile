@@ -8,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
-    fastapi uvicorn pydantic python-dotenv rich pypdf \
+    fastapi uvicorn pydantic python-dotenv rich pypdf pymupdf \
     google-genai requests beautifulsoup4 huggingface_hub edge-tts
 
 # Copiar código y carpeta data/ con permisos para UID 1000

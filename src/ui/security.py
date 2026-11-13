@@ -174,12 +174,33 @@ def _aplicar_cabeceras_seguridad(response: Response) -> Response:
     return response
 
 
+def _proxies_confiables() -> set:
+    """
+    IPs desde las que sí aceptamos la cabecera X-Forwarded-For.
+    Por defecto solo loopback; en la nube se configura con HUB_TRUSTED_PROXIES
+    (lista separada por comas con las IPs de los proxies de la plataforma).
+    """
+    proxies = {"127.0.0.1", "::1", "localhost"}
+    extra = os.getenv("HUB_TRUSTED_PROXIES", "")
+    for p in extra.split(","):
+        if p.strip():
+            proxies.add(p.strip())
+    return proxies
+
+
 def _obtener_ip_cliente(request: Request) -> str:
-    """Extrae la IP real del cliente teniendo en cuenta proxies/Render (X-Forwarded-For)."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "desconocida"
+    """
+    Extrae la IP del cliente para el control anti-fuerza bruta.
+    X-Forwarded-For solo se acepta si la petición llega de un proxy de confianza;
+    si no, cualquiera podría falsificarla y saltarse el bloqueo por IP.
+    """
+    cliente = request.client.host if request.client else "desconocida"
+    if cliente in _proxies_confiables():
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            # El proxy añade la IP del cliente al final de la cadena; la usamos.
+            return xff.split(",")[-1].strip() or cliente
+    return cliente
 
 
 def _esta_ip_bloqueada(ip: str) -> Tuple[bool, int]:
@@ -627,7 +648,7 @@ class AccesoSeguroMiddleware(BaseHTTPMiddleware):
                     max_age=60 * 60 * 24 * 365,
                     httponly=True,
                     secure=es_https,
-                    samesite="none" if es_https else "lax",
+                    samesite="lax",
                 )
                 return _aplicar_cabeceras_seguridad(resp)
             else:
