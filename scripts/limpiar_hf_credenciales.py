@@ -18,7 +18,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from src.core.cloud_sync import (  # noqa: E402
-    BUNDLE_FILENAME,
     _avisar_si_repo_publico,
     _es_ruta_sensible,
     crear_y_subir_bundle_rapido,
@@ -61,9 +60,6 @@ def main() -> int:
         return 1
 
     a_borrar = sorted({rf for rf in remotos if _es_ruta_sensible(rf)})
-    if BUNDLE_FILENAME in remotos:
-        # El bundle antiguo puede contener canvas_config.json; se reconstruye limpio.
-        a_borrar.append(BUNDLE_FILENAME)
 
     if not a_borrar:
         print(f"✔ No hay archivos sensibles en {repo_id}.")
