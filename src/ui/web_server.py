@@ -40,6 +40,7 @@ from src.core.config import (
     EJERCICIOS_DIR,
     PROCESADO_DIR,
     RESUMENES_CLASES_DIR,
+    enmascarar_clave,
 )
 from src.core.academic_structure import (
     PROGRAMAS,
@@ -245,7 +246,24 @@ def _obtener_user_key_o_exigir(request: Request, key_override: Optional[str] = N
     return user_key
 
 
-# --- API ENDPOINTS ---
+def _usuario_publico(usuario: dict) -> dict:
+    """
+    Copia del perfil de usuario SIN las claves de API reales.
+    El navegador nunca necesita las claves: el servidor las usa directamente.
+    Se devuelven enmascaradas (para pintar un indicador) y un indicador booleano.
+    """
+    if not isinstance(usuario, dict):
+        return usuario
+    publico = dict(usuario)
+    for campo in ("gemini_api_key", "openrouter_api_key", "groq_api_key"):
+        valor = (usuario.get(campo) or "").strip()
+        publico[campo] = enmascarar_clave(valor)
+    publico["claves_configuradas"] = {
+        "gemini": bool((usuario.get("gemini_api_key") or "").strip()),
+        "openrouter": bool((usuario.get("openrouter_api_key") or "").strip()),
+        "groq": bool((usuario.get("groq_api_key") or "").strip()),
+    }
+    return publico
 
 @app.api_route("/ping", methods=["GET", "HEAD"])
 @app.api_route("/health", methods=["GET", "HEAD"])
@@ -280,7 +298,8 @@ def api_auth_login(req: LoginRequest, request: Request, response: Response):
         secure=es_https,
         samesite="lax",
     )
-    return {"status": "ok", "usuario": usuario}
+    # Nunca devolvemos las claves de API reales al navegador.
+    return {"status": "ok", "usuario": _usuario_publico(usuario)}
 
 
 @app.post("/api/auth/registro")
@@ -330,6 +349,7 @@ def api_usuario_actual(request: Request):
     u = getattr(request.state, "usuario", None)
     if not u:
         return {"autenticado": False, "es_admin": False}
+    publico = _usuario_publico(u)
     return {
         "autenticado": True,
         "id": u.get("id"),
@@ -338,9 +358,10 @@ def api_usuario_actual(request: Request):
         "rol": u.get("rol"),
         "activo": u.get("activo"),
         "es_admin": u.get("rol") == "admin",
-        "gemini_api_key": u.get("gemini_api_key", ""),
-        "openrouter_api_key": u.get("openrouter_api_key", ""),
-        "groq_api_key": u.get("groq_api_key", ""),
+        "claves_configuradas": publico["claves_configuradas"],
+        "gemini_api_key": publico["gemini_api_key"],
+        "openrouter_api_key": publico["openrouter_api_key"],
+        "groq_api_key": publico["groq_api_key"],
     }
 
 
@@ -2707,7 +2728,7 @@ def api_modelos_ia():
 
 @app.get("/api/proveedores-ia")
 def api_obtener_proveedores_ia(request: Request):
-    """Devuelve las claves actuales guardadas (para pre-rellenar la interfaz y evitar que se pierdan) y su estado."""
+    """Devuelve el estado de las claves guardadas, enmascaradas (nunca la clave real)."""
     from src.core.config import get_openrouter_api_key, get_groq_api_key, get_gemini_api_key
     u = getattr(request.state, "usuario", None) or {}
 
@@ -2716,9 +2737,9 @@ def api_obtener_proveedores_ia(request: Request):
     groq_k = (u.get("groq_api_key") or "").strip() or get_groq_api_key()
 
     return {
-        "gemini_key": gemini_k,
-        "openrouter_key": openrouter_k,
-        "groq_key": groq_k,
+        "gemini_key": enmascarar_clave(gemini_k),
+        "openrouter_key": enmascarar_clave(openrouter_k),
+        "groq_key": enmascarar_clave(groq_k),
         "configurados": {
             "gemini": bool(gemini_k),
             "openrouter": bool(openrouter_k),
@@ -2732,23 +2753,34 @@ def api_configurar_proveedores_ia(req: ConfigurarProveedoresReq, request: Reques
     """Guarda claves gratuitas adicionales (OpenRouter / Groq / Gemini) en .env Y en el perfil de SQLite del usuario."""
     from src.core.config import save_openrouter_api_key, save_groq_api_key, save_gemini_api_key
     from src.core.auth import actualizar_api_key_usuario
+
+    def _clave_para_guardar(valor: Optional[str]) -> Optional[str]:
+        """'' borra la clave; None o un valor enmascarado significa 'sin cambio'."""
+        if valor is None:
+            return None
+        val = valor.strip()
+        # Nunca guardamos de vuelta una clave enmascarada (podría pisar la real).
+        if "..." in val or "•" in val:
+            return None
+        return val
+
     u = getattr(request.state, "usuario", None) or {}
     username = u.get("username")
 
-    if req.openrouter_key is not None:
-        val = req.openrouter_key.strip()
+    val = _clave_para_guardar(req.openrouter_key)
+    if val is not None:
         save_openrouter_api_key(val)
         if username:
             actualizar_api_key_usuario(username, val, proveedor="openrouter")
 
-    if req.groq_key is not None:
-        val = req.groq_key.strip()
+    val = _clave_para_guardar(req.groq_key)
+    if val is not None:
         save_groq_api_key(val)
         if username:
             actualizar_api_key_usuario(username, val, proveedor="groq")
 
-    if req.gemini_key is not None:
-        val = req.gemini_key.strip()
+    val = _clave_para_guardar(req.gemini_key)
+    if val is not None:
         save_gemini_api_key(val)
         if username:
             actualizar_api_key_usuario(username, val, proveedor="gemini")
@@ -8410,15 +8442,15 @@ def dashboard_html(response: Response):
 
       <!-- CUERPO CON SCROLL -->
       <div class="mt-4 space-y-4 overflow-y-auto pr-1">
-        <!-- BANNER DE TRIPLE PERSISTENCIA -->
+        <!-- BANNER DE PERSISTENCIA SEGURA -->
         <div class="p-3 bg-cyan-950/40 border border-cyan-500/20 rounded-2xl text-[11px] text-gray-300 space-y-1">
           <div class="flex items-center text-cyan-400 font-semibold gap-1.5">
             <i class="fa-solid fa-shield-halved"></i>
-            <span>Triple Redundancia Permanente</span>
+            <span>Claves guardadas solo en el servidor</span>
           </div>
           <p class="text-gray-400 leading-relaxed">
-            Tus claves se guardan en tu navegador (<code class="text-cyan-300">localStorage</code>), en tu cuenta de usuario y en el servidor local (<code class="text-cyan-300">.env</code>). 
-            Permanecerán guardadas ante cualquier actualización de código, reinicio o cambio de ventana.
+            Tus claves se guardan en tu cuenta de usuario y en el servidor (<code class="text-cyan-300">.env</code>).
+            El navegador nunca las guarda ni las vuelve a ver: solo comprueba si están configuradas.
           </p>
         </div>
 
@@ -8431,8 +8463,8 @@ def dashboard_html(response: Response):
               <span class="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded font-mono">Oficial</span>
             </div>
             <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  :class="inputApiKeyTemp.trim() ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
-                  x-text="inputApiKeyTemp.trim() ? '✓ Configurada' : 'Sin configurar'"></span>
+                  :class="(userGeminiKey || inputApiKeyTemp.trim()) ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
+                  x-text="inputApiKeyTemp.trim() ? '✓ Nueva' : (userGeminiKey ? '✓ Configurada' : 'Sin configurar')"></span>
           </div>
           <p class="text-[11px] text-gray-400">
             Permite usar Gemini 3.5 Flash, Gemini Flash Lite y modelos oficiales de Google con cuota gratuita.
@@ -8440,7 +8472,7 @@ def dashboard_html(response: Response):
           <div class="relative">
             <input :type="mostrarKeyGemini ? 'text' : 'password'"
                    x-model="inputApiKeyTemp"
-                   placeholder="AIzaSy..."
+                   :placeholder="userGeminiKey ? '•••• Guardada — escribe solo si quieres cambiarla' : 'AIzaSy...'"
                    class="w-full bg-gray-900 border border-gray-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-cyan-300 outline-none focus:border-cyan-500 font-mono transition">
             <button type="button" 
                     @click="mostrarKeyGemini = !mostrarKeyGemini"
@@ -8466,8 +8498,8 @@ def dashboard_html(response: Response):
               <span class="text-[10px] text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded font-mono">Gratis</span>
             </div>
             <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  :class="inputOpenrouterTemp.trim() ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
-                  x-text="inputOpenrouterTemp.trim() ? '✓ Configurada' : 'Opcional'"></span>
+                  :class="(userOpenrouterKey || inputOpenrouterTemp.trim()) ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
+                  x-text="inputOpenrouterTemp.trim() ? '✓ Nueva' : (userOpenrouterKey ? '✓ Configurada' : 'Opcional')"></span>
           </div>
           <p class="text-[11px] text-gray-400">
             Habilita DeepSeek V3 Free, Qwen 3 235B Free, Llama 3.3 70B Free y Mistral Small sin coste.
@@ -8475,7 +8507,7 @@ def dashboard_html(response: Response):
           <div class="relative">
             <input :type="mostrarKeyOpenrouter ? 'text' : 'password'"
                    x-model="inputOpenrouterTemp"
-                   placeholder="sk-or-v1-..."
+                   :placeholder="userOpenrouterKey ? '•••• Guardada — escribe solo si quieres cambiarla' : 'sk-or-v1-...'"
                    class="w-full bg-gray-900 border border-gray-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-purple-300 outline-none focus:border-purple-500 font-mono transition">
             <button type="button" 
                     @click="mostrarKeyOpenrouter = !mostrarKeyOpenrouter"
@@ -8501,8 +8533,8 @@ def dashboard_html(response: Response):
               <span class="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded font-mono">Ultra-rápido</span>
             </div>
             <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  :class="inputGroqTemp.trim() ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
-                  x-text="inputGroqTemp.trim() ? '✓ Configurada' : 'Opcional'"></span>
+                  :class="(userGroqKey || inputGroqTemp.trim()) ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'"
+                  x-text="inputGroqTemp.trim() ? '✓ Nueva' : (userGroqKey ? '✓ Configurada' : 'Opcional')"></span>
           </div>
           <p class="text-[11px] text-gray-400">
             Habilita Llama 3.3 70B y DeepSeek R1 Distill 70B a una velocidad extrema de ~300 tokens/segundo.
@@ -8510,7 +8542,7 @@ def dashboard_html(response: Response):
           <div class="relative">
             <input :type="mostrarKeyGroq ? 'text' : 'password'"
                    x-model="inputGroqTemp"
-                   placeholder="gsk_..."
+                   :placeholder="userGroqKey ? '•••• Guardada — escribe solo si quieres cambiarla' : 'gsk_...'"
                    class="w-full bg-gray-900 border border-gray-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-amber-300 outline-none focus:border-amber-500 font-mono transition">
             <button type="button" 
                     @click="mostrarKeyGroq = !mostrarKeyGroq"
@@ -9455,7 +9487,10 @@ def dashboard_html(response: Response):
         modelosIaDisponibles: [],
 
         // BYOK (Bring Your Own Key) y Proveedores de IA con Triple Redundancia
-        userGeminiKey: localStorage.getItem('unir_user_gemini_key') || '',
+        // Flags de "clave configurada": el navegador nunca guarda ni ve la clave real.
+        userGeminiKey: false,
+        userOpenrouterKey: false,
+        userGroqKey: false,
         userOpenrouterKey: localStorage.getItem('unir_openrouter_key') || '',
         userGroqKey: localStorage.getItem('unir_groq_key') || '',
         modalApiKey: false,
@@ -9672,9 +9707,6 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {}),
-                ...(this.userOpenrouterKey ? { 'X-User-Openrouter-Key': this.userOpenrouterKey } : {}),
-                ...(this.userGroqKey ? { 'X-User-Groq-Key': this.userGroqKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig,
@@ -9682,7 +9714,6 @@ def dashboard_html(response: Response):
                 tema_titulo: temaTitulo,
                 dificultad: this.generadorIaDificultad || 'examen',
                 enfoque: this.generadorIaEnfoque || '',
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -11718,38 +11749,23 @@ def dashboard_html(response: Response):
         },
 
         async abrirModalApiKey() {
-          this.inputApiKeyTemp = this.userGeminiKey || localStorage.getItem('unir_user_gemini_key') || '';
-          this.inputOpenrouterTemp = this.userOpenrouterKey || localStorage.getItem('unir_openrouter_key') || '';
-          this.inputGroqTemp = this.userGroqKey || localStorage.getItem('unir_groq_key') || '';
+          // Los inputs arrancan vacíos: el servidor nunca devuelve la clave real.
+          this.inputApiKeyTemp = '';
+          this.inputOpenrouterTemp = '';
+          this.inputGroqTemp = '';
           this.apiKeyMensajeError = '';
           this.apiKeyMensajeExito = '';
           this.modalApiKey = true;
 
-          // Obtener las claves persistidas en el servidor (.env / SQLite) para pre-rellenar siempre
+          // Solo necesitamos saber QUÉ claves están configuradas, no cuáles son.
           try {
             const res = await fetch('/api/proveedores-ia');
             if (res.ok) {
               const data = await res.json();
-              if (data.gemini_key && !this.inputApiKeyTemp) {
-                this.inputApiKeyTemp = data.gemini_key;
-              }
-              if (data.openrouter_key && !this.inputOpenrouterTemp) {
-                this.inputOpenrouterTemp = data.openrouter_key;
-              }
-              if (data.groq_key && !this.inputGroqTemp) {
-                this.inputGroqTemp = data.groq_key;
-              }
-              if (data.gemini_key) {
-                this.userGeminiKey = data.gemini_key;
-                try { localStorage.setItem('unir_user_gemini_key', data.gemini_key); } catch(e) {}
-              }
-              if (data.openrouter_key) {
-                this.userOpenrouterKey = data.openrouter_key;
-                try { localStorage.setItem('unir_openrouter_key', data.openrouter_key); } catch(e) {}
-              }
-              if (data.groq_key) {
-                this.userGroqKey = data.groq_key;
-                try { localStorage.setItem('unir_groq_key', data.groq_key); } catch(e) {}
+              if (data.configurados) {
+                this.userGeminiKey = !!data.configurados.gemini;
+                this.userOpenrouterKey = !!data.configurados.openrouter;
+                this.userGroqKey = !!data.configurados.groq;
               }
             }
           } catch(e) {
@@ -11767,8 +11783,8 @@ def dashboard_html(response: Response):
           this.apiKeyMensajeExito = '';
 
           try {
-            // Si introdujo una clave de Gemini nueva, validarla
-            if (geminiLimpia && geminiLimpia !== this.userGeminiKey) {
+            // Si introdujo una clave de Gemini nueva, validarla antes de guardarla
+            if (geminiLimpia) {
               const resVal = await fetch('/api/validar-gemini-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -11782,14 +11798,15 @@ def dashboard_html(response: Response):
               }
             }
 
-            // Guardar en el servidor (.env + SQLite de usuario)
+            // null = "no tocar"; una cadena vacía explícita = "borrar".
+            // El servidor guarda la clave y la usa directamente: nunca vuelve al navegador.
             const res = await fetch('/api/proveedores-ia', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                gemini_key: geminiLimpia,
-                openrouter_key: openrouterLimpia,
-                groq_key: groqLimpia
+                gemini_key: geminiLimpia || null,
+                openrouter_key: openrouterLimpia || null,
+                groq_key: groqLimpia || null
               })
             });
 
@@ -11800,21 +11817,21 @@ def dashboard_html(response: Response):
               }
             }
 
-            // Actualizar estado local y localStorage para triple redundancia
-            this.userGeminiKey = geminiLimpia;
-            this.userOpenrouterKey = openrouterLimpia;
-            this.userGroqKey = groqLimpia;
+            // Actualizar solo los flags: si no se tocó un campo, se conserva.
+            if (geminiLimpia) this.userGeminiKey = true;
+            if (openrouterLimpia) this.userOpenrouterKey = true;
+            if (groqLimpia) this.userGroqKey = true;
 
+            // Limpieza de restos antiguos: las claves ya no se guardan en el navegador.
             try {
-              if (geminiLimpia) localStorage.setItem('unir_user_gemini_key', geminiLimpia);
-              else localStorage.removeItem('unir_user_gemini_key');
-
-              if (openrouterLimpia) localStorage.setItem('unir_openrouter_key', openrouterLimpia);
-              else localStorage.removeItem('unir_openrouter_key');
-
-              if (groqLimpia) localStorage.setItem('unir_groq_key', groqLimpia);
-              else localStorage.removeItem('unir_groq_key');
+              localStorage.removeItem('unir_user_gemini_key');
+              localStorage.removeItem('unir_openrouter_key');
+              localStorage.removeItem('unir_groq_key');
             } catch(e) {}
+
+            this.inputApiKeyTemp = '';
+            this.inputOpenrouterTemp = '';
+            this.inputGroqTemp = '';
 
             this.apiKeyMensajeExito = '¡Claves guardadas y activadas con éxito!';
             setTimeout(() => {
@@ -11831,9 +11848,9 @@ def dashboard_html(response: Response):
           if (!confirm('¿Deseas restablecer y eliminar las claves de IA configuradas?')) {
             return;
           }
-          this.userGeminiKey = '';
-          this.userOpenrouterKey = '';
-          this.userGroqKey = '';
+          this.userGeminiKey = false;
+          this.userOpenrouterKey = false;
+          this.userGroqKey = false;
           this.inputApiKeyTemp = '';
           this.inputOpenrouterTemp = '';
           this.inputGroqTemp = '';
@@ -11861,58 +11878,37 @@ def dashboard_html(response: Response):
 
         async sincronizarClavesIa() {
           try {
-            const res = await fetch('/api/proveedores-ia');
-            if (res.ok) {
-              const data = await res.json();
-              let cambioRequerido = false;
-              const payload = {};
+            // Migración de una sola vez: si el navegador aún guarda claves de versiones
+            // anteriores, se suben al servidor y se borran del navegador.
+            const payload = {};
+            const localGemini = localStorage.getItem('unir_user_gemini_key') || '';
+            const localOR = localStorage.getItem('unir_openrouter_key') || '';
+            const localGroq = localStorage.getItem('unir_groq_key') || '';
+            if (localGemini) payload.gemini_key = localGemini;
+            if (localOR) payload.openrouter_key = localOR;
+            if (localGroq) payload.groq_key = localGroq;
 
-              // 1. Gemini
-              const localGemini = localStorage.getItem('unir_user_gemini_key') || '';
-              if (data.gemini_key) {
-                this.userGeminiKey = data.gemini_key;
-                try { localStorage.setItem('unir_user_gemini_key', data.gemini_key); } catch(e) {}
-              } else if (localGemini) {
-                payload.gemini_key = localGemini;
-                this.userGeminiKey = localGemini;
-                cambioRequerido = true;
-              }
-
-              // 2. OpenRouter
-              const localOR = localStorage.getItem('unir_openrouter_key') || '';
-              if (data.openrouter_key) {
-                this.userOpenrouterKey = data.openrouter_key;
-                try { localStorage.setItem('unir_openrouter_key', data.openrouter_key); } catch(e) {}
-              } else if (localOR) {
-                payload.openrouter_key = localOR;
-                this.userOpenrouterKey = localOR;
-                cambioRequerido = true;
-              }
-
-              // 3. Groq
-              const localGroq = localStorage.getItem('unir_groq_key') || '';
-              if (data.groq_key) {
-                this.userGroqKey = data.groq_key;
-                try { localStorage.setItem('unir_groq_key', data.groq_key); } catch(e) {}
-              } else if (localGroq) {
-                payload.groq_key = localGroq;
-                this.userGroqKey = localGroq;
-                cambioRequerido = true;
-              }
-
-              // Si el cliente tenía claves que faltaban en el servidor, sincronizar al servidor
-              if (cambioRequerido) {
-                const resPost = await fetch('/api/proveedores-ia', {
+            if (Object.keys(payload).length) {
+              try {
+                await fetch('/api/proveedores-ia', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(payload)
                 });
-                if (resPost.ok) {
-                  const dataPost = await resPost.json();
-                  if (dataPost && dataPost.modelos) {
-                    this.modelosIaDisponibles = dataPost.modelos;
-                  }
-                }
+              } catch(e) {}
+              localStorage.removeItem('unir_user_gemini_key');
+              localStorage.removeItem('unir_openrouter_key');
+              localStorage.removeItem('unir_groq_key');
+            }
+
+            // Estado actual del servidor: solo flags, nunca la clave real.
+            const res = await fetch('/api/proveedores-ia');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.configurados) {
+                this.userGeminiKey = !!data.configurados.gemini;
+                this.userOpenrouterKey = !!data.configurados.openrouter;
+                this.userGroqKey = !!data.configurados.groq;
               }
             }
           } catch(e) {
@@ -12022,18 +12018,18 @@ def dashboard_html(response: Response):
             const res = await fetch('/api/usuario/actual');
             const data = await res.json();
             this.usuarioActual = data;
-            if (this.usuarioActual?.gemini_api_key) {
-              this.userGeminiKey = this.usuarioActual.gemini_api_key;
-              try { localStorage.setItem('unir_user_gemini_key', this.userGeminiKey); } catch(e) {}
+            // El servidor devuelve solo indicadores, nunca las claves reales.
+            if (data.claves_configuradas) {
+              this.userGeminiKey = !!data.claves_configuradas.gemini;
+              this.userOpenrouterKey = !!data.claves_configuradas.openrouter;
+              this.userGroqKey = !!data.claves_configuradas.groq;
             }
-            if (this.usuarioActual?.openrouter_api_key) {
-              this.userOpenrouterKey = this.usuarioActual.openrouter_api_key;
-              try { localStorage.setItem('unir_openrouter_key', this.userOpenrouterKey); } catch(e) {}
-            }
-            if (this.usuarioActual?.groq_api_key) {
-              this.userGroqKey = this.usuarioActual.groq_api_key;
-              try { localStorage.setItem('unir_groq_key', this.userGroqKey); } catch(e) {}
-            }
+            // Limpieza de restos antiguos de versiones anteriores.
+            try {
+              localStorage.removeItem('unir_user_gemini_key');
+              localStorage.removeItem('unir_openrouter_key');
+              localStorage.removeItem('unir_groq_key');
+            } catch(e) {}
             if (this.usuarioActual?.autenticado && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey) {
               setTimeout(() => {
                 this.abrirModalApiKey();
@@ -12188,6 +12184,8 @@ def dashboard_html(response: Response):
           if (!confirm('¿Cerrar sesión en NOVA Study Hub?')) return;
           try {
             localStorage.removeItem('unir_user_gemini_key');
+            localStorage.removeItem('unir_openrouter_key');
+            localStorage.removeItem('unir_groq_key');
           } catch(e) {}
           try {
             await fetch('/api/auth/logout', { method: 'POST' });
@@ -12446,12 +12444,10 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig,
                 nombre_archivo: nomArchivo,
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -12485,13 +12481,11 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: this.resumenClaseActual.asignatura,
                 nombre_archivo: this.resumenClaseActual.nombre_archivo,
                 forzar: true,
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -12543,7 +12537,6 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig,
@@ -12552,7 +12545,6 @@ def dashboard_html(response: Response):
                 profundidad: 'robusta',
                 num_preguntas: 20,
                 tipo_generacion: tipo,
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -12737,7 +12729,6 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: this.asigSeleccionada.nombre,
@@ -12746,7 +12737,6 @@ def dashboard_html(response: Response):
                 profundidad: this.generadorProfundidad || 'media',
                 num_preguntas: parseInt(this.generadorNumPreguntas) || 10,
                 tipo_generacion: this.generadorTipo || 'ambos',
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -13156,7 +13146,6 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig,
@@ -13165,7 +13154,6 @@ def dashboard_html(response: Response):
                 profundidad: 'robusta',
                 num_preguntas: 20,
                 tipo_generacion: 'solo_guia',
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -13460,7 +13448,6 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig.nombre,
@@ -13469,7 +13456,6 @@ def dashboard_html(response: Response):
                 profundidad: 'robusta',
                 num_preguntas: 20,
                 tipo_generacion: 'solo_test',
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -13567,7 +13553,6 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig.nombre,
@@ -13576,7 +13561,6 @@ def dashboard_html(response: Response):
                 profundidad: 'robusta',
                 num_preguntas: 10,
                 tipo_generacion: 'verdadero_falso',
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -13665,14 +13649,12 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: asig,
                 programa: this.programaActivoId || 'dam',
                 texto: textoTema,
                 cantidad: 6,
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -13741,12 +13723,10 @@ def dashboard_html(response: Response):
             programa: this.programaActivo || 'dam',
             historial: historialPrevio,
             modelo: this.chatModeloSeleccionado || 'auto',
-            api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
           };
 
           const headers = {
             'Content-Type': 'application/json',
-            ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
           };
 
           if (this.ayudaVisorAbortController) {
@@ -14331,14 +14311,12 @@ def dashboard_html(response: Response):
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
-                ...(this.userGeminiKey ? { 'X-User-Gemini-Key': this.userGeminiKey } : {})
               },
               body: JSON.stringify({
                 asignatura: this.nuevaCardAsig || (this.todasLasAsignaturasPrograma[0] || 'Acceso a Datos'),
                 programa: this.programaActivoId,
                 texto: this.nuevaCardTema.trim(),
                 cantidad: this.nuevaCardCantidad || 4,
-                api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
               })
             });
             const data = await res.json();
@@ -14682,15 +14660,6 @@ def dashboard_html(response: Response):
           };
 
           const chatHeaders = { 'Content-Type': 'application/json' };
-          if (this.userGeminiKey && this.userGeminiKey.trim()) {
-            chatHeaders['X-User-Gemini-Key'] = this.userGeminiKey.trim();
-          }
-          if (this.userOpenrouterKey && this.userOpenrouterKey.trim()) {
-            chatHeaders['X-User-Openrouter-Key'] = this.userOpenrouterKey.trim();
-          }
-          if (this.userGroqKey && this.userGroqKey.trim()) {
-            chatHeaders['X-User-Groq-Key'] = this.userGroqKey.trim();
-          }
 
           const chatPayload = {
             mensaje: texto,
@@ -14698,7 +14667,6 @@ def dashboard_html(response: Response):
             programa: programaOrigen,
             historial: historialPrevio,
             modelo: this.chatModeloSeleccionado || 'auto',
-            api_key: (this.userGeminiKey && this.userGeminiKey.trim()) || null
           };
 
           let fueCancelado = false;

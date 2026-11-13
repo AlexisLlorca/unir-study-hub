@@ -428,9 +428,7 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-          if (data.usuario && data.usuario.gemini_api_key) {
-            try { localStorage.setItem('unir_user_gemini_key', data.usuario.gemini_api_key); } catch(e) {}
-          }
+          // Las claves de API ya no se guardan en el navegador: el servidor las usa directamente.
           mostrarAlerta('ok', 'Acceso correcto. Entrando al Hub...');
           setTimeout(() => { window.location.href = '/'; }, 600);
         } else {
@@ -490,7 +488,7 @@ _PAGINA_TOKEN = """<!DOCTYPE html>
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-          try { localStorage.setItem('unir_user_gemini_key', apiKey); } catch(e) {}
+          // La clave queda guardada en el servidor, no en el navegador.
           mostrarAlerta('info', '¡Cuenta creada con éxito! El administrador revisará y activará tu cuenta.');
           document.getElementById('formRegistro').reset();
           setTimeout(() => { mostrarTab('login'); }, 4000);

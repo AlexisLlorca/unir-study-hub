@@ -28,6 +28,16 @@ AGENDA_CACHE_FILE = PROCESADO_DIR / "agenda_cache.json"
 AGENDA_BACKUP_FILE = BASE_DIR / "data" / "agenda_backup.json"
 
 
+def _guardar_backup_agenda(raw_json: str) -> None:
+    """Guarda el backup de la agenda legible solo por su dueño (600)."""
+    try:
+        AGENDA_BACKUP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        AGENDA_BACKUP_FILE.write_text(raw_json, encoding="utf-8")
+        os.chmod(AGENDA_BACKUP_FILE, 0o600)
+    except Exception:
+        pass
+
+
 def calcular_dias_restantes(fecha_iso: Optional[str]) -> tuple[int, str]:
     """Calcula días restantes hasta la fecha límite y una etiqueta legible."""
     if not fecha_iso:
@@ -169,10 +179,7 @@ def sincronizar_agenda_canvas() -> List[Dict[str, Any]]:
             # Guardar en cache local y en backup versionado
             raw_json = json.dumps(eventos_limpios, indent=2, ensure_ascii=False)
             AGENDA_CACHE_FILE.write_text(raw_json, encoding="utf-8")
-            try:
-                AGENDA_BACKUP_FILE.write_text(raw_json, encoding="utf-8")
-            except Exception:
-                pass
+            _guardar_backup_agenda(raw_json)
 
             # Respaldar en Hugging Face en segundo plano
             try:
@@ -308,10 +315,7 @@ def sincronizar_calendario_notion_dam() -> List[Dict[str, Any]]:
             raw_json = json.dumps(eventos, indent=2, ensure_ascii=False)
             AGENDA_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             AGENDA_CACHE_FILE.write_text(raw_json, encoding="utf-8")
-            try:
-                AGENDA_BACKUP_FILE.write_text(raw_json, encoding="utf-8")
-            except Exception:
-                pass
+            _guardar_backup_agenda(raw_json)
             try:
                 from src.core.cloud_sync import respaldar_archivo_en_hf_async
                 respaldar_archivo_en_hf_async(AGENDA_CACHE_FILE)

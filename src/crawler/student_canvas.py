@@ -10,9 +10,11 @@ Permite que cada cuenta de usuario conecte su propio perfil de Canvas UNIR de do
 """
 
 from datetime import datetime, timedelta, timezone
+import ipaddress
 import json
 import os
 import re
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,6 +28,70 @@ from src.crawler.agenda_sync import calcular_dias_restantes
 DEFAULT_CANVAS_BASE_URL = "https://campusfp.unir.net"
 TOKEN_DIAS_MAX = 30   # UNIR limita los tokens personales a 30 días
 TOKEN_DIAS_AVISO = 7  # Avisar al alumno cuando queden 7 días o menos antes de expirar
+
+
+# ==================== PROTECCIÓN CONTRA SSRF ====================
+# El usuario puede indicar base_url e ics_url. Antes de hacer una petición
+# (y antes de enviar el token de Canvas en cabeceras) validamos que el
+# destino sea un servidor público por HTTPS: ni localhost, ni IPs internas,
+# ni redes privadas. Así la app no puede usarse como sonda de la red interna.
+
+def _url_bloqueada(url: str) -> Optional[str]:
+    """Devuelve el motivo si la URL apunta a un destino interno o inseguro; None si es válida."""
+    try:
+        partes = urllib.parse.urlparse(url.strip())
+    except ValueError:
+        return "URL no válida"
+    if partes.scheme not in ("http", "https"):
+        return "Solo se permiten direcciones https://"
+    host = partes.hostname
+    if not host:
+        return "URL sin dominio"
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local") or host.endswith(".internal"):
+        return "No se permiten dominios internos"
+    # Un dominio puede apuntar a varias IPs: las comprobamos todas (DNS rebinding básico).
+    try:
+        infos = socket.getaddrinfo(host, partes.port or 443, proto=socket.IPPROTO_TCP)
+    except OSError as e:
+        return f"No se pudo resolver el dominio: {e}"
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return "El dominio apunta a una dirección no válida"
+        if (ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_unspecified
+                or ip.is_multicast or ip.is_reserved):
+            return f"El dominio apunta a una dirección interna ({ip}); no se permite"
+    return None
+
+
+def _normalizar_url_campus(url: str) -> Tuple[Optional[str], str]:
+    """Devuelve (url_normalizada_https, motivo_de_error). Si hay error, la url es None."""
+    limpia = (url or "").strip().rstrip("/")
+    if not limpia:
+        return None, "URL vacía"
+    if not limpia.startswith("http"):
+        limpia = "https://" + limpia
+    # El token de Canvas viaja en cabeceras: sin HTTPS se podría filtrar en claro.
+    motivo = _url_bloqueada(limpia)
+    if motivo:
+        return None, motivo
+    if limpia.startswith("http://"):
+        limpia = "https://" + limpia[len("http://"):]
+    return limpia, ""
+
+
+class _RedireccionesValidadas(urllib.request.HTTPRedirectHandler):
+    """Rechaza redirecciones que apunten a destinos internos (bypass clásico de SSRF)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        motivo = _url_bloqueada(newurl)
+        if motivo:
+            raise urllib.error.HTTPError(newurl, code, f"Redirección bloqueada por seguridad: {motivo}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER_SEGURO = urllib.request.build_opener(_RedireccionesValidadas())
 
 
 def _archivos_canvas_usuario(username: str) -> Tuple[Path, Path]:
@@ -67,16 +133,18 @@ def guardar_asignaturas_favoritas_usuario(username: str, asignaturas: List[str])
 
 
 def _canvas_api_get(base_url: str, token: str, endpoint: str) -> Any:
-    url = f"{base_url.rstrip('/')}{endpoint}"
-    req = urllib.request.Request(
-        url,
+    url, motivo = _normalizar_url_campus(base_url)
+    if not url:
+        raise ValueError(f"URL del Campus no permitida: {motivo}")
+    peticion = urllib.request.Request(
+        f"{url}{endpoint}",
         headers={
             "Authorization": f"Bearer {token.strip()}",
             "Accept": "application/json",
             "User-Agent": "NOVA-Study-Hub/3.5",
         },
     )
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with _OPENER_SEGURO.open(peticion, timeout=20) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -210,11 +278,16 @@ def estado_token_canvas(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _descargar_eventos_ics(feed_ics: str) -> Tuple[bool, str, List[Dict[str, Any]]]:
-    if not feed_ics.startswith("http") or ".ics" not in feed_ics.lower():
+    # El .ics es una URL controlada por el usuario: validamos el destino antes de conectar.
+    limpia = (feed_ics or "").strip()
+    if ".ics" not in limpia.lower():
         return False, "El enlace de calendario debe ser una URL válida terminada en .ics (Alimentación del calendario de Canvas).", []
+    motivo = _url_bloqueada(limpia)
+    if motivo:
+        return False, f"Enlace de calendario rechazado: {motivo}", []
     try:
-        req = urllib.request.Request(feed_ics, headers={"User-Agent": "NOVA-Study-Hub/3.5"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        req = urllib.request.Request(limpia, headers={"User-Agent": "NOVA-Study-Hub/3.5"})
+        with _OPENER_SEGURO.open(req, timeout=20) as resp:
             ics_text = resp.read().decode("utf-8", errors="ignore")
     except Exception as e:
         return False, f"No se pudo descargar el calendario .ics: {e}", []
@@ -285,14 +358,17 @@ def oauth_url_autorizacion(state: str) -> str:
 
 def _oauth_pedir_token(datos: Dict[str, str]) -> Dict[str, Any]:
     c = oauth_config()
+    url_token, motivo = _normalizar_url_campus(c["base_url"])
+    if not url_token:
+        raise ValueError(f"URL de Canvas no permitida: {motivo}")
     cuerpo = urllib.parse.urlencode({**datos, "client_id": c["client_id"], "client_secret": c["client_secret"]}).encode()
     req = urllib.request.Request(
-        f"{c['base_url']}/login/oauth2/token",
+        f"{url_token}/login/oauth2/token",
         data=cuerpo,
         headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "NOVA-Study-Hub/3.5"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=20) as resp:
+    with _OPENER_SEGURO.open(req, timeout=20) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -373,9 +449,11 @@ def sincronizar_canvas_estudiante(
         token = _token_vigente(username, cfg_actual)
         cfg_actual = obtener_config_canvas_usuario(username)  # puede haberse renovado (OAuth)
     feed_ics = (ics_url if ics_url is not None else cfg_actual.get("ics_url", "")).strip()
-    campus_url = (base_url or cfg_actual.get("base_url") or DEFAULT_CANVAS_BASE_URL).strip().rstrip("/")
-    if not campus_url.startswith("http"):
-        campus_url = "https://" + campus_url
+    campus_url, motivo_url = _normalizar_url_campus(
+        base_url or cfg_actual.get("base_url") or DEFAULT_CANVAS_BASE_URL
+    )
+    if not campus_url:
+        return False, f"La dirección del Campus no es válida: {motivo_url}. Usa la oficial de UNIR (campusfp.unir.net).", {}
 
     ahora_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     modo_oauth = cfg_actual.get("modo") == "oauth" and not token_nuevo
@@ -779,7 +857,13 @@ def sincronizar_materiales_canvas_estudiante(username: str) -> Tuple[bool, str, 
     """
     cfg = obtener_config_canvas_usuario(username)
     token = _token_vigente(username, cfg)
-    campus_url = (cfg.get("base_url") or DEFAULT_CANVAS_BASE_URL).strip().rstrip("/")
+    campus_url, motivo_url = _normalizar_url_campus(cfg.get("base_url") or DEFAULT_CANVAS_BASE_URL)
+    if not campus_url:
+        return (
+            False,
+            f"La dirección del Campus guardada no es válida ({motivo_url}). Revisa «Mi Campus».",
+            {},
+        )
     if not token:
         return (
             False,
@@ -819,6 +903,7 @@ def sincronizar_materiales_canvas_estudiante(username: str) -> Tuple[bool, str, 
     descargados = 0
     omitidos_existentes = 0
     cursos_revisados = 0
+    omitidos_error = 0
     MAX_PDF_BYTES = 15 * 1024 * 1024  # Límite seguro de 15 MB por PDF para proteger RAM en Render
 
     for c in cursos_raw if isinstance(cursos_raw, list) else []:
@@ -887,12 +972,17 @@ def sincronizar_materiales_canvas_estudiante(username: str) -> Tuple[bool, str, 
 
             # Descargar por streaming en bloques de 64 KB para consumo nulo de RAM
             try:
+                # La URL la devuelve Canvas (no la escribe el usuario), pero también se valida.
+                motivo_dl = _url_bloqueada(download_url)
+                if motivo_dl:
+                    omitidos_error += 1
+                    continue
                 ruta_privada.parent.mkdir(parents=True, exist_ok=True)
                 req = urllib.request.Request(
                     download_url,
                     headers={"Authorization": f"Bearer {token}", "User-Agent": "NOVA-Study-Hub/3.5"},
                 )
-                with urllib.request.urlopen(req, timeout=25) as resp, open(ruta_privada, "wb") as out_f:
+                with _OPENER_SEGURO.open(req, timeout=25) as resp, open(ruta_privada, "wb") as out_f:
                     total_leido = 0
                     while True:
                         chunk = resp.read(65536)

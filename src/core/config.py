@@ -204,6 +204,19 @@ def get_hub_access_token() -> str:
     return token
 
 
+def enmascarar_clave(clave: Optional[str]) -> str:
+    """
+    Devuelve una versión segura para mostrar de una API key: nunca la clave completa.
+    Ejemplo: 'AIzaSyA...9fQ2' — solo los 6 primeros caracteres y ninguno del final completo.
+    """
+    clave = (clave or "").strip()
+    if not clave:
+        return ""
+    if len(clave) <= 10:
+        return "••••••"
+    return f"{clave[:6]}...{clave[-4:]}"
+
+
 def escribir_json_atomico(ruta: Path, datos) -> None:
     """
     Escribe un JSON de forma atómica: primero en un archivo temporal y luego lo renombra.
