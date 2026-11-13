@@ -4,6 +4,7 @@ Permite memorizar conceptos clave de FP DAM, Ciberseguridad y Grado con tarjetas
 calificación de dificultad y generación automática mediante IA.
 """
 
+import copy
 import json
 import threading
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,19 @@ from src.ai.tutor import TutorIA
 FLASHCARDS_DIR = PROCESADO_DIR / "flashcards"
 FLASHCARDS_DATA_FILE = FLASHCARDS_DIR / "mazos.json"
 _FLASHCARDS_LOCK = threading.Lock()
+
+# Caché por fecha de modificación: los mazos son grandes y se leen en cada petición.
+_CACHE_MAZOS: Dict[str, tuple] = {}
+_CACHE_MAZOS_LOCK = threading.Lock()
+
+
+def _firma_archivo(ruta: Path):
+    """Devuelve (mtime_ns, tamaño) para detectar cambios sin abrir el fichero."""
+    try:
+        st = ruta.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
 
 # --- Motor de repetición espaciada (SM-2 simplificado) ---------------------
 # Cada tarjeta guarda: facilidad, repeticiones, intervalo_dias y proximo_repaso.
@@ -133,7 +147,6 @@ class GestorFlashcards:
     """Gestiona el almacenamiento, generación y estado de repetición espaciada de las flashcards (aislado por usuario)."""
 
     def __init__(self, username: Optional[str] = None):
-        import copy
         ensure_directories()
         self.username = username or "alexking44"
         self.archivo_datos = obtener_rutas_usuario(self.username)["flashcards_file"]
@@ -167,14 +180,35 @@ class GestorFlashcards:
                     cambiado = True
         return cambiado
 
+    def _guardar_en_cache(self, mazos: Dict[str, List[Dict[str, Any]]]) -> None:
+        """Guarda una copia en caché junto a la firma del fichero recién escrito."""
+        firma = _firma_archivo(self.archivo_datos)
+        if firma is None:
+            return
+        with _CACHE_MAZOS_LOCK:
+            _CACHE_MAZOS[str(self.archivo_datos)] = (
+                firma[0],
+                firma[1],
+                copy.deepcopy(mazos),
+            )
+
     def _cargar_o_inicializar(self) -> Dict[str, List[Dict[str, Any]]]:
-        import copy
+        clave = str(self.archivo_datos)
+        firma = _firma_archivo(self.archivo_datos)
+        if firma is not None:
+            with _CACHE_MAZOS_LOCK:
+                cache = _CACHE_MAZOS.get(clave)
+                if cache and cache[0] == firma[0] and cache[1] == firma[1]:
+                    # Copia para que nadie modifique la caché compartida por accidente.
+                    return copy.deepcopy(cache[2])
         if self.archivo_datos.exists():
             try:
                 mazos = json.loads(self.archivo_datos.read_text(encoding="utf-8"))
                 # Migración transparente: las tarjetas antiguas pasan a tener SRS.
                 if self._normalizar_mazos(mazos):
                     self._guardar(mazos)
+                else:
+                    self._guardar_en_cache(mazos)
                 return mazos
             except Exception:
                 pass
@@ -185,6 +219,7 @@ class GestorFlashcards:
 
     def _guardar(self, data: Dict[str, List[Dict[str, Any]]]):
         escribir_json_atomico(self.archivo_datos, data)
+        self._guardar_en_cache(data)
         try:
             from src.core.cloud_sync import respaldar_archivo_en_hf_async
             respaldar_archivo_en_hf_async(self.archivo_datos)

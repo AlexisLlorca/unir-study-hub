@@ -4,6 +4,7 @@ Registra el historial de tests y simulacros de examen realizados por el alumno,
 calcula la nota media y genera el 'Semáforo de Examen' por tema y asignatura.
 """
 
+import copy
 import json
 import threading
 from datetime import datetime
@@ -18,6 +19,19 @@ from src.core.academic_structure import ASIGNATURAS_2DAM
 
 PROGRESO_FILE = PROCESADO_DIR / "progreso.json"
 _PROGRESO_LOCK = threading.Lock()
+
+# Caché por fecha de modificación: evita releer y parsear el JSON en cada petición.
+_CACHE_PROGRESO: Dict[str, tuple] = {}
+_CACHE_PROGRESO_LOCK = threading.Lock()
+
+
+def _firma_archivo(ruta: Path):
+    """Devuelve (mtime_ns, tamaño) para saber si un fichero cambió, sin abrirlo."""
+    try:
+        st = ruta.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
 
 
 class GestorProgreso:
@@ -41,17 +55,37 @@ class GestorProgreso:
                 escribir_json_atomico(self.archivo_progreso, datos_iniciales)
 
     def _cargar(self) -> Dict[str, Any]:
+        clave = str(self.archivo_progreso)
+        firma = _firma_archivo(self.archivo_progreso)
+        if firma is not None:
+            with _CACHE_PROGRESO_LOCK:
+                cache = _CACHE_PROGRESO.get(clave)
+                if cache and cache[0] == firma[0] and cache[1] == firma[1]:
+                    # Copia para que quien modifique el resultado no altere la caché compartida.
+                    return copy.deepcopy(cache[2])
         try:
             with open(self.archivo_progreso, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 data.setdefault("preguntas_falladas", [])
-                return data
         except Exception:
-            return {"historial_tests": [], "ultimas_calificaciones": {}, "preguntas_falladas": []}
+            data = {"historial_tests": [], "ultimas_calificaciones": {}, "preguntas_falladas": []}
+        if firma is not None:
+            with _CACHE_PROGRESO_LOCK:
+                # Se guarda una copia: el llamante puede modificar `data` libremente.
+                _CACHE_PROGRESO[clave] = (firma[0], firma[1], copy.deepcopy(data))
+        return data
 
     def _guardar(self, datos: Dict[str, Any]):
         datos["fecha_actualizacion"] = datetime.now().isoformat()
         escribir_json_atomico(self.archivo_progreso, datos)
+        firma = _firma_archivo(self.archivo_progreso)
+        if firma is not None:
+            with _CACHE_PROGRESO_LOCK:
+                _CACHE_PROGRESO[str(self.archivo_progreso)] = (
+                    firma[0],
+                    firma[1],
+                    copy.deepcopy(datos),
+                )
         try:
             from src.core.cloud_sync import respaldar_archivo_en_hf_async
             respaldar_archivo_en_hf_async(self.archivo_progreso)

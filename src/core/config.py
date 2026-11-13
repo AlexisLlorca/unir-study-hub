@@ -45,6 +45,12 @@ class SafeConsole(Console):
 
 console = SafeConsole()
 
+# Crear carpetas es idempotente, pero no gratis: recordamos lo ya comprobado
+# para no repetir decenas de mkdir en cada petición web.
+_DIRECTORIOS_ASEGURADOS = False
+_RUTAS_BASE_ASEGURADAS = False
+_ESPACIOS_USUARIO_ASEGURADOS: set = set()
+
 # 4. Rutas del sistema de datos (Entrada, Almacén y Procesado)
 DATA_DIR = BASE_DIR / "data"
 
@@ -80,16 +86,21 @@ def obtener_espacio_usuario(username: Optional[str] = None) -> Path:
     if not u or u == "local":
         u = "alexking44"
     espacio = USUARIOS_ESPACIOS_DIR / u
-    espacio.mkdir(parents=True, exist_ok=True)
+    if u not in _ESPACIOS_USUARIO_ASEGURADOS:
+        espacio.mkdir(parents=True, exist_ok=True)
+        _ESPACIOS_USUARIO_ASEGURADOS.add(u)
     return espacio
 
 
 def obtener_rutas_usuario(username: Optional[str] = None) -> dict:
     """Devuelve las rutas unificadas de materiales, guías, exámenes, resúmenes, progreso y flashcards."""
+    global _RUTAS_BASE_ASEGURADAS
     espacio = obtener_espacio_usuario(username)
     flashcards_dir = PROCESADO_DIR / "flashcards"
-    for d in (MATERIALES_DIR, GUIAS_DIR, EXAMENES_DIR, RESUMENES_CLASES_DIR, flashcards_dir):
-        d.mkdir(parents=True, exist_ok=True)
+    if not _RUTAS_BASE_ASEGURADAS:
+        for d in (MATERIALES_DIR, GUIAS_DIR, EXAMENES_DIR, RESUMENES_CLASES_DIR, flashcards_dir):
+            d.mkdir(parents=True, exist_ok=True)
+        _RUTAS_BASE_ASEGURADAS = True
     return {
         "espacio": espacio,
         "materiales": MATERIALES_DIR,
@@ -220,7 +231,11 @@ def ensure_directories():
     """
     Crea automáticamente todas las carpetas necesarias si no existen todavía.
     Garantiza que el proyecto funcione al clonarlo en cualquier equipo.
+    Solo hace el trabajo la primera vez; después es una salida inmediata.
     """
+    global _DIRECTORIOS_ASEGURADOS
+    if _DIRECTORIOS_ASEGURADOS:
+        return
     directorios = [
         DATA_DIR,
         BANDEJA_ENTRADA_DIR,
@@ -239,6 +254,7 @@ def ensure_directories():
     ]
     for d in directorios:
         d.mkdir(parents=True, exist_ok=True)
+    _DIRECTORIOS_ASEGURADOS = True
 
 
 if __name__ == "__main__":
