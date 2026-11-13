@@ -12080,10 +12080,19 @@ def dashboard_html(response: Response):
               localStorage.removeItem('unir_openrouter_key');
               localStorage.removeItem('unir_groq_key');
             } catch(e) {}
-            if (this.usuarioActual?.autenticado && !this.userGeminiKey && !this.userOpenrouterKey && !this.userGroqKey) {
-              setTimeout(() => {
-                this.abrirModalApiKey();
-              }, 700);
+            // Solo avisamos a los estudiantes sin claves propias, y como mucho una vez al día:
+            // el admin usa la cuota compartida del .env y no necesita configurar nada.
+            const tieneClaves = this.userGeminiKey || this.userOpenrouterKey || this.userGroqKey;
+            if (this.usuarioActual?.autenticado && !this.usuarioActual?.es_admin && !tieneClaves) {
+              const hoy = new Date().toISOString().slice(0, 10);
+              let avisadoHoy = '';
+              try { avisadoHoy = localStorage.getItem('unir_aviso_claves') || ''; } catch(e) {}
+              if (avisadoHoy !== hoy) {
+                try { localStorage.setItem('unir_aviso_claves', hoy); } catch(e) {}
+                setTimeout(() => {
+                  this.abrirModalApiKey();
+                }, 700);
+              }
             }
           } catch(e) { console.error('Error al cargar usuario actual', e); }
         },
