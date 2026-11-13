@@ -9,7 +9,7 @@ import json
 import unittest
 from datetime import date, timedelta
 
-from src.core.resumen_semanal import _a_fecha, calcular_resumen_semanal
+from src.core.resumen_semanal import _a_fecha, calcular_resumen_semanal, construir_recomendacion
 
 HOY = date(2026, 11, 13)  # viernes, fijo para que los tests no dependan del día real
 
@@ -101,6 +101,53 @@ class TestSemana(unittest.TestCase):
         self.assertEqual(len(r["entregas_proximas"]), 1)
         self.assertEqual(r["entregas_proximas"][0]["titulo"], "Actividad 1")
         self.assertEqual(r["entregas_proximas"][0]["dias_restantes"], 1)
+
+
+class TestRecomendacion(unittest.TestCase):
+    def _semana(self, **cambios):
+        base = {"racha_dias": 0, "tarjetas_semana": 0, "tests_semana": 0,
+                "nota_media_semana": None, "tema_flojo": None, "entregas_proximas": []}
+        base.update(cambios)
+        return base
+
+    def test_entrega_urgente_va_primero(self):
+        semana = self._semana(entregas_proximas=[
+            {"titulo": "Actividad 1", "asignatura": "Multimedia", "dias_restantes": 1},
+        ])
+        rec = construir_recomendacion(semana, {"vencidas": 27})
+        self.assertIn("Prioridad", rec)
+        self.assertIn("para mañana", rec)
+        self.assertIn("Repaso", rec)
+
+    def test_sin_urgencia_menciona_entrega_lejana(self):
+        semana = self._semana(entregas_proximas=[
+            {"titulo": "Actividad 1", "asignatura": "Multimedia", "dias_restantes": 4},
+        ])
+        rec = construir_recomendacion(semana, {"vencidas": 0})
+        self.assertIn("cae en 4 días", rec)
+        self.assertNotIn("Prioridad", rec)
+
+    def test_dia_tranquilo_da_alternativa(self):
+        rec = construir_recomendacion(self._semana(), {"vencidas": 0})
+        self.assertIn("Día tranquilo", rec)
+
+    def test_menciona_racha_y_tema_flojo(self):
+        semana = self._semana(
+            racha_dias=3,
+            tema_flojo={"asignatura": "Acceso a Datos", "tema": "Tema 1. Ficheros", "nota": 2.0},
+        )
+        rec = construir_recomendacion(semana, {"vencidas": 5})
+        self.assertIn("3 días de racha", rec)
+        self.assertIn("Tema 1. Ficheros", rec)
+        self.assertIn("(2.0)", rec)
+
+    def test_titulos_largos_se_recortan(self):
+        semana = self._semana(entregas_proximas=[
+            {"titulo": "X" * 200, "asignatura": "Asignatura" + "Larga" * 20, "dias_restantes": 0},
+        ])
+        rec = construir_recomendacion(semana, {"vencidas": 0})
+        self.assertLess(len(rec), 400)
+        self.assertIn("…", rec)
 
 
 if __name__ == "__main__":

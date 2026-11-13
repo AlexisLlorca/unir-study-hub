@@ -126,3 +126,62 @@ def calcular_resumen_semanal(
         "tema_flojo": tema_flojo,
         "entregas_proximas": entregas_proximas,
     }
+
+
+def _cortar(texto: str, maximo: int = 42) -> str:
+    """Recorta un título largo para que la recomendación no sea un párrafo."""
+    texto = (texto or "").strip()
+    return texto if len(texto) <= maximo else texto[:maximo] + "…"
+
+
+def construir_recomendacion(semana: Dict[str, Any], estadisticas: Dict[str, Any]) -> str:
+    """
+    Recomendación diaria del entrenador, combinando las tres señales con prioridad:
+    1. Entrega próxima (lo que tiene fecha fija manda sobre lo demás).
+    2. Repaso vencido (10-15 minutos que consolidan lo que se está olvidando).
+    3. Tema flojo (test corto sobre el peor resultado del mes).
+    """
+    semana = semana or {}
+    estadisticas = estadisticas or {}
+    entregas = semana.get("entregas_proximas") or []
+    vencidas = int(estadisticas.get("vencidas") or 0)
+    tema_flojo = semana.get("tema_flojo")
+
+    partes: List[str] = []
+
+    # 1. Entrega próxima: si es urgente (≤2 días) es la prioridad; si cae pronto, se menciona.
+    if entregas:
+        primera = entregas[0]
+        dias = int(primera.get("dias_restantes", 99))
+        titulo = _cortar(primera.get("titulo", ""))
+        asignatura = _cortar(primera.get("asignatura", ""), 30)
+        if dias <= 1:
+            cuando = "para hoy" if dias == 0 else "para mañana"
+            partes.append(f"Prioridad: «{titulo}» ({asignatura}) es {cuando}. Arráncala hoy.")
+        elif dias <= 4:
+            partes.append(f"Con vista a «{titulo}» ({asignatura}), que cae en {dias} días.")
+
+    # 2. Repaso vencido: siempre lo segundo, es el mantenimiento diario.
+    if vencidas > 0:
+        partes.append(f"Repaso: {vencidas} tarjeta(s) vencidas, unos 15 minutos.")
+
+    # 3. Tema flojo: el cierre con un test corto.
+    if tema_flojo:
+        partes.append(
+            f"Cierra con un test corto de «{_cortar(tema_flojo.get('tema', ''))}» "
+            f"({tema_flojo.get('asignatura', '')}): tu nota más floja ({tema_flojo.get('nota')})."
+        )
+
+    if not partes:
+        return (
+            "Día tranquilo: no tienes repasos ni entregas inmediatas. Genera un test de un tema "
+            "nuevo o adelanta temario para aprovechar el día."
+        )
+
+    # La racha se menciona solo si hay algo que hacer (es el empujón del final).
+    racha = int(semana.get("racha_dias") or 0)
+    if racha > 0:
+        dias_palabra = "día" if racha == 1 else "días"
+        partes.append(f"Y llevas {racha} {dias_palabra} de racha: hoy la mantienes.")
+
+    return " ".join(partes)

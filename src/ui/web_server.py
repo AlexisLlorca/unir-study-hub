@@ -2602,28 +2602,14 @@ def api_plan_hoy(request: Request, programa: str = "dam"):
     temas_debiles = tracker.obtener_temas_debiles(limite=5)
 
     # Resumen semanal del entrenador: racha, repaso, tests y entregas de los próximos 7 días.
-    from src.core.resumen_semanal import calcular_resumen_semanal
+    from src.core.resumen_semanal import calcular_resumen_semanal, construir_recomendacion
     username = _username_actual(request)
     eventos = _combinar_agenda_oficial_y_estudiante(username)
     semana = calcular_resumen_semanal(gestor.mazos, datos, eventos)
 
-    vencidas = estadisticas.get("vencidas", 0)
-    if vencidas > 0:
-        recomendacion = (
-            f"Empieza con {vencidas} tarjeta(s) vencida(s). Son 10-15 minutos "
-            "y consolidan justo lo que estás a punto de olvidar."
-        )
-    elif temas_debiles:
-        primero = temas_debiles[0]
-        recomendacion = (
-            f"Haz un test corto de «{primero['tema']}» ({primero['asignatura']}): "
-            "es tu punto más flojo ahora mismo."
-        )
-    else:
-        recomendacion = (
-            "No tienes repasos pendientes. Genera un test de un tema nuevo "
-            "o adelanta el siguiente tema del temario."
-        )
+    # La recomendación combina las señales con prioridad:
+    # entrega urgente > repaso vencido > tema flojo.
+    recomendacion = construir_recomendacion(semana, estadisticas)
 
     return {
         "fecha": time.strftime("%Y-%m-%d"),
