@@ -30,6 +30,69 @@ EXTENSIONES_SINCRONIZABLES = {".pdf", ".docx", ".md", ".json", ".txt"}
 EXTENSIONES_BUNDLE_LIGERO = {".md", ".json", ".txt"}
 BUNDLE_FILENAME = "procesado_bundle.tar.gz"
 
+# Archivos que NUNCA deben salir del equipo: credenciales, sesiones y bases de datos.
+_NOMBRES_SENSIBLES = {
+    "usuarios.json",
+    "usuarios.db",
+    "session_state.json",
+    "canvas_config.json",
+    ".env",
+}
+_EXTENSIONES_SENSIBLES = {".db", ".sqlite", ".sqlite3", ".pem", ".key"}
+_CARPETAS_SENSIBLES = {"auth", ".git", ".venv", "__pycache__"}
+
+
+def _es_ruta_sensible(ruta_relativa) -> bool:
+    """True si la ruta contiene credenciales o sesiones que no deben subirse a la nube."""
+    rel = Path(str(ruta_relativa).replace("\\", "/"))
+    partes = [p.lower() for p in rel.parts]
+    if not partes:
+        return False
+    if any(p in _CARPETAS_SENSIBLES for p in partes):
+        return True
+    nombre = partes[-1]
+    if nombre in _NOMBRES_SENSIBLES or nombre.startswith(".env"):
+        return True
+    if nombre.startswith(("usuarios.db", "usuarios.json", "canvas_config")):
+        return True
+    if rel.suffix.lower() in _EXTENSIONES_SENSIBLES:
+        return True
+    return False
+
+
+def _miembro_tar_seguro(m: tarfile.TarInfo) -> bool:
+    """Rechaza rutas absolutas, '..', enlaces y dispositivos dentro de un tar."""
+    nombre = m.name.replace("\\", "/")
+    if nombre.startswith("/") or ".." in Path(nombre).parts:
+        return False
+    if m.issym() or m.islnk() or m.isdev():
+        return False
+    return True
+
+
+def _destino_repo_seguro(ruta_repo: str) -> Optional[Path]:
+    """Convierte una ruta del repositorio en una ruta local que no salga de BASE_DIR."""
+    rel = Path(str(ruta_repo).replace("\\", "/"))
+    if rel.is_absolute() or ".." in rel.parts or any(p.startswith(".") for p in rel.parts):
+        return None
+    destino = (BASE_DIR / rel).resolve()
+    if not destino.is_relative_to(BASE_DIR.resolve()):
+        return None
+    return destino
+
+
+def _avisar_si_repo_publico(api, repo_id: str) -> None:
+    """Avisa si el dataset de Hugging Face es público, porque ahí no debe haber datos privados."""
+    try:
+        info = api.repo_info(repo_id=repo_id, repo_type="dataset")
+        if not getattr(info, "private", False):
+            console.print(
+                "[bold red]⚠ El dataset de Hugging Face es PÚBLICO.[/bold red] "
+                "Cámbialo a privado antes de sincronizar datos personales."
+            )
+    except Exception:
+        pass
+
 
 def get_hf_token() -> str:
     load_dotenv(dotenv_path=ENV_FILE, override=True)
@@ -59,6 +122,7 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
 
     api = HfApi(token=hf_token)
     repo_id = get_hf_dataset_repo()
+    _avisar_si_repo_publico(api, repo_id)
 
     # Recopilar lista de todos los materiales (PDF/DOCX/MD/TXT)
     mats_dir = DATA_DIR / "materiales"
@@ -68,7 +132,7 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
             try:
                 if p.is_file() and p.suffix.lower() in EXTENSIONES_SINCRONIZABLES:
                     rel = p.relative_to(DATA_DIR)
-                    if not any(part.startswith(".") for part in rel.parts):
+                    if not any(part.startswith(".") for part in rel.parts) and not _es_ruta_sensible(rel):
                         lista_materiales.append(str(rel).replace("\\", "/"))
             except Exception:
                 continue
@@ -87,6 +151,8 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
                     for f in sub_dir.rglob("*"):
                         if f.is_file() and f.suffix.lower() in EXTENSIONES_BUNDLE_LIGERO:
                             rel_arc = f.relative_to(BASE_DIR)
+                            if _es_ruta_sensible(rel_arc):
+                                continue
                             tar.add(str(f.resolve()), arcname=str(rel_arc).replace("\\", "/"))
 
         sz_mb = bundle_path.stat().st_size / (1024 * 1024)
@@ -104,6 +170,9 @@ def crear_y_subir_bundle_rapido(token: Optional[str] = None) -> bool:
 
 def _descargar_archivo_hf_directo(path_in_repo: str, destino_local: Path) -> bool:
     """Descarga un único archivo desde el Dataset privado de Hugging Face usando HTTP directo ligero."""
+    # Nunca restauramos credenciales desde la nube, aunque queden copias antiguas.
+    if _es_ruta_sensible(path_in_repo):
+        return False
     hf_token = get_hf_token()
     if not hf_token:
         return False
@@ -242,8 +311,13 @@ def _reconciliar_estado_ligero_hf(hf_token: str, actualizar_existentes: bool = F
             for rf in remote_sub:
                 if rf.endswith((".pdf", ".docx", ".bak", "progreso.json", "organizador_notion.json")):
                     continue
-                dest_loc = BASE_DIR / rf
-                es_estado_vivo = rf.endswith(("canvas_config.json", "canvas_sync.json", "mazos.json"))
+                # Nunca descargamos credenciales ni dejamos que una ruta del repo salga de BASE_DIR.
+                if _es_ruta_sensible(rf):
+                    continue
+                dest_loc = _destino_repo_seguro(rf)
+                if dest_loc is None:
+                    continue
+                es_estado_vivo = rf.endswith(("canvas_sync.json", "mazos.json"))
                 if actualizar_existentes or es_estado_vivo or not dest_loc.exists() or dest_loc.stat().st_size == 0:
                     _descargar_archivo_hf_directo(rf, dest_loc)
     except Exception as e:
@@ -276,12 +350,20 @@ def descargar_datos_desde_hf_si_vacio(forzar: bool = False) -> bool:
 
         try:
             with tarfile.open(bundle_local, "r:gz") as tar:
-                # Nunca sobrescribir bases de datos de cuentas de usuario o feedback con el bundle general
+                # Nunca sobrescribir cuentas, feedback ni credenciales con el bundle general,
+                # y rechazar rutas absolutas, "..", enlaces y dispositivos.
                 miembros_seguros = [
                     m for m in tar.getmembers()
                     if not m.name.startswith(("data/usuarios.json", "data/usuarios.db", "data/feedback"))
+                    and not _es_ruta_sensible(m.name)
+                    and _miembro_tar_seguro(m)
                 ]
-                tar.extractall(path=str(BASE_DIR), members=miembros_seguros)
+                try:
+                    # filter="data" es la protección oficial de Python 3.12+ contra tar maliciosos.
+                    tar.extractall(path=str(BASE_DIR), members=miembros_seguros, filter="data")
+                except TypeError:
+                    # Python < 3.12: los miembros ya vienen validados a mano.
+                    tar.extractall(path=str(BASE_DIR), members=miembros_seguros)
         except Exception as e:
             console.print(f"[red]❌ Error extrayendo {BUNDLE_FILENAME}: {e}[/red]")
             return False
@@ -335,11 +417,10 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
         return False
 
     api = HfApi(token=hf_token)
-    user_info = api.whoami()
-    username = user_info["name"]
-    repo_id = f"{username}/unir-study-hub-data"
+    repo_id = get_hf_dataset_repo()
 
     api.create_repo(repo_id=repo_id, repo_type="dataset", private=True, exist_ok=True)
+    _avisar_si_repo_publico(api, repo_id)
     crear_y_subir_bundle_rapido(token=hf_token)
 
     with tempfile.TemporaryDirectory(prefix="unir_hf_data_") as tmpdir:
@@ -351,7 +432,7 @@ def subir_datos_a_hf(token: Optional[str] = None, solo_activos: bool = False) ->
                 if not ruta_origen.is_file() or ruta_origen.suffix.lower() not in EXTENSIONES_SINCRONIZABLES:
                     continue
                 rel = ruta_origen.relative_to(DATA_DIR)
-                if any(part.startswith(".") for part in rel.parts):
+                if any(part.startswith(".") for part in rel.parts) or _es_ruta_sensible(rel):
                     continue
                 ruta_real = ruta_origen.resolve()
                 if not ruta_real.exists() or not ruta_real.is_file() or ruta_real.stat().st_size == 0:
@@ -437,6 +518,10 @@ def respaldar_archivo_en_hf_async(ruta_local: Path) -> None:
         return
 
     rel_str = str(rel_to_base).replace("\\", "/")
+
+    # Nunca subimos credenciales, sesiones ni bases de datos de usuarios.
+    if _es_ruta_sensible(rel_str):
+        return
 
     def _worker():
         try:

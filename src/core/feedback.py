@@ -5,6 +5,7 @@ Persistencia dual en SQLite (data/usuarios.db) y JSON (data/feedback.json).
 """
 
 import json
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -20,6 +21,10 @@ def _obtener_conexion() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        os.chmod(DB_PATH, 0o600)
+    except OSError:
+        pass
     return conn
 
 
@@ -141,11 +146,14 @@ def importar_feedback_desde_json() -> None:
 
 
 def _notificar_respaldo_cloud():
+    """
+    Sube solo el JSON de feedback (incidencias y propuestas).
+    La base SQLite compartida NO se sube: contiene usuarios, hashes y claves de API.
+    """
     try:
         exportar_feedback_a_json()
         from src.core.cloud_sync import respaldar_archivo_en_hf_async
         respaldar_archivo_en_hf_async(FEEDBACK_JSON_PATH)
-        respaldar_archivo_en_hf_async(DB_PATH)
     except Exception:
         pass
 

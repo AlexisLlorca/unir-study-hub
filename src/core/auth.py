@@ -21,10 +21,20 @@ DB_PATH = DATA_DIR / "usuarios.db"
 USERS_JSON_PATH = DATA_DIR / "usuarios.json"
 
 
+def _asegurar_permisos_privados(ruta: Path) -> None:
+    """Deja el archivo legible solo por su dueño (600), si existe."""
+    try:
+        if ruta.exists():
+            os.chmod(ruta, 0o600)
+    except OSError:
+        pass
+
+
 def _obtener_conexion() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    _asegurar_permisos_privados(DB_PATH)
     return conn
 
 
@@ -49,6 +59,7 @@ def exportar_usuarios_a_json() -> None:
         USERS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(USERS_JSON_PATH, "w", encoding="utf-8") as f:
             json.dump(usuarios, f, indent=2, ensure_ascii=False)
+        _asegurar_permisos_privados(USERS_JSON_PATH)
     except Exception as e:
         pass
 
@@ -141,11 +152,12 @@ def importar_usuarios_desde_json() -> None:
 
 
 def _notificar_respaldo_nube():
+    """
+    Guarda una copia local del JSON de usuarios.
+    NO se sube a Hugging Face: contiene hashes de contraseñas y claves de API.
+    """
     try:
         exportar_usuarios_a_json()
-        from src.core.cloud_sync import respaldar_archivo_en_hf_async
-        respaldar_archivo_en_hf_async(USERS_JSON_PATH)
-        respaldar_archivo_en_hf_async(DB_PATH)
     except Exception:
         pass
 
@@ -285,6 +297,11 @@ def inicializar_bd_usuarios() -> None:
             cursor.execute("PRAGMA wal_checkpoint(FULL);")
 
     exportar_usuarios_a_json()
+
+    # Permisos privados también para la base SQLite y sus archivos auxiliares.
+    _asegurar_permisos_privados(DB_PATH)
+    _asegurar_permisos_privados(Path(str(DB_PATH) + "-wal"))
+    _asegurar_permisos_privados(Path(str(DB_PATH) + "-shm"))
 
 
 def _hash_password(password: str, salt: str) -> str:
