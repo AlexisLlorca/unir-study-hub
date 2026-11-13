@@ -2601,6 +2601,12 @@ def api_plan_hoy(request: Request, programa: str = "dam"):
     media = round(sum(notas) / len(notas), 2) if notas else 0.0
     temas_debiles = tracker.obtener_temas_debiles(limite=5)
 
+    # Resumen semanal del entrenador: racha, repaso, tests y entregas de los próximos 7 días.
+    from src.core.resumen_semanal import calcular_resumen_semanal
+    username = _username_actual(request)
+    eventos = _combinar_agenda_oficial_y_estudiante(username)
+    semana = calcular_resumen_semanal(gestor.mazos, datos, eventos)
+
     vencidas = estadisticas.get("vencidas", 0)
     if vencidas > 0:
         recomendacion = (
@@ -2623,6 +2629,7 @@ def api_plan_hoy(request: Request, programa: str = "dam"):
         "fecha": time.strftime("%Y-%m-%d"),
         "flashcards": estadisticas,
         "temas_debiles": temas_debiles,
+        "semana": semana,
         "progreso": {
             "media_global": media,
             "tests_realizados": len(historial),
@@ -3869,6 +3876,63 @@ def dashboard_html(response: Response):
                 <p class="text-base font-black text-white font-mono" x-text="planHoy?.progreso?.fallos_pendientes ?? '—'"></p>
                 <p class="text-[9px] text-gray-400 uppercase tracking-wider">Fallos</p>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== ENTRENADOR PERSONAL: TU SEMANA ==================== -->
+        <div class="glass-card p-4 rounded-2xl border border-orange-500/20 bg-surface-2/95">
+          <div class="flex items-center justify-between pb-2.5 mb-3 border-b border-gray-800">
+            <h3 class="text-xs sm:text-sm font-extrabold text-orange-300 flex items-center gap-2">
+              <i class="fa-solid fa-calendar-week"></i> Tu semana
+            </h3>
+            <span class="text-[10px] text-gray-500">últimos 7 días</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
+            <div class="text-center">
+              <p class="text-2xl font-black font-mono" :class="(planHoy?.semana?.racha_dias ?? 0) > 0 ? 'text-orange-400' : 'text-gray-500'">
+                <span x-text="planHoy?.semana?.racha_dias ?? 0"></span><span class="text-xs font-bold ml-0.5">d</span>
+              </p>
+              <p class="text-[9px] text-gray-400 uppercase tracking-wider flex items-center justify-center gap-1">
+                <i class="fa-solid fa-fire text-[8px]" :class="(planHoy?.semana?.racha_dias ?? 0) > 0 ? 'text-orange-500' : 'text-gray-600'"></i> Racha
+              </p>
+            </div>
+            <div class="text-center">
+              <p class="text-2xl font-black text-white font-mono" x-text="planHoy?.semana?.tarjetas_semana ?? 0"></p>
+              <p class="text-[9px] text-gray-400 uppercase tracking-wider">Tarjetas repasadas</p>
+            </div>
+            <div class="text-center">
+              <p class="text-2xl font-black font-mono"
+                 :class="(planHoy?.semana?.nota_media_semana ?? null) !== null ? ((planHoy?.semana?.nota_media_semana ?? 0) < 5 ? 'text-rose-400' : 'text-emerald-400') : 'text-gray-500'">
+                <span x-text="planHoy?.semana?.tests_semana ?? 0"></span><span x-show="(planHoy?.semana?.nota_media_semana ?? null) !== null" class="text-xs font-bold"> · <span x-text="planHoy?.semana?.nota_media_semana"></span></span>
+              </p>
+              <p class="text-[9px] text-gray-400 uppercase tracking-wider">Tests · nota media</p>
+            </div>
+            <div class="text-center">
+              <template x-if="planHoy?.semana?.tema_flojo">
+                <div>
+                  <p class="text-sm font-black text-rose-400 font-mono truncate" x-text="'≈' + (planHoy?.semana?.tema_flojo?.nota ?? '?')"></p>
+                  <p class="text-[10px] text-gray-300 truncate" x-text="planHoy?.semana?.tema_flojo?.tema"></p>
+                  <p class="text-[9px] text-gray-500 uppercase tracking-wider truncate" x-text="planHoy?.semana?.tema_flojo?.asignatura"></p>
+                </div>
+              </template>
+              <template x-if="!planHoy?.semana?.tema_flojo">
+                <p class="text-[11px] text-gray-500 py-1">Sin tests este mes</p>
+              </template>
+            </div>
+          </div>
+          <div x-show="(planHoy?.semana?.entregas_proximas || []).length" class="mt-3 pt-3 border-t border-gray-800">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">Entregas y actividades próximas</p>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="(e, idx) in (planHoy?.semana?.entregas_proximas || [])" :key="'semana-' + idx">
+                <button @click="abrirAsignaturaPorNombre(e.asignatura)" title="Abrir asignatura"
+                        class="px-2.5 py-1 rounded-full text-[10px] font-medium transition border"
+                        :class="e.dias_restantes <= 2 ? 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20' : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-cyan-500/30'">
+                  <span class="font-black font-mono" x-text="e.dias_restantes === 0 ? 'Hoy' : (e.dias_restantes === 1 ? 'Mañana' : '+' + e.dias_restantes + 'd')"></span>
+                  <span class="mx-1 opacity-50">·</span>
+                  <span x-text="e.titulo.length > 40 ? e.titulo.slice(0, 40) + '…' : e.titulo"></span>
+                </button>
+              </template>
             </div>
           </div>
         </div>
