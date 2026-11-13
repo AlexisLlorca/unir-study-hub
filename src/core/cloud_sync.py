@@ -36,6 +36,7 @@ _NOMBRES_SENSIBLES = {
     "usuarios.db",
     "session_state.json",
     "canvas_config.json",
+    "agenda_backup.json",
     ".env",
 }
 _EXTENSIONES_SENSIBLES = {".db", ".sqlite", ".sqlite3", ".pem", ".key"}
