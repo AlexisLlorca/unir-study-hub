@@ -11,6 +11,10 @@ import urllib.request
 from pathlib import Path
 from typing import Optional, Generator, List, Dict, Any
 
+# Sesión estable (por proceso) que exige el gateway de OpenCode Go: la usa para
+# enrutado y reutilización de caché de prompt. No es una credencial.
+_SESION_OPENCODE_GO = "ses_" + os.urandom(16).hex()
+
 # Asegura importación modular
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BASE_DIR) not in sys.path:
@@ -26,6 +30,7 @@ from src.core.config import (
     save_gemini_api_key,
     get_openrouter_api_key,
     get_groq_api_key,
+    get_opencode_api_key,
     DEFAULT_GEMINI_MODEL,
 )
 
@@ -128,6 +133,20 @@ CATALOGO_MODELOS_GRATUITOS: List[Dict[str, Any]] = [
         "gratis": True,
         "descripcion": "Groq Cloud Gratis · Razonamiento profundo paso a paso",
     },
+    {
+        "id": "go:glm-5.3-flash",
+        "nombre": "GLM-5.3 Flash (OpenCode Go)",
+        "proveedor": "go",
+        "gratis": False,  # de pago por suscripción: no entra en la rotación "Auto"
+        "descripcion": "OpenCode Go · Rápido y barato, 0 días de retención de datos",
+    },
+    {
+        "id": "go:qwen3.8-flash",
+        "nombre": "Qwen3.8 Flash (OpenCode Go)",
+        "proveedor": "go",
+        "gratis": False,
+        "descripcion": "OpenCode Go · Alternativa rápida de Alibaba",
+    },
 ]
 
 NOMBRES_MODELOS_MAP: Dict[str, str] = {m["id"]: m["nombre"] for m in CATALOGO_MODELOS_GRATUITOS}
@@ -201,6 +220,7 @@ class LLMClient:
         tiene_gemini = bool(get_gemini_api_key())
         tiene_openrouter = bool(get_openrouter_api_key())
         tiene_groq = bool(get_groq_api_key())
+        tiene_opencode = bool(get_opencode_api_key())  # suscripción OpenCode Go
 
         modelos_info = []
         for m in CATALOGO_MODELOS_GRATUITOS:
@@ -212,6 +232,9 @@ class LLMClient:
                 disponible = tiene_openrouter
             elif prov == "groq":
                 disponible = tiene_groq
+            elif prov == "go":
+                # Sin clave de Go, sus modelos se marcan como no disponibles.
+                disponible = tiene_opencode
 
             agotado = self.es_modelo_agotado(m["id"])
             modelos_info.append({
@@ -228,6 +251,7 @@ class LLMClient:
                 "google": tiene_gemini,
                 "openrouter": tiene_openrouter,
                 "groq": tiene_groq,
+                "go": tiene_opencode,
             },
         }
 
@@ -298,6 +322,18 @@ class LLMClient:
             url = "https://api.groq.com/openai/v1/chat/completions"
             model_real = mod.split("groq:", 1)[1]
             extra_headers = {}
+        elif mod.startswith("go:"):
+            # OpenCode Go: mismo protocolo OpenAI que los anteriores. La URL lleva /go/
+            # porque esa es la base de la suscripción Go: la URL general (/inference/...)
+            # cobra por créditos de pago por consumo y daría "Insufficient balance".
+            api_key = get_opencode_api_key()
+            if not api_key:
+                return None
+            url = "https://opencode.ai/inference/go/openai/v1/chat/completions"
+            # split("go:", 1)[1] corta el prefijo: el gateway espera el ID del modelo a secas.
+            model_real = mod.split("go:", 1)[1]
+            # Go exige una sesión estable por conversación (enrutado + caché de prompt).
+            extra_headers = {"x-opencode-session": _SESION_OPENCODE_GO}
         else:
             return None
 

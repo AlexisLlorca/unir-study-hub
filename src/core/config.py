@@ -191,6 +191,12 @@ def save_groq_api_key(api_key: str):
         _guardar_variable_env("GROQ_API_KEY", k)
 
 
+def get_opencode_api_key() -> str:
+    """Obtiene la clave de OpenCode Go (suscripción) desde las variables de entorno."""
+    load_dotenv(dotenv_path=ENV_FILE, override=True)  # recarga el .env por si se acaba de editar
+    return os.getenv("OPENCODE_API_KEY", "").strip()  # .strip() quita espacios accidentales al copiar
+
+
 def get_hub_access_token() -> str:
     """
     Devuelve el token de acceso a la web para dispositivos de la red (móvil, tablet...).
